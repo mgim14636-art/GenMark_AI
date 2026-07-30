@@ -1,0 +1,129 @@
+<h2 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">로고 생성 서비스 관리자 대시보드 목업. 좌측 사이드바 메뉴와 4개 차트 카드로 구성.</h2>
+
+<div style="display:grid; grid-template-columns:172px minmax(0,1fr); gap:12px; background:var(--surface-1); border-radius:12px; padding:12px; font-size:13px;">
+
+  <div style="background:var(--surface-2); border:0.5px solid var(--border); border-radius:12px; padding:12px 10px;">
+    <div style="font-weight:500; font-size:14px; padding:0 4px 8px; color:var(--text-primary);">서비스 이름</div>
+    <div style="display:flex; align-items:center; gap:6px; border:0.5px solid var(--border); border-radius:var(--radius); padding:6px 8px; margin-bottom:12px; color:var(--text-muted);">
+      <i class="ti ti-search" style="font-size:15px" aria-hidden="true"></i><span style="font-size:12px;">검색</span>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:7px; padding:6px 6px; border-radius:var(--radius); background:var(--bg-accent); color:var(--text-accent); font-weight:500; margin-bottom:10px;">
+      <i class="ti ti-layout-dashboard" style="font-size:16px" aria-hidden="true"></i>대시보드
+    </div>
+
+    <div style="font-size:11px; color:var(--text-muted); padding:0 6px 4px;">회원관리</div>
+    <div style="padding:4px 6px 4px 20px; color:var(--text-secondary);">회원목록</div>
+    <div style="padding:4px 6px 10px 20px; color:var(--text-secondary);">관리자</div>
+
+    <div style="font-size:11px; color:var(--text-muted); padding:0 6px 4px;">프로젝트</div>
+    <div style="padding:4px 6px 4px 20px; color:var(--text-secondary);">CI 프로젝트</div>
+    <div style="padding:4px 6px 4px 20px; color:var(--text-secondary);">BI 프로젝트</div>
+    <div style="padding:4px 6px 10px 20px; color:var(--text-secondary);">생성 이력</div>
+
+    <div style="font-size:11px; color:var(--text-muted); padding:0 6px 4px;">만족도</div>
+    <div style="padding:4px 6px 4px 20px; color:var(--text-secondary);">리뷰</div>
+    <div style="padding:4px 6px 10px 20px; color:var(--text-secondary);">개선 요청</div>
+
+    <div style="font-size:11px; color:var(--text-muted); padding:0 6px 4px;">통계</div>
+    <div style="padding:4px 6px 4px 20px; color:var(--text-secondary);">가입 통계</div>
+    <div style="padding:4px 6px 4px 20px; color:var(--text-secondary);">생성 통계</div>
+    <div style="padding:4px 6px 4px 20px; color:var(--text-secondary);">다운로드 통계</div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:12px; min-width:0;">
+
+    <div style="display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px;">
+      <div style="background:var(--surface-2); border-radius:var(--radius); padding:10px;"><div style="font-size:11px; color:var(--text-secondary);">전체 회원</div><div style="font-size:20px; font-weight:500;">3,412</div></div>
+      <div style="background:var(--surface-2); border-radius:var(--radius); padding:10px;"><div style="font-size:11px; color:var(--text-secondary);">생성 건수</div><div style="font-size:20px; font-weight:500;">9,187</div></div>
+      <div style="background:var(--surface-2); border-radius:var(--radius); padding:10px;"><div style="font-size:11px; color:var(--text-secondary);">다운로드</div><div style="font-size:20px; font-weight:500;">2,050</div></div>
+      <div style="background:var(--surface-2); border-radius:var(--radius); padding:10px;"><div style="font-size:11px; color:var(--text-secondary);">평균 만족도</div><div style="font-size:20px; font-weight:500;">4.4</div></div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;">
+
+      <div style="background:var(--surface-2); border:0.5px solid var(--border); border-radius:12px; padding:12px;">
+        <div style="font-size:13px; font-weight:500; margin-bottom:8px;">계기 / 용도</div>
+        <div style="display:flex; flex-wrap:wrap; gap:4px 10px; margin-bottom:6px; font-size:11px; color:var(--text-secondary);">
+          <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#2a78d6;"></span>신규 창업 42%</span>
+          <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#008300;"></span>리브랜딩 24%</span>
+          <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#e87ba4;"></span>온라인몰 18%</span>
+          <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#eda100;"></span>SNS 채널 11%</span>
+          <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#898781;"></span>기타 5%</span>
+        </div>
+        <div style="position:relative; width:100%; height:150px;">
+          <canvas id="c1" role="img" aria-label="로고 제작 계기 원그래프. 신규 창업 42퍼센트, 리브랜딩 24퍼센트, 온라인몰 18퍼센트, SNS 채널 11퍼센트, 기타 5퍼센트">신규 창업 42%, 리브랜딩 24%, 온라인몰 18%, SNS 채널 11%, 기타 5%</canvas>
+        </div>
+      </div>
+
+      <div style="background:var(--surface-2); border:0.5px solid var(--border); border-radius:12px; padding:12px;">
+        <div style="font-size:13px; font-weight:500; margin-bottom:8px;">만족도 분포</div>
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+          <i class="ti ti-star" style="font-size:20px; color:#eda100;" aria-hidden="true"></i>
+          <span style="font-family:var(--font-voice); font-size:28px; font-weight:400; font-variant-numeric:tabular-nums;">4.4</span>
+          <span style="font-size:11px; color:var(--text-muted);">리뷰 1,284건</span>
+        </div>
+        <div style="position:relative; width:100%; height:130px;">
+          <canvas id="c2" role="img" aria-label="별점 분포 막대그래프. 5점 720건, 4점 361건, 3점 128건, 2점 45건, 1점 30건">5점 720, 4점 361, 3점 128, 2점 45, 1점 30</canvas>
+        </div>
+      </div>
+
+      <div style="background:var(--surface-2); border:0.5px solid var(--border); border-radius:12px; padding:12px;">
+        <div style="font-size:13px; font-weight:500;">월별 이용자 수</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">2026년 · 단위 명</div>
+        <div style="position:relative; width:100%; height:150px;">
+          <canvas id="c3" role="img" aria-label="월별 이용자 수 선그래프. 1월 210명에서 12월 1180명까지 증가">1월 210명에서 12월 1180명까지 꾸준히 증가</canvas>
+        </div>
+      </div>
+
+      <div style="background:var(--surface-2); border:0.5px solid var(--border); border-radius:12px; padding:12px;">
+        <div style="font-size:13px; font-weight:500;">CI / BI 이용현황</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">로고 형태별 생성 횟수</div>
+        <div style="position:relative; width:100%; height:150px;">
+          <canvas id="c4" role="img" aria-label="로고 형태별 생성 횟수 막대그래프. CI 3240건, BI 5947건">CI 3,240건, BI 5,947건</canvas>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+(function(){
+  const cs = getComputedStyle(document.documentElement);
+  const muted = cs.getPropertyValue('--text-muted').trim() || '#898781';
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const grid = dark ? '#2c2c2a' : '#e1e0d9';
+  const base = { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } };
+  const ax = { ticks:{ color:muted, font:{ size:11 } }, grid:{ color:grid, drawTicks:false }, border:{ color:grid } };
+
+  new Chart(document.getElementById('c1'), {
+    type:'doughnut',
+    data:{ labels:['신규 창업','리브랜딩','온라인몰','SNS 채널','기타'],
+      datasets:[{ data:[42,24,18,11,5], backgroundColor:['#2a78d6','#008300','#e87ba4','#eda100','#898781'], borderWidth:2, borderColor: dark ? '#1a1a19' : '#fcfcfb' }] },
+    options:{ ...base, cutout:'52%' }
+  });
+
+  new Chart(document.getElementById('c2'), {
+    type:'bar',
+    data:{ labels:['5점','4점','3점','2점','1점'],
+      datasets:[{ data:[720,361,128,45,30], backgroundColor:'#2a78d6', borderRadius:4, barThickness:14 }] },
+    options:{ ...base, indexAxis:'y', scales:{ x:{ ...ax }, y:{ ...ax, grid:{ display:false } } } }
+  });
+
+  new Chart(document.getElementById('c3'), {
+    type:'line',
+    data:{ labels:['1','2','3','4','5','6','7','8','9','10','11','12'],
+      datasets:[{ data:[210,248,275,301,340,392,455,530,690,880,1040,1180], borderColor:'#2a78d6', borderWidth:2, backgroundColor:'rgba(42,120,214,0.10)', fill:true, tension:0.35, pointRadius:0 }] },
+    options:{ ...base, scales:{ x:{ ...ax, grid:{ display:false } }, y:{ ...ax, beginAtZero:true } } }
+  });
+
+  new Chart(document.getElementById('c4'), {
+    type:'bar',
+    data:{ labels:['CI','BI'],
+      datasets:[{ data:[3240,5947], backgroundColor:['#2a78d6','#1baf7a'], borderRadius:4, barThickness:44 }] },
+    options:{ ...base, scales:{ x:{ ...ax, grid:{ display:false } }, y:{ ...ax, beginAtZero:true } } }
+  });
+})();
+</script>

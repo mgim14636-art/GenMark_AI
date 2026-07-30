@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <div th:replace="~{layout/header :: header-head}"></div>
+</head>
+<body>
+<div th:replace="~{layout/header :: header-nav}"></div>
+
+<div class="container" style="max-width: 400px; margin-top: 4rem;">
+    <h2>Login</h2>
+    <form th:action="@{/member/login}" method="post">
+        <div style="margin-bottom: 1rem;">
+            <label>Email</label>
+            <input type="email" name="username" required style="width: 100%; padding: 0.5rem; border-radius: 4px; border: 1px solid #334155; background: #0f172a; color: #fff;">
+        </div>
+        <div style="margin-bottom: 1.5rem;">
+            <label>Password</label>
+            <input type="password" name="password" required style="width: 100%; padding: 0.5rem; border-radius: 4px; border: 1px solid #334155; background: #0f172a; color: #fff;">
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%;">Sign In</button>
+    </form>
+    <p style="margin-top: 1rem; text-align: center;"><a href="/member/join" style="color: #06b6d4;">Don't have an account? Sign up</a></p>
+</div>
+
+<div th:replace="~{layout/footer :: footer-content}"></div>
+</body>
+</html>

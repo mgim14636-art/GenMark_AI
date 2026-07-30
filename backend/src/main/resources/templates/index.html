@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <div th:replace="~{layout/header :: header-head}"></div>
+</head>
+<body>
+<div th:replace="~{layout/header :: header-nav}"></div>
+
+<main class="hero">
+    <div class="container">
+        <h1>AI-Powered Logo Generation & Trademark Verification</h1>
+        <p>Create stunning AI logos with FLUX model and verify visual trademark similarity using DINOv2 + FAISS vector search instantly.</p>
+        <a href="/logo/generate" class="btn-primary" style="display: inline-block; text-decoration: none;">Start Generating Logo</a>
+    </div>
+</main>
+
+<div th:replace="~{layout/footer :: footer-content}"></div>
+</body>
+</html>

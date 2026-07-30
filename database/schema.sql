@@ -1,0 +1,48 @@
+-- Database schema definition for GenMark-AI
+
+CREATE DATABASE IF NOT EXISTS `genmark_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `genmark_db`;
+
+-- Member Table
+CREATE TABLE IF NOT EXISTS `members` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+    `email` VARCHAR(100) NOT NULL UNIQUE,
+    `password` VARCHAR(255) NOT NULL,
+    `name` VARCHAR(50) NOT NULL,
+    `role` VARCHAR(20) NOT NULL DEFAULT 'ROLE_USER',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Project Table
+CREATE TABLE IF NOT EXISTS `projects` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+    `member_id` BIGINT NOT NULL,
+    `title` VARCHAR(100) NOT NULL,
+    `description` TEXT,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT `fk_project_member` FOREIGN KEY (`member_id`) REFERENCES `members` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Generated Logo Table
+CREATE TABLE IF NOT EXISTS `generated_logos` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+    `project_id` BIGINT NOT NULL,
+    `prompt` TEXT NOT NULL,
+    `image_url` VARCHAR(255) NOT NULL,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'COMPLETED',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT `fk_logo_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Similarity Result Table
+CREATE TABLE IF NOT EXISTS `similarity_results` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+    `logo_id` BIGINT NOT NULL,
+    `matched_trademark_id` VARCHAR(100) NOT NULL,
+    `matched_trademark_name` VARCHAR(100),
+    `similarity_score` FLOAT NOT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT `fk_similarity_logo` FOREIGN KEY (`logo_id`) REFERENCES `generated_logos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
