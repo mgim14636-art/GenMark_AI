@@ -15,6 +15,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD}
       AI_SERVER_URL: http://ai-server:8000
       TZ: Asia/Seoul
+    ports:
+      - "8080:8080"
     networks:
       - genmark-dev-net
 
@@ -30,6 +32,8 @@ services:
       HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN}
       FAISS_INDEX_PATH: /app/data/faiss/trademark.index
       TZ: Asia/Seoul
+    ports:
+      - "8000:8000"
     networks:
       - genmark-dev-net
 
