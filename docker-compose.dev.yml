@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # 1. MariaDB Database Service
+  mariadb:
+    image: mariadb:10.11
+    container_name: genmark-mariadb-dev
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MARIADB_DATABASE}
+      MYSQL_USER: ${MARIADB_USER}
+      MYSQL_PASSWORD: ${MARIADB_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_dev_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - genmark-dev-net
+
+  # 2. Spring Boot Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: genmark-backend-dev
+    restart: always
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/${MARIADB_DATABASE}?useUnicode=true&characterEncoding=utf8
+      SPRING_DATASOURCE_USERNAME: ${MARIADB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD}
+      AI_SERVER_URL: http://ai-server:8000
+      TZ: Asia/Seoul
+    networks:
+      - genmark-dev-net
+
+  # 3. FastAPI AI Server Service
+  ai-server:
+    build:
+      context: ./ai-server
+      dockerfile: Dockerfile
+    container_name: genmark-ai-server-dev
+    restart: always
+    environment:
+      FASTAPI_ENV: production
+      HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN}
+      FAISS_INDEX_PATH: /app/data/faiss/trademark.index
+      TZ: Asia/Seoul
+    networks:
+      - genmark-dev-net
+
+  # 4. Nginx Reverse Proxy Service
+  nginx:
+    image: nginx:alpine
+    container_name: genmark-nginx-dev
+    restart: always
+    depends_on:
+      - backend
+      - ai-server
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/certs:/etc/nginx/certs:ro
+    networks:
+      - genmark-dev-net
+
+networks:
+  genmark-dev-net:
+    driver: bridge
+
+volumes:
+  mariadb_dev_data:
