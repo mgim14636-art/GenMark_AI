@@ -22,7 +22,16 @@ jobs:
           script: |
             cd ~/GenMark_AI
             git pull
-            # Build and deploy only target services (backend, ai-server) without removing mariadb
+            # Remove legacy local database container if it exists
+            docker rm -f genmark-mariadb-dev 2>/dev/null || true
+            # Create/overwrite the .env file automatically using secrets
+            echo "DB_HOST=${{ secrets.DB_HOST }}" > .env
+            echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+            echo "MARIADB_DATABASE=${{ secrets.MARIADB_DATABASE }}" >> .env
+            echo "MARIADB_USER=${{ secrets.MARIADB_USER }}" >> .env
+            echo "MARIADB_PASSWORD=${{ secrets.MARIADB_PASSWORD }}" >> .env
+            echo "HUGGINGFACE_TOKEN=${{ secrets.HUGGINGFACE_TOKEN }}" >> .env
+            # Build and deploy only target services (backend, ai-server)
             docker compose -f docker-compose.dev.yml up -d --build backend ai-server
             docker compose -f docker-compose.dev.yml ps
 
