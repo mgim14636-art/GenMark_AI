@@ -74,7 +74,7 @@ services:
       - DOMAIN=${DOMAIN}
     volumes:
       - ./infra/nginx/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
-      - ./infra/nginx/certs:/etc/nginx/certs:ro
+      - ${LETSENCRYPT_DIR:-./infra/nginx/certs}:/etc/nginx/certs:ro
     networks:
       - genmark-dev-net
 

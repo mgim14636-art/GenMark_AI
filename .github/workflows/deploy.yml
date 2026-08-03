@@ -40,6 +40,7 @@ jobs:
           script: |
             cd ~/GenMark_AI
             git pull
+            export LETSENCRYPT_DIR="/etc/letsencrypt"
             export DOMAIN="${{ secrets.DOMAIN }}"
             export BACKEND_HOST="${{ secrets.BACKEND_HOST }}"
             export AI_HOST="${{ secrets.AI_HOST }}"
