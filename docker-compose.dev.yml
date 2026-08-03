@@ -10,9 +10,9 @@ services:
     restart: always
     environment:
       SPRING_PROFILES_ACTIVE: dev
-      SPRING_DATASOURCE_URL: jdbc:mariadb://${DB_HOST:-project-db-campus.smhrd.com}:${DB_PORT:-3308}/${MARIADB_DATABASE:-cgi_25IS_GA3_p3_2}?useUnicode=true&characterEncoding=utf8
-      SPRING_DATASOURCE_USERNAME: ${MARIADB_USER:-cgi_25IS_GA3_p3_2}
-      SPRING_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD:-smhrd2}
+      SPRING_DATASOURCE_URL: jdbc:mariadb://${DB_HOST}:${DB_PORT}/${MARIADB_DATABASE}?useUnicode=true&characterEncoding=utf8
+      SPRING_DATASOURCE_USERNAME: ${MARIADB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD}
       AI_SERVER_URL: http://ai-server:8000
       TZ: Asia/Seoul
     networks:
