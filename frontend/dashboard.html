@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>대시보드 — GenMark AI</title>
+  <meta name="description" content="GenMark AI 프로젝트 대시보드에서 생성한 로고와 프로젝트를 관리하세요." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <nav class="nav scrolled" id="main-nav">
+    <div class="nav-inner">
+      <a href="index.html" class="logo" id="nav-logo">
+        <span class="logo-mark">G</span>
+        <span class="logo-text">GenMark<span class="logo-ai">AI</span></span>
+      </a>
+      <div class="nav-actions" style="margin-left:auto;display:flex;gap:10px;">
+        <a href="generate.html" class="btn btn-primary" id="nav-generate-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          새 로고 생성
+        </a>
+        <a href="login.html" class="btn btn-ghost" id="nav-logout-btn">로그아웃</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="dashboard-page">
+    <div class="container">
+
+      <!-- Header -->
+      <div class="dashboard-header">
+        <div>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:4px;">안녕하세요 👋</p>
+          <h1>홍길동님의 프로젝트</h1>
+        </div>
+        <button class="btn btn-primary btn-lg" id="new-project-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          새 프로젝트
+        </button>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card" id="stat-total-logos">
+          <div class="stat-card-label">총 생성 로고</div>
+          <div class="stat-card-num">24</div>
+          <div class="stat-card-trend">↑ 이번 달 8개</div>
+        </div>
+        <div class="stat-card" id="stat-projects">
+          <div class="stat-card-label">프로젝트 수</div>
+          <div class="stat-card-num">5</div>
+          <div class="stat-card-trend">활성 3개</div>
+        </div>
+        <div class="stat-card" id="stat-safe">
+          <div class="stat-card-label">안전 등급</div>
+          <div class="stat-card-num" style="color:var(--secondary);">21</div>
+          <div class="stat-card-trend" style="color:var(--secondary);">✓ 등록 가능</div>
+        </div>
+        <div class="stat-card" id="stat-downloads">
+          <div class="stat-card-label">다운로드 수</div>
+          <div class="stat-card-num">12</div>
+          <div class="stat-card-trend">↑ 이번 달 5회</div>
+        </div>
+      </div>
+
+      <!-- Filter Tabs -->
+      <div style="display:flex;gap:8px;margin-bottom:24px;">
+        <button class="btn btn-primary" id="filter-all" style="font-size:0.85rem;padding:8px 18px;">전체</button>
+        <button class="btn btn-ghost" id="filter-ci" style="font-size:0.85rem;padding:8px 18px;">CI 프로젝트</button>
+        <button class="btn btn-ghost" id="filter-bi" style="font-size:0.85rem;padding:8px 18px;">BI 프로젝트</button>
+      </div>
+
+      <!-- Projects Grid -->
+      <div class="projects-grid" id="projects-grid">
+
+        <!-- Project 1 -->
+        <div class="project-card" id="project-card-1">
+          <div class="project-thumb project-thumb-1" onclick="location.href='generate.html'">
+            <span class="project-badge score-safe">CI</span>
+            <div style="font-size:3rem;opacity:0.4;">✦</div>
+          </div>
+          <div class="project-body">
+            <div class="project-title">테크 스타트업 CI</div>
+            <div class="project-meta">
+              <span class="project-count">로고 5개</span>
+              <span>2026.07.28</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Project 2 -->
+        <div class="project-card" id="project-card-2">
+          <div class="project-thumb project-thumb-2" onclick="location.href='generate.html'">
+            <span class="project-badge score-safe">BI</span>
+            <div style="font-size:3rem;opacity:0.4;">◆</div>
+          </div>
+          <div class="project-body">
+            <div class="project-title">카페 브랜드 BI</div>
+            <div class="project-meta">
+              <span class="project-count">로고 8개</span>
+              <span>2026.07.25</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Project 3 -->
+        <div class="project-card" id="project-card-3">
+          <div class="project-thumb project-thumb-3" onclick="location.href='generate.html'">
+            <span class="project-badge score-warn" style="background:rgba(247,183,49,0.2);color:var(--accent);">CI</span>
+            <div style="font-size:3rem;opacity:0.4;">▲</div>
+          </div>
+          <div class="project-body">
+            <div class="project-title">패션 브랜드 CI</div>
+            <div class="project-meta">
+              <span class="project-count">로고 3개</span>
+              <span>2026.07.20</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Project 4 -->
+        <div class="project-card" id="project-card-4">
+          <div class="project-thumb project-thumb-4" onclick="location.href='generate.html'">
+            <span class="project-badge score-safe">BI</span>
+            <div style="font-size:3rem;opacity:0.4;">●</div>
+          </div>
+          <div class="project-body">
+            <div class="project-title">음식 브랜드 BI</div>
+            <div class="project-meta">
+              <span class="project-count">로고 6개</span>
+              <span>2026.07.15</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Project 5 -->
+        <div class="project-card" id="project-card-5">
+          <div class="project-thumb project-thumb-5" onclick="location.href='generate.html'">
+            <span class="project-badge score-safe">CI</span>
+            <div style="font-size:3rem;opacity:0.4;">★</div>
+          </div>
+          <div class="project-body">
+            <div class="project-title">뷰티 브랜드 CI</div>
+            <div class="project-meta">
+              <span class="project-count">로고 2개</span>
+              <span>2026.07.10</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add New Project Card -->
+        <div class="project-card" id="project-card-add" onclick="location.href='generate.html'" style="cursor:pointer;border:2px dashed var(--border);">
+          <div class="add-project">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="project-thumb-icon">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <span>새 프로젝트 추가</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Recent Activity -->
+      <div style="margin-top:48px;">
+        <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">최근 생성 이력</h2>
+        <div style="background:var(--gradient-card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border);">
+                <th style="padding:14px 20px;text-align:left;font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">로고</th>
+                <th style="padding:14px 20px;text-align:left;font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">프롬프트</th>
+                <th style="padding:14px 20px;text-align:left;font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">프로젝트</th>
+                <th style="padding:14px 20px;text-align:left;font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">유사도</th>
+                <th style="padding:14px 20px;text-align:left;font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">날짜</th>
+              </tr>
+            </thead>
+            <tbody id="activity-table">
+              <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:14px 20px;"><div style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg,#1a1040,#2d1b6b);"></div></td>
+                <td style="padding:14px 20px;font-size:0.85rem;color:var(--text-secondary);max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">미니멀한 테크 스타트업 로고, 파란색 계열...</td>
+                <td style="padding:14px 20px;font-size:0.85rem;">테크 스타트업 CI</td>
+                <td style="padding:14px 20px;"><span class="sim-score score-safe">8%</span></td>
+                <td style="padding:14px 20px;font-size:0.82rem;color:var(--text-muted);">2026.07.28</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:14px 20px;"><div style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg,#0a2010,#165c2e);"></div></td>
+                <td style="padding:14px 20px;font-size:0.85rem;color:var(--text-secondary);max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">따뜻한 느낌의 커피숍 엠블럼, 갈색 원형...</td>
+                <td style="padding:14px 20px;font-size:0.85rem;">카페 브랜드 BI</td>
+                <td style="padding:14px 20px;"><span class="sim-score score-safe">12%</span></td>
+                <td style="padding:14px 20px;font-size:0.82rem;color:var(--text-muted);">2026.07.25</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:14px 20px;"><div style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg,#200a10,#3d1020);"></div></td>
+                <td style="padding:14px 20px;font-size:0.85rem;color:var(--text-secondary);max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">럭셔리 패션 브랜드, 레드 & 블랙 콤비...</td>
+                <td style="padding:14px 20px;font-size:0.85rem;">패션 브랜드 CI</td>
+                <td style="padding:14px 20px;"><span class="sim-score score-warn">34%</span></td>
+                <td style="padding:14px 20px;font-size:0.82rem;color:var(--text-muted);">2026.07.20</td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;"><div style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg,#1a0a00,#4a2200);"></div></td>
+                <td style="padding:14px 20px;font-size:0.85rem;color:var(--text-secondary);max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">친근한 음식 배달 서비스 마스코트 로고...</td>
+                <td style="padding:14px 20px;font-size:0.85rem;">음식 브랜드 BI</td>
+                <td style="padding:14px 20px;"><span class="sim-score score-safe">5%</span></td>
+                <td style="padding:14px 20px;font-size:0.82rem;color:var(--text-muted);">2026.07.15</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="js/main.js"></script>
+  <script>
+    // Filter tabs
+    const filterBtns = document.querySelectorAll('[id^="filter-"]');
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach(b => {
+          b.className = 'btn btn-ghost';
+          b.style.fontSize = '0.85rem';
+          b.style.padding = '8px 18px';
+        });
+        btn.className = 'btn btn-primary';
+        btn.style.fontSize = '0.85rem';
+        btn.style.padding = '8px 18px';
+      });
+    });
+  </script>
+</body>
+</html>
