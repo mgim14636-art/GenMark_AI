@@ -7,6 +7,7 @@ on:
 jobs:
   deploy-backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - name: SSH into Private server via Public server (bastion) and redeploy backend/ai
         uses: appleboy/ssh-action@v1.0.3
@@ -17,17 +18,17 @@ jobs:
           proxy_host: ${{ secrets.PUBLIC_HOST }}
           proxy_username: ${{ secrets.SSH_USER }}
           proxy_key: ${{ secrets.SSH_KEY }}
+          command_timeout: 30m
           script: |
             cd ~/GenMark_AI
             git pull
-            # Ensure non-target services are NOT running on the private server
-            docker compose -f docker-compose.dev.yml rm -s -f nginx 2>/dev/null || true
-            # Recreate target services (mariadb, backend, ai-server)
-            docker compose -f docker-compose.dev.yml rm -s -f mariadb backend ai-server 2>/dev/null || true
-            docker compose -f docker-compose.dev.yml up -d --build mariadb backend ai-server
+            # Build and deploy only target services (backend, ai-server) without removing mariadb
+            docker compose -f docker-compose.dev.yml up -d --build backend ai-server
+            docker compose -f docker-compose.dev.yml ps
 
   deploy-frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - name: SSH into Public server and redeploy nginx
         uses: appleboy/ssh-action@v1.0.3
@@ -35,15 +36,13 @@ jobs:
           host: ${{ secrets.PUBLIC_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
+          command_timeout: 30m
           script: |
             cd ~/GenMark_AI
             git pull
             export DOMAIN="${{ secrets.DOMAIN }}"
             export BACKEND_HOST="${{ secrets.BACKEND_HOST }}"
             export AI_HOST="${{ secrets.AI_HOST }}"
-            # Ensure non-target services are NOT running on the public server
-            docker compose -f docker-compose.dev.yml rm -s -f mariadb backend ai-server 2>/dev/null || true
-            # Recreate target services (nginx)
-            docker compose -f docker-compose.dev.yml rm -s -f nginx 2>/dev/null || true
+            # Build and deploy nginx without removing other containers
             docker compose -f docker-compose.dev.yml up -d --build nginx
-            docker ps
+            docker compose -f docker-compose.dev.yml ps
