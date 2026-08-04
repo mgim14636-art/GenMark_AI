@@ -1,11 +1,13 @@
 import { FormEvent, PointerEvent, useEffect, useRef, useState } from 'react'
+import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Heart, House, Image as ImageIcon, Info, LoaderCircle, MessageSquare, Palette, Pencil, PenLine, Plus, RefreshCw, Search, ShieldCheck, Sparkle as LucideSparkle, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, X, Clock3 } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 
-type ViewMode = 'home' | 'hero' | 'onboarding' | 'brand-details' | 'choice' | 'setup' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'result' | 'edit' | 'login'
+type ViewMode = 'home' | 'hero' | 'onboarding' | 'brand-details' | 'company-details' | 'choice' | 'setup' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'edit' | 'login' | 'mypage' | 'survey'
 type OnboardingOption = 'online' | 'social' | 'offline'
 type AudienceOption = 'company' | 'owner' | 'hobby' | 'sidejob'
 type CoreValue = 'vegan' | 'crueltyFree' | 'lowIrritation' | 'derma' | 'cleanBeauty' | 'natural' | 'premium' | 'sustainable' | 'scientific' | 'reasonable' | 'emotional'
 type ToneOption = 'friendly' | 'professional' | 'warm' | 'trendy' | 'minimal'
+type RgbColor = { r: number; g: number; b: number }
 type LogoStyle = 'symbol' | 'wordmark' | 'combination' | 'lettermark'
 
 const categories = ['전체', '워드마크', '콤비네이션', '레터마크', '미니멀']
@@ -32,8 +34,52 @@ const galleryItems = [
   { id: 'mori', name: 'MORI', category: '레터마크', meta: '바디케어 · 레터마크', likes: '1.2k', position: '52% 28%', tone: 'mori' },
 ]
 
+const surveyImprovementOptions = ['로고 디자인', '글씨체', '색상 조합', '생성 속도', '수정 기능', '상표 이미지 분석', '결과 설명', '제품 썸네일', '기타']
+
+const getModeFromUrl = (): ViewMode => {
+  const requestedView = new URLSearchParams(window.location.search).get('view')
+  if (requestedView === 'login') return 'login'
+  if (requestedView === 'hero') return 'hero'
+  if (requestedView === 'onboarding') return 'onboarding'
+  if (requestedView === 'brand-details' || requestedView === 'brand-info' || requestedView === 'values') return 'brand-details'
+  if (requestedView === 'company-details' || requestedView === 'ci-details' || requestedView === 'corporate-details') return 'company-details'
+  if (requestedView === 'choice' || requestedView === 'ci-bi' || requestedView === 'brand-type') return 'choice'
+  if (requestedView === 'setup') return 'setup'
+  if (requestedView === 'tone' || requestedView === 'tone-color' || requestedView === 'tone-and-color') return 'tone'
+  if (requestedView === 'style' || requestedView === 'logo-style' || requestedView === 'logo-shape') return 'style'
+  if (requestedView === 'final' || requestedView === 'details' || requestedView === 'request') return 'final'
+  if (requestedView === 'loading' || requestedView === 'logo-loading' || requestedView === 'generating') return 'loading'
+  if (requestedView === 'trademark-loading' || requestedView === 'trademark' || requestedView === 'trademark-analysis') return 'trademark-loading'
+  if (requestedView === 'trademark-selection' || requestedView === 'trademark-choice' || requestedView === 'trademark-select') return 'trademark-selection'
+  if (requestedView === 'trademark-result' || requestedView === 'trademark-analysis-result' || requestedView === 'similarity-result') return 'trademark-result'
+  if (requestedView === 'result' || requestedView === 'logo-result' || requestedView === 'generated-logo') return 'result'
+  if (requestedView === 'edit' || requestedView === 'logo-edit' || requestedView === 'logo-editor') return 'edit'
+  if (requestedView === 'mypage' || requestedView === 'my-page' || requestedView === 'profile') return 'mypage'
+  if (requestedView === 'survey' || requestedView === 'feedback' || requestedView === 'satisfaction') return 'survey'
+  return 'home'
+}
+
+const clampColorChannel = (value: number) => Math.max(0, Math.min(255, Math.round(value)))
+const rgbToHex = ({ r, g, b }: RgbColor) => `#${[r, g, b].map((channel) => clampColorChannel(channel).toString(16).padStart(2, '0')).join('')}`
+const hexToRgb = (hex: string): RgbColor => {
+  const normalized = hex.replace('#', '')
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16) || 0,
+    g: Number.parseInt(normalized.slice(2, 4), 16) || 0,
+    b: Number.parseInt(normalized.slice(4, 6), 16) || 0,
+  }
+}
+
 function Sparkle() {
-  return <span aria-hidden="true" className="sparkle">✦</span>
+  return <Sparkles aria-hidden="true" className="sparkle" size={18} strokeWidth={1.8} />
+}
+
+function ScreenBackButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button className="screen-back-button" type="button" aria-label={label} onClick={onClick}>
+      <ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} />
+    </button>
+  )
 }
 
 function BrandLogo() {
@@ -48,24 +94,7 @@ function BrandLogo() {
 }
 
 function App() {
-  const [mode, setMode] = useState<ViewMode>(() => {
-    const requestedView = new URLSearchParams(window.location.search).get('view')
-    if (requestedView === 'login') return 'login'
-    if (requestedView === 'hero') return 'hero'
-    if (requestedView === 'onboarding') return 'onboarding'
-    if (requestedView === 'brand-details' || requestedView === 'brand-info' || requestedView === 'values') return 'brand-details'
-    if (requestedView === 'choice' || requestedView === 'ci-bi' || requestedView === 'brand-type') return 'choice'
-    if (requestedView === 'setup') return 'setup'
-    if (requestedView === 'tone' || requestedView === 'tone-color' || requestedView === 'tone-and-color') return 'tone'
-    if (requestedView === 'style' || requestedView === 'logo-style' || requestedView === 'logo-shape') return 'style'
-    if (requestedView === 'final' || requestedView === 'details' || requestedView === 'request') return 'final'
-    if (requestedView === 'loading' || requestedView === 'logo-loading' || requestedView === 'generating') return 'loading'
-    if (requestedView === 'trademark-loading' || requestedView === 'trademark' || requestedView === 'trademark-analysis') return 'trademark-loading'
-    if (requestedView === 'trademark-selection' || requestedView === 'trademark-choice' || requestedView === 'trademark-select') return 'trademark-selection'
-    if (requestedView === 'result' || requestedView === 'logo-result' || requestedView === 'generated-logo') return 'result'
-    if (requestedView === 'edit' || requestedView === 'logo-edit' || requestedView === 'logo-editor') return 'edit'
-    return 'home'
-  })
+  const [mode, setModeState] = useState<ViewMode>(getModeFromUrl)
   const [loggedIn, setLoggedIn] = useState(false)
   const [onboardingCompleted, setOnboardingCompleted] = useState(false)
   const [activeCategory, setActiveCategory] = useState('전체')
@@ -78,12 +107,17 @@ function App() {
   const [direction, setDirection] = useState('깨끗하고 신뢰감 있게')
   const [additionalRequest, setAdditionalRequest] = useState('')
   const [brandName, setBrandName] = useState('')
+  const [companyMotto, setCompanyMotto] = useState('')
   const [coreValues, setCoreValues] = useState<CoreValue[]>([])
+  const [coreValueInputMode, setCoreValueInputMode] = useState<'category' | 'direct'>('category')
+  const [brandValueDescription, setBrandValueDescription] = useState('')
   const [toneSelection, setToneSelection] = useState<ToneOption>('friendly')
-  const [toneMode, setToneMode] = useState<'ai' | 'manual'>('ai')
+  const [manualColor, setManualColor] = useState<RgbColor>({ r: 151, g: 101, b: 233 })
+  const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const [logoStyle, setLogoStyle] = useState<LogoStyle>('combination')
   const [resultCandidate, setResultCandidate] = useState(0)
-  const [resultSaved, setResultSaved] = useState(false)
+  const [resultLiked, setResultLiked] = useState(false)
+  const [trademarkAnalysisSkipped, setTrademarkAnalysisSkipped] = useState(false)
   const [editTarget, setEditTarget] = useState<'symbol' | 'text'>('text')
   const [editorBrandName, setEditorBrandName] = useState('LUVÉRA')
   const [editorSymbol, setEditorSymbol] = useState(0)
@@ -94,11 +128,46 @@ function App() {
   const [editorColor, setEditorColor] = useState('#7B5CDF')
   const [editorSaved, setEditorSaved] = useState(false)
   const [trademarkEntry, setTrademarkEntry] = useState<'generation' | 'result'>('generation')
+  const [trademarkAnalysisCompleted, setTrademarkAnalysisCompleted] = useState(false)
+  const [surveyRating, setSurveyRating] = useState(0)
+  const [surveyImprovements, setSurveyImprovements] = useState<string[]>([])
+  const [surveyComment, setSurveyComment] = useState('')
+  const [surveySubmitted, setSurveySubmitted] = useState(false)
+  const [remainingCredits, setRemainingCredits] = useState(2)
+  const [creditModal, setCreditModal] = useState<'credit' | 'survey' | null>(null)
+  const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string } | null>(null)
+
+  const setMode = (nextMode: ViewMode, options: { replace?: boolean } = {}) => {
+    setModeState(nextMode)
+
+    const url = new URL(window.location.href)
+    const currentView = url.searchParams.get('view')
+    if (currentView === nextMode) return
+
+    url.searchParams.set('view', nextMode)
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`
+    if (options.replace) {
+      window.history.replaceState({ view: nextMode }, '', nextUrl)
+    } else {
+      window.history.pushState({ view: nextMode }, '', nextUrl)
+    }
+  }
+
+  const canAnalyzeTrademark = logoStyle === 'combination' || logoStyle === 'symbol'
+
+  useEffect(() => {
+    const handlePopState = () => setModeState(getModeFromUrl())
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
 
   useEffect(() => {
     if (mode !== 'loading' && mode !== 'trademark-loading') return
 
-    const timer = window.setTimeout(() => setMode('result'), mode === 'loading' ? 1700 : 1900)
+    const timer = window.setTimeout(() => {
+      if (mode === 'trademark-loading') setTrademarkAnalysisCompleted(true)
+      setMode('result')
+    }, mode === 'loading' ? 1700 : 1900)
     return () => window.clearTimeout(timer)
   }, [mode])
   const galleryRef = useRef<HTMLDivElement>(null)
@@ -151,6 +220,10 @@ function App() {
     if (projectName.trim()) setMode('final')
   }
 
+  const toggleSurveyImprovement = (item: string) => {
+    setSurveyImprovements((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])
+  }
+
   const completeLogin = () => {
     setLoggedIn(true)
     setOnboardingStep(1)
@@ -178,6 +251,13 @@ function App() {
   }
 
   const openTrademarkSelection = (entry: 'generation' | 'result') => {
+    if (!canAnalyzeTrademark) {
+      setTrademarkAnalysisSkipped(true)
+      setMode(entry === 'result' ? 'result' : 'loading')
+      return
+    }
+
+    setTrademarkAnalysisSkipped(false)
     setTrademarkEntry(entry)
     setMode('trademark-selection')
   }
@@ -196,6 +276,48 @@ function App() {
     setCoreValues((current) => current.includes(value)
       ? current.filter((item) => item !== value)
       : current.length < 3 ? [...current, value] : current)
+  }
+
+  const updateManualColor = (channel: keyof RgbColor, value: string) => {
+    const nextValue = value === '' ? 0 : Number(value)
+    setManualColor((current) => ({
+      ...current,
+      [channel]: clampColorChannel(Number.isFinite(nextValue) ? nextValue : 0),
+    }))
+  }
+
+  const updateManualColorFromHex = (hex: string) => {
+    setManualColor(hexToRgb(hex))
+  }
+
+  const downloadLogo = (candidate: { name: string; subtitle: string }) => {
+    const logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="#ffffff"/><circle cx="600" cy="280" r="116" fill="none" stroke="#b889ad" stroke-width="6"/><path d="M600 380c-72-28-104-83-74-142 35-68 70 4 74 55 4-51 39-123 74-55 30 59-2 114-74 142Z" fill="#d9c6e0" stroke="#8f75a8" stroke-width="4"/><text x="600" y="570" text-anchor="middle" fill="#2a2d39" font-family="Georgia, serif" font-size="92" letter-spacing="12">${candidate.name}</text><text x="600" y="635" text-anchor="middle" fill="#b388a9" font-family="Arial, sans-serif" font-size="26" letter-spacing="12">${candidate.subtitle}</text></svg>`
+    const downloadUrl = URL.createObjectURL(new Blob([logoSvg], { type: 'image/svg+xml' }))
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = `${candidate.name.toLowerCase()}-logo.svg`
+    link.click()
+    URL.revokeObjectURL(downloadUrl)
+  }
+
+  const requestLogoDownload = (candidate: { name: string; subtitle: string }) => {
+    setPendingDownload(candidate)
+    setCreditModal('credit')
+  }
+
+  const downloadWithCredit = () => {
+    if (!pendingDownload || remainingCredits < 1) return
+    setRemainingCredits((current) => current - 1)
+    downloadLogo(pendingDownload)
+    setPendingDownload(null)
+    setCreditModal(null)
+  }
+
+  const submitCreditSurvey = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setRemainingCredits((current) => current + 1)
+    setSurveySubmitted(true)
+    setCreditModal(null)
   }
 
   const onboardingOptions: Array<{
@@ -246,6 +368,7 @@ function App() {
 
   const renderOnboardingScreen = () => (
     <main className={`onboarding-screen onboarding-step-${onboardingStep}`}>
+      <ScreenBackButton label="로그인 화면으로 돌아가기" onClick={() => onboardingStep === 1 ? setMode('login') : setOnboardingStep(1)} />
       <img className="onboarding-art" src="/aurora-bubbles.png" alt="" aria-hidden="true" />
       <div className="onboarding-overlay" />
       <section className="onboarding-content" aria-labelledby="onboarding-title">
@@ -268,7 +391,7 @@ function App() {
                   <strong>{option.title}</strong>
                   <span>{option.description}</span>
                 </span>
-                <span className="onboarding-radio" aria-hidden="true">{selected ? '✓' : ''}</span>
+                <span className="onboarding-radio" aria-hidden="true">{selected && <Check size={24} strokeWidth={2.5} />}</span>
               </button>
             )
           }) : audienceOptions.map((option) => {
@@ -281,7 +404,7 @@ function App() {
                   <strong>{option.title}</strong>
                   <span>{option.description}</span>
                 </span>
-                <span className="onboarding-radio" aria-hidden="true">{selected ? '✓' : ''}</span>
+                <span className="onboarding-radio" aria-hidden="true">{selected && <Check size={24} strokeWidth={2.5} />}</span>
               </button>
             )
           })}
@@ -294,28 +417,29 @@ function App() {
   )
 
   const renderBrandDetailsScreen = () => {
-    const coreValueOptions: Array<{ id: CoreValue; label: string; icon: string }> = [
-      { id: 'vegan', label: '비건', icon: 'leaf' },
-      { id: 'crueltyFree', label: '크루얼티프리', icon: 'bunny' },
-      { id: 'lowIrritation', label: '저자극', icon: 'drop' },
-      { id: 'derma', label: '더마', icon: 'shield' },
-      { id: 'cleanBeauty', label: '클린뷰티', icon: 'flower' },
-      { id: 'natural', label: '자연주의', icon: 'leaf' },
-      { id: 'premium', label: '프리미엄', icon: 'crown' },
-      { id: 'sustainable', label: '지속가능성', icon: 'recycle' },
-      { id: 'scientific', label: '과학적 검증', icon: 'flask' },
-      { id: 'reasonable', label: '합리적인 가격', icon: 'tag' },
-      { id: 'emotional', label: '감성적인 경험', icon: 'heart' },
+    const coreValueOptions: Array<{ id: CoreValue; label: string }> = [
+      { id: 'vegan', label: '비건' },
+      { id: 'crueltyFree', label: '크루얼티프리' },
+      { id: 'lowIrritation', label: '저자극' },
+      { id: 'derma', label: '더마' },
+      { id: 'cleanBeauty', label: '클린뷰티' },
+      { id: 'natural', label: '자연주의' },
+      { id: 'premium', label: '프리미엄' },
+      { id: 'sustainable', label: '지속가능성' },
+      { id: 'scientific', label: '과학적 검증' },
+      { id: 'reasonable', label: '합리적인 가격' },
+      { id: 'emotional', label: '감성적인 경험' },
     ]
 
     return (
       <main className="brand-details-screen">
+        <ScreenBackButton label="CI·BI 선택 화면으로 돌아가기" onClick={() => setMode('choice')} />
         <section className="brand-details-content" aria-labelledby="brand-details-title">
           <div className="brand-details-progress" aria-label="브랜드 생성 4단계 중 2단계">
             <span className="brand-details-step-badge">2 / 4</span>
             <div className="brand-details-progress-track" aria-hidden="true">
               <span className="brand-details-progress-line" />
-              <span className="brand-details-progress-node complete">✓</span>
+              <span className="brand-details-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
               <span className="brand-details-progress-node active" />
               <span className="brand-details-progress-node" />
               <span className="brand-details-progress-node" />
@@ -342,38 +466,114 @@ function App() {
           </section>
 
           <section className="brand-details-section core-values-section" aria-labelledby="core-values-title">
-            <h2 id="core-values-title">브랜드가 추구하는 가치 <small>(최대 3개 선택)</small></h2>
-            <div className="core-values-grid">
-              {coreValueOptions.map((option) => {
-                const selected = coreValues.includes(option.id)
-                return (
-                  <button key={option.id} type="button" className={selected ? 'core-value-button selected' : 'core-value-button'} aria-pressed={selected} onClick={() => toggleCoreValue(option.id)}>
-                    <span className={`core-value-icon ${option.icon}`} aria-hidden="true" />
-                    <span>{option.label}</span>
-                  </button>
-                )
-              })}
+            <div className="core-values-heading">
+              <h2 id="core-values-title">브랜드가 추구하는 가치 <small>(최대 3개 선택)</small></h2>
+              <div className="core-values-mode-toggle" role="tablist" aria-label="가치 입력 방식">
+                <button className={coreValueInputMode === 'category' ? 'active' : ''} type="button" role="tab" aria-selected={coreValueInputMode === 'category'} onClick={() => setCoreValueInputMode('category')}>카테고리</button>
+                <button className={coreValueInputMode === 'direct' ? 'active' : ''} type="button" role="tab" aria-selected={coreValueInputMode === 'direct'} onClick={() => setCoreValueInputMode('direct')}>직접입력</button>
+              </div>
             </div>
-            <p className="core-values-note"><span aria-hidden="true">ⓘ</span>3개까지 선택할 수 있어요. 선택하지 않아도 다음 단계로 진행할 수 있어요.</p>
+            {coreValueInputMode === 'category' ? (
+              <>
+                <div className="core-values-grid">
+                  {coreValueOptions.map((option) => {
+                    const selected = coreValues.includes(option.id)
+                    return (
+                      <button key={option.id} type="button" className={selected ? 'core-value-button selected' : 'core-value-button'} aria-pressed={selected} onClick={() => toggleCoreValue(option.id)}>
+                        <span>{option.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="core-values-note"><span aria-hidden="true">ⓘ</span>3개까지 선택할 수 있어요. 선택하지 않아도 다음 단계로 진행할 수 있어요.</p>
+              </>
+            ) : (
+              <div className="core-values-custom-input">
+                <textarea
+                  aria-label="브랜드가 추구하는 가치 직접 입력"
+                  value={brandValueDescription}
+                  onChange={(event) => setBrandValueDescription(event.target.value)}
+                  placeholder="고객에게 어떤 브랜드로 기억되고 싶은지 작성해주세요. (예: 친근한, 전문적인, 혁신적인)"
+                />
+              </div>
+            )}
           </section>
 
           <button className="brand-details-next" type="button" onClick={() => setMode('tone')}>
-            다음 <span aria-hidden="true">›</span>
+            다음 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
           </button>
         </section>
       </main>
     )
   }
 
+  const renderCompanyDetailsScreen = () => (
+    <main className="brand-details-screen company-details-screen">
+      <ScreenBackButton label="CI·BI 선택 화면으로 돌아가기" onClick={() => setMode('choice')} />
+      <section className="brand-details-content" aria-labelledby="company-details-title">
+        <div className="brand-details-progress" aria-label="기업 로고 생성 4단계 중 2단계">
+          <span className="brand-details-step-badge">2 / 4</span>
+          <div className="brand-details-progress-track" aria-hidden="true">
+            <span className="brand-details-progress-line" />
+            <span className="brand-details-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
+            <span className="brand-details-progress-node active" />
+            <span className="brand-details-progress-node" />
+            <span className="brand-details-progress-node" />
+          </div>
+        </div>
+
+        <header className="brand-details-heading">
+          <h1 id="company-details-title">어떤 기업을 만들고 있나요?</h1>
+          <p>기업의 방향과 고객에게 전하고 싶은 이미지를 알려주세요.</p>
+        </header>
+
+        <section className="brand-details-section brand-name-section" aria-labelledby="company-name-title">
+          <h2 id="company-name-title">기업명</h2>
+          <div className="brand-details-input-wrap">
+            <input
+              aria-label="기업명"
+              maxLength={80}
+              value={brandName}
+              onChange={(event) => setBrandName(event.target.value)}
+              placeholder="예: 그로우랩"
+            />
+            <span>{brandName.length} / 80</span>
+          </div>
+        </section>
+
+        <section className="brand-details-section core-values-section company-motto-section" aria-labelledby="company-motto-title">
+          <div className="core-values-heading company-motto-heading">
+            <h2 id="company-motto-title">기업의 모토</h2>
+          </div>
+          <div className="core-values-custom-input">
+            <textarea
+              aria-label="기업의 모토 직접 입력"
+              maxLength={300}
+              value={companyMotto}
+              onChange={(event) => setCompanyMotto(event.target.value)}
+              placeholder="기업의 미션, 비전, 또는 모토를 입력해주세요."
+            />
+            <span className="company-motto-count">{companyMotto.length} / 300</span>
+          </div>
+        </section>
+
+        <button className="brand-details-next" type="button" onClick={() => setMode('tone')}>
+          다음 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
+        </button>
+      </section>
+    </main>
+  )
+
   const renderToneSelectionScreen = () => (
     <main className="tone-selection-screen">
+      <ScreenBackButton label="브랜드 설명 화면으로 돌아가기" onClick={() => setMode(brandKind === 'ci' ? 'company-details' : 'brand-details')} />
       <section className="tone-selection-content" aria-labelledby="tone-selection-title">
         <div className="tone-progress" aria-label="브랜드 생성 4단계 중 3단계">
           <span className="tone-step-badge">3 / 4</span>
           <div className="tone-progress-track" aria-hidden="true">
             <span className="tone-progress-line" />
-            <span className="tone-progress-node complete">✓</span>
-            <span className="tone-progress-node complete">✓</span>
+            <span className="tone-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
+            <span className="tone-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
             <span className="tone-progress-node active" />
             <span className="tone-progress-node" />
           </div>
@@ -403,32 +603,69 @@ function App() {
                   <strong>{tone.label}</strong>
                   <small>{tone.description}</small>
                 </span>
-                <span className="tone-radio" aria-hidden="true">{selected ? '✓' : ''}</span>
+                <span className="tone-radio" aria-hidden="true">{selected && <Check size={21} strokeWidth={2.5} />}</span>
               </button>
             )
           })}
         </section>
 
-        <div className="tone-mode-toggle" role="tablist" aria-label="색상 지정 방식">
-          <button className={toneMode === 'ai' ? 'tone-mode-button active' : 'tone-mode-button'} type="button" role="tab" aria-selected={toneMode === 'ai'} onClick={() => setToneMode('ai')}>
-            <Sparkle /> AI 추천
-          </button>
-          <button className={toneMode === 'manual' ? 'tone-mode-button active' : 'tone-mode-button'} type="button" role="tab" aria-selected={toneMode === 'manual'} onClick={() => setToneMode('manual')}>
-            직접 지정
-          </button>
-        </div>
-
-        <section className="tone-color-card" aria-label="색상 추천 안내">
-          <span className="tone-color-sparkles" aria-hidden="true">✦</span>
+        <section className="tone-color-card tone-direct-card" aria-label="직접 색상 지정">
+          <span className="tone-color-sparkles" aria-hidden="true"><Sparkles size={32} strokeWidth={1.6} /></span>
           <div>
-            <h2>{toneMode === 'ai' ? 'AI 색상 추천' : '직접 색상 지정'}</h2>
-            <p>{toneMode === 'ai' ? '브랜드 정보를 분석해 최적의 색상을 선택해요' : '원하는 색상을 직접 지정할 수 있어요'}</p>
+            <h2>직접 색상 지정</h2>
+            <p>원하는 색상을 직접 지정할 수 있어요</p>
           </div>
-          <span className="tone-auto-chip">{toneMode === 'ai' ? '자동' : '직접'}</span>
+          <button
+            className="tone-auto-chip tone-picker-trigger"
+            type="button"
+            aria-expanded={colorPickerOpen}
+            aria-controls="tone-color-picker"
+            onClick={() => setColorPickerOpen((current) => !current)}
+          >
+            <span className="tone-picker-swatch" style={{ background: rgbToHex(manualColor) }} aria-hidden="true" />
+            직접
+          </button>
+
+          {colorPickerOpen && (
+            <div className="tone-color-picker" id="tone-color-picker" role="dialog" aria-label="RGB 색상 선택">
+              <div className="tone-color-picker-heading">
+                <strong>원하는 색상 선택</strong>
+                <button type="button" aria-label="색상 팔레트 닫기" onClick={() => setColorPickerOpen(false)}>×</button>
+              </div>
+              <label className="tone-color-palette">
+                <span className="tone-color-palette-preview" style={{ background: rgbToHex(manualColor) }} />
+                <input
+                  aria-label="색상 팔레트"
+                  type="color"
+                  value={rgbToHex(manualColor)}
+                  onChange={(event) => updateManualColorFromHex(event.target.value)}
+                />
+              </label>
+              <div className="tone-rgb-fields" aria-label="RGB 값 입력">
+                {(['r', 'g', 'b'] as const).map((channel) => (
+                  <label key={channel}>
+                    <span>{channel.toUpperCase()}</span>
+                    <input
+                      aria-label={`${channel.toUpperCase()} 값`}
+                      type="number"
+                      min="0"
+                      max="255"
+                      value={manualColor[channel]}
+                      onChange={(event) => updateManualColor(channel, event.target.value)}
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className="tone-color-picker-footer">
+                <span>RGB({manualColor.r}, {manualColor.g}, {manualColor.b})</span>
+                <button type="button" onClick={() => setColorPickerOpen(false)}>선택 완료</button>
+              </div>
+            </div>
+          )}
         </section>
 
         <button className="tone-next" type="button" onClick={() => setMode('style')}>
-          다음 <span aria-hidden="true">›</span>
+          다음 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
         </button>
       </section>
     </main>
@@ -436,6 +673,7 @@ function App() {
 
   const renderStyleSelectionScreen = () => (
     <main className="logo-style-screen">
+      <ScreenBackButton label="톤앤매너 선택 화면으로 돌아가기" onClick={() => setMode('tone')} />
       <section className="logo-style-content" aria-labelledby="logo-style-title">
         <div className="logo-style-progress" aria-label="브랜드 생성 4단계 중 3단계">
           <span className="logo-style-step-badge">3 / 4</span>
@@ -476,14 +714,14 @@ function App() {
                   <span className="logo-style-fit"><em>적합한 경우</em>{option.fit}</span>
                   {option.recommended && <small className="logo-style-recommend"><Sparkle /> 처음 만드는 브랜드에 추천</small>}
                 </span>
-                <span className="logo-style-radio" aria-hidden="true">{selected ? '✓' : ''}</span>
+                <span className="logo-style-radio" aria-hidden="true">{selected && <Check size={22} strokeWidth={2.5} />}</span>
               </button>
             )
           })}
         </section>
 
         <button className="logo-style-next" type="button" onClick={() => setMode('final')}>
-          다음 <span aria-hidden="true">›</span>
+          다음 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
         </button>
       </section>
     </main>
@@ -539,11 +777,12 @@ function App() {
   const renderChoiceScreen = () => {
     const chooseBrandKind = (kind: 'ci' | 'bi') => {
       setBrandKind(kind)
-      setMode('brand-details')
+      setMode(kind === 'ci' ? 'company-details' : 'brand-details')
     }
 
     return (
       <main className="brand-choice-screen">
+        <ScreenBackButton label="온보딩 화면으로 돌아가기" onClick={() => { setOnboardingStep(2); setMode('onboarding') }} />
         <section className="brand-choice-content" aria-label="CI와 BI 로고 선택">
           <div className="brand-choice-list">
             <article className="brand-choice-card ci-card">
@@ -554,7 +793,7 @@ function App() {
                 <p>회사나 매장 전체를<br />대표하는 로고예요.</p>
                 <div className="brand-choice-recommend"><strong>✦ 이런 경우 추천</strong><ul><li>회사명을 로고로 만들고 싶어요</li><li>여러 제품을 하나의 회사 브랜드로 운영할 예정이에요</li><li>명함이나 회사 소개 자료에도 사용할 예정이에요</li></ul></div>
                 <div className="brand-choice-result"><strong><span className="choice-gift" aria-hidden="true" />결과물</strong><span>기업 로고 · 대표 컬러 · 추천 글씨체 · 명함 시안</span></div>
-                <button className="brand-choice-cta ci-cta" type="button" onClick={() => chooseBrandKind('ci')}>회사 로고 만들기 <span aria-hidden="true">›</span></button>
+                <button className="brand-choice-cta ci-cta" type="button" onClick={() => chooseBrandKind('ci')}>회사 로고 만들기 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
               </div>
             </article>
             <article className="brand-choice-card bi-card">
@@ -564,7 +803,7 @@ function App() {
                 <p>특정 화장품 브랜드나 제품 라인을<br />대표하는 로고예요.</p>
                 <div className="brand-choice-recommend"><strong>✦ 이런 경우 추천</strong><ul><li>새로운 화장품 브랜드를 출시하려고 해요</li><li>기존 회사에서 새로운 제품 라인을 만들고 있어요</li><li>스마트스토어 제품 썸네일에 사용할 로고가 필요해요</li></ul></div>
                 <div className="brand-choice-result"><strong><span className="choice-gift" aria-hidden="true" />결과물</strong><span>제품 브랜드 로고 · 대표 컬러 · 추천 글씨체 · 제품 썸네일</span></div>
-                <button className="brand-choice-cta bi-cta" type="button" onClick={() => chooseBrandKind('bi')}>제품 · 브랜드 로고 만들기 <span aria-hidden="true">›</span></button>
+                <button className="brand-choice-cta bi-cta" type="button" onClick={() => chooseBrandKind('bi')}>제품 · 브랜드 로고 만들기 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
               </div>
               <div className="brand-choice-art-wrap"><img src="/bi-white.svg" alt="제품과 화장품 브랜드를 대표하는 BI 로고 예시" /></div>
             </article>
@@ -593,14 +832,15 @@ function App() {
 
     return (
       <main className="final-request-screen">
+        <ScreenBackButton label="로고 스타일 선택 화면으로 돌아가기" onClick={() => setMode('style')} />
         <section className="final-request-content" aria-labelledby="final-request-title">
           <div className="final-progress" aria-label="브랜드 생성 4단계 중 4단계">
             <span className="final-step-badge">4 / 4</span>
             <div className="final-progress-track" aria-hidden="true">
               <span className="final-progress-line" />
-              <span className="final-progress-node complete">✓</span>
-              <span className="final-progress-node complete">✓</span>
-              <span className="final-progress-node complete">✓</span>
+                <span className="final-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
+                <span className="final-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
+                <span className="final-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
               <span className="final-progress-node active" />
             </div>
           </div>
@@ -625,13 +865,13 @@ function App() {
           </section>
 
           <section className="final-tip-card" aria-label="추가 요청사항 작성 도움말">
-            <span className="final-tip-icon" aria-hidden="true">♧</span>
+          <span className="final-tip-icon" aria-hidden="true"><Info size={24} strokeWidth={1.8} /></span>
             <div>
               <p>다음과 같은 내용을 작성할 수 있어요.</p>
               <div className="final-suggestion-list">
                 {suggestions.map((suggestion) => (
                   <button key={suggestion} type="button" onClick={() => addSuggestion(suggestion)}>
-                    <span aria-hidden="true">＋</span>{suggestion}
+                    <Plus aria-hidden="true" size={15} strokeWidth={2} />{suggestion}
                   </button>
                 ))}
               </div>
@@ -646,7 +886,7 @@ function App() {
                   <span className={`final-detail-icon icon-${row.icon}`} aria-hidden="true" />
                   <span className="final-summary-label">{row.label}</span>
                   <span className="final-summary-value">{row.value}</span>
-                  <button className="final-edit-button" type="button" onClick={() => setMode('brand-details')}>수정하기 <span aria-hidden="true">›</span></button>
+                  <button className="final-edit-button" type="button" onClick={() => setMode(brandKind === 'ci' ? 'company-details' : 'brand-details')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
                 </div>
               ))}
               <div className="final-summary-row">
@@ -655,16 +895,16 @@ function App() {
                 <span className="final-color-swatches" aria-label="선호 색상 4개">
                   <i className="swatch-green" /><i className="swatch-yellow" /><i className="swatch-cream" /><i className="swatch-gray" />
                 </span>
-                  <button className="final-edit-button" type="button" onClick={() => setMode('brand-details')}>수정하기 <span aria-hidden="true">›</span></button>
+                  <button className="final-edit-button" type="button" onClick={() => setMode(brandKind === 'ci' ? 'company-details' : 'brand-details')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
               <div className="final-summary-row">
                 <span className="final-detail-icon icon-logo" aria-hidden="true" />
                 <span className="final-summary-label">로고 형태</span>
                 <span className="final-summary-value">콤비네이션 (그림 + 브랜드명) <em>추천</em></span>
-                <button className="final-edit-button" type="button" onClick={() => setMode('brand-details')}>수정하기 <span aria-hidden="true">›</span></button>
+                <button className="final-edit-button" type="button" onClick={() => setMode(brandKind === 'ci' ? 'company-details' : 'brand-details')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
               <div className="final-summary-row final-summary-last">
-                <span className="final-detail-icon icon-question" aria-hidden="true">?</span>
+                <span className="final-detail-icon icon-question" aria-hidden="true"><CircleHelp size={22} strokeWidth={1.8} /></span>
                 <span className="final-summary-label">추가 요청사항</span>
                 <span className="final-summary-value">{additionalRequest || '별도 요청 없음'}</span>
                 <span className="final-summary-dash" aria-hidden="true">—</span>
@@ -672,12 +912,19 @@ function App() {
             </div>
           </section>
 
-          <button className="final-generate-button" type="button" onClick={() => openTrademarkSelection('generation')}>
+          <button className="final-generate-button" type="button" onClick={() => {
+            if (canAnalyzeTrademark) {
+              openTrademarkSelection('generation')
+            } else {
+              setTrademarkAnalysisSkipped(true)
+              setMode('loading')
+            }
+          }}>
             <span className="final-sparkle-cluster" aria-hidden="true"><i>✧</i><i>✧</i><i>✧</i></span>
             로고 생성하기
-            <span className="final-generate-arrow" aria-hidden="true">›</span>
+            <ChevronRight className="final-generate-arrow" aria-hidden="true" size={28} strokeWidth={1.8} />
           </button>
-          <p className="final-footnote"><span aria-hidden="true">ⓘ</span> 생성된 후보는 나중에 색상과 글씨체를 수정할 수 있어요.</p>
+          <p className="final-footnote"><Info aria-hidden="true" size={18} strokeWidth={1.8} /> 생성된 후보는 나중에 색상과 글씨체를 수정할 수 있어요.</p>
         </section>
       </main>
     )
@@ -702,8 +949,8 @@ function App() {
 
           <div className="logo-loading-orb" aria-label="로고 생성 진행 중">
             <div className="logo-loading-ring">
-              <span className="logo-loading-sparkle sparkle-one">✦</span>
-              <span className="logo-loading-sparkle sparkle-two">✦</span>
+              <Sparkles className="logo-loading-sparkle sparkle-one" aria-hidden="true" size={70} strokeWidth={1.6} />
+              <LucideSparkle className="logo-loading-sparkle sparkle-two" aria-hidden="true" size={40} strokeWidth={1.8} />
             </div>
           </div>
           <div className="logo-loading-status">로고 생성 중...</div>
@@ -712,29 +959,35 @@ function App() {
             {loadingSteps.map((step, index) => (
               <article className={index === 0 ? 'logo-loading-step active' : 'logo-loading-step'} key={step.number}>
                 <span className="logo-loading-step-number">{step.number}</span>
-                <span className={`logo-loading-step-icon icon-${step.icon}`} aria-hidden="true" />
+                <span className={`logo-loading-step-icon icon-${step.icon}`} aria-hidden="true">
+                  {step.icon === 'clipboard' ? <ClipboardCheck size={47} strokeWidth={1.8} />
+                    : step.icon === 'mood' ? <Heart size={47} strokeWidth={1.8} fill="currentColor" />
+                      : step.icon === 'palette' ? <Palette size={47} strokeWidth={1.8} />
+                        : step.icon === 'pen' ? <PenLine size={47} strokeWidth={1.8} />
+                          : <FolderCheck size={47} strokeWidth={1.8} />}
+                </span>
                 <p>{step.text}</p>
-                {index === 0 && <span className="logo-loading-dots" aria-hidden="true" />}
+                {index === 0 && <LoaderCircle className="logo-loading-dots" aria-hidden="true" size={27} strokeWidth={2.6} />}
               </article>
             ))}
           </section>
 
           <section className="logo-loading-time-card" aria-label="예상 소요 시간">
-            <span className="logo-loading-side-icon clock-icon" aria-hidden="true" />
+            <Clock3 className="logo-loading-side-icon clock-icon" aria-hidden="true" size={59} strokeWidth={1.8} />
             <div>
               <p>약 1~3분 정도 걸릴 수 있어요.</p>
               <div className="logo-loading-progress" aria-hidden="true"><span /></div>
             </div>
-            <span className="logo-loading-side-icon alarm-icon" aria-hidden="true" />
+            <AlarmClock className="logo-loading-side-icon alarm-icon" aria-hidden="true" size={59} strokeWidth={1.8} />
           </section>
 
           <section className="logo-loading-save-card" aria-label="입력 내용 저장 안내">
-            <span className="logo-loading-save-icon" aria-hidden="true" />
+            <ShieldCheck className="logo-loading-save-icon" aria-hidden="true" size={60} strokeWidth={1.8} />
             <div>
               <strong>입력한 내용은 저장되어 있어요.</strong>
               <p>잠시 다른 화면을 둘러봐도 괜찮아요.</p>
             </div>
-            <span className="logo-loading-cloud" aria-hidden="true" />
+            <span className="logo-loading-cloud" aria-hidden="true"><CloudCheck size={58} strokeWidth={1.7} /><FileCheck2 size={45} strokeWidth={1.7} /></span>
           </section>
         </section>
       </main>
@@ -752,7 +1005,7 @@ function App() {
       <main className="trademark-loading-screen" aria-labelledby="trademark-loading-title">
         <section className="trademark-loading-content">
           <div className="trademark-brand-lockup" aria-label="GenMark AI">
-            <span className="trademark-brand-mark" aria-hidden="true">◇</span>
+            <span className="trademark-brand-mark" aria-hidden="true"><Sparkles size={30} strokeWidth={1.6} /></span>
             <span>GenMark AI</span>
           </div>
 
@@ -760,8 +1013,8 @@ function App() {
             <span className="trademark-step-badge">2 / 3</span>
             <div className="trademark-progress-track" aria-hidden="true">
               <span className="trademark-progress-line" />
-              <span className="trademark-progress-node complete">✓</span>
-              <span className="trademark-progress-node complete">✓</span>
+              <span className="trademark-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
+              <span className="trademark-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
               <span className="trademark-progress-node active" />
               <span className="trademark-progress-node" />
             </div>
@@ -776,8 +1029,8 @@ function App() {
             <div className="trademark-reference-card reference-left"><span className="trademark-leaf-icon">♢</span><i /><i /></div>
             <div className="trademark-magnifier"><span /></div>
             <div className="trademark-reference-card reference-right"><span className="trademark-bottle-icon">▯</span><i /><i /></div>
-            <span className="trademark-visual-sparkle sparkle-a">✦</span>
-            <span className="trademark-visual-sparkle sparkle-b">✦</span>
+            <Sparkles className="trademark-visual-sparkle sparkle-a" aria-hidden="true" size={24} strokeWidth={1.6} />
+            <Sparkles className="trademark-visual-sparkle sparkle-b" aria-hidden="true" size={20} strokeWidth={1.6} />
           </div>
 
           <section className="trademark-analysis-steps" aria-label="상표 분석 단계">
@@ -785,18 +1038,18 @@ function App() {
               <div className={`trademark-analysis-step ${step.state}`} key={step.number}>
                 <span className="trademark-analysis-number">{step.number}</span>
                 <p>{step.text}</p>
-                {step.state === 'complete' ? <span className="trademark-analysis-check" aria-hidden="true">✓</span> : <span className="trademark-analysis-spinner" aria-hidden="true" />}
+                {step.state === 'complete' ? <span className="trademark-analysis-check" aria-hidden="true"><Check size={18} strokeWidth={2.5} /></span> : <span className="trademark-analysis-spinner" aria-hidden="true" />}
               </div>
             ))}
           </section>
 
           <section className="trademark-info-card" aria-label="상표 분석 안내">
-            <span className="trademark-info-icon" aria-hidden="true">i</span>
+            <span className="trademark-info-icon" aria-hidden="true"><Info size={24} strokeWidth={1.8} /></span>
             <p>이름 검색이 아니라<br /><strong>로고 이미지의 외관</strong>을 비교하는 과정이에요.</p>
             <span className="trademark-info-art" aria-hidden="true">⌕</span>
           </section>
 
-          <p className="trademark-waiting"><span>✦</span> 분석 중이에요. 잠시만 기다려주세요. <span>✦</span></p>
+          <p className="trademark-waiting"><Sparkles aria-hidden="true" size={18} strokeWidth={1.6} /> 분석 중이에요. 잠시만 기다려주세요. <Sparkles aria-hidden="true" size={18} strokeWidth={1.6} /></p>
         </section>
       </main>
     )
@@ -811,9 +1064,10 @@ function App() {
 
     return (
       <main className="trademark-selection-screen" aria-labelledby="trademark-selection-title">
+        <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => setMode(trademarkEntry === 'generation' ? 'final' : 'result')} />
         <header className="trademark-selection-header">
-          <div className="trademark-selection-brand"><span className="trademark-selection-brand-mark" aria-hidden="true">✦</span><span>GenMark AI</span></div>
-          <button className="trademark-help" type="button" aria-label="상표 분석 도움말">?</button>
+          <div className="trademark-selection-brand"><Sparkles className="trademark-selection-brand-mark" aria-hidden="true" size={24} strokeWidth={1.6} /><span>GenMark AI</span></div>
+          <button className="trademark-help" type="button" aria-label="상표 분석 도움말"><CircleHelp aria-hidden="true" size={23} strokeWidth={1.8} /></button>
         </header>
 
         <section className="trademark-selection-content">
@@ -851,18 +1105,91 @@ function App() {
           </section>
 
           <div className="trademark-selection-actions">
-            <button className="trademark-check-button" type="button" onClick={() => setMode('trademark-loading')}>
+            <button className="trademark-check-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(false); setMode('trademark-loading') }}>
               <span className="trademark-check-search" aria-hidden="true" />
               <span>비슷한 상표 이미지 확인하기</span>
-              <span aria-hidden="true">›</span>
+              <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
             </button>
-            <button className="trademark-skip-button" type="button" onClick={() => setMode(trademarkEntry === 'result' ? 'result' : 'loading')}>
+            <button className="trademark-skip-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(true); setMode(trademarkEntry === 'result' ? 'result' : 'loading') }}>
               <span>지금은 건너뛰기</span>
-              <span aria-hidden="true">›</span>
+              <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
             </button>
           </div>
 
-          <p className="trademark-disclaimer"><span aria-hidden="true">ⓘ</span><span>본 분석은 기존 등록 상표 이미지와의 시각적 유사성을 보여주는 참고 자료입니다.<br />상표 등록 가능 여부나 법적 침해 여부를 판단하지 않습니다.</span></p>
+          <p className="trademark-disclaimer"><Info aria-hidden="true" size={20} strokeWidth={1.8} /><span>본 분석은 기존 등록 상표 이미지와의 시각적 유사성을 보여주는 참고 자료입니다.<br />상표 등록 가능 여부나 법적 침해 여부를 판단하지 않습니다.</span></p>
+        </section>
+      </main>
+    )
+  }
+
+  const renderTrademarkResultScreen = () => {
+    const matches = [
+      { rank: 1, name: 'LUNÉA Beauty', category: '스킨케어 · 워드마크', score: 27, style: 'trademark-match-lunea', note: '원형 배지와 잎사귀 형태가 일부 유사해요.' },
+      { rank: 2, name: 'MORÉA Skin', category: '클린뷰티 · 심볼마크', score: 19, style: 'trademark-match-morea', note: '중앙 심볼 배치가 부분적으로 유사해요.' },
+      { rank: 3, name: 'LUVIA Cosmetics', category: '코스메틱 · 콤비네이션', score: 14, style: 'trademark-match-luvia', note: '부드러운 곡선의 인상이 일부 겹쳐요.' },
+    ]
+    const topMatch = matches[0]
+
+    return (
+      <main className="trademark-result-screen" aria-labelledby="trademark-result-title">
+        <header className="trademark-result-header">
+          <button className="trademark-result-back" type="button" aria-label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+          <div className="trademark-result-brand"><Sparkles aria-hidden="true" size={26} strokeWidth={1.6} /><strong>GenMark AI</strong></div>
+          <button className="trademark-result-help" type="button" aria-label="상표 분석 도움말"><CircleHelp aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+        </header>
+
+        <section className="trademark-result-content">
+          <div className="trademark-result-complete"><CircleCheck aria-hidden="true" size={20} strokeWidth={1.8} /> 상표 이미지 분석 완료</div>
+          <h1 id="trademark-result-title">비슷한 상표 이미지<br /><strong>분석 결과를 확인해보세요</strong></h1>
+          <p className="trademark-result-lead">생성한 로고의 형태와 배치를 기존 등록 상표 이미지와 비교했어요.</p>
+
+          <section className="trademark-result-summary" aria-label="가장 유사한 상표 요약">
+            <div className="trademark-result-summary-icon" aria-hidden="true"><span /><i /><b /></div>
+            <div className="trademark-result-summary-copy">
+              <span>가장 유사한 상표</span>
+              <strong>{topMatch.name}</strong>
+              <p>{topMatch.category}</p>
+            </div>
+            <div className="trademark-result-score">
+              <strong>{topMatch.score}%</strong>
+              <span>이미지 유사도</span>
+            </div>
+          </section>
+
+          <section className="trademark-risk-card safe" aria-label="유사도 안전 범주">
+            <div className="trademark-risk-mark" aria-hidden="true"><Check size={24} strokeWidth={2.5} /></div>
+            <div>
+              <div className="trademark-risk-heading"><strong>안전</strong><span>낮은 유사도</span></div>
+              <p>현재 결과에서는 눈에 띄는 시각적 유사성이 낮아요. 그래도 실제 상표 등록 전에는 전문가의 확인을 권장해요.</p>
+            </div>
+          </section>
+
+          <section className="trademark-match-section" aria-labelledby="trademark-match-title">
+            <div className="trademark-match-heading">
+              <h2 id="trademark-match-title">비슷한 상표 이미지</h2>
+              <span>상위 {matches.length}건</span>
+            </div>
+            <div className="trademark-match-list">
+              {matches.map((match) => (
+                <article className="trademark-match-row" key={match.name}>
+                  <span className="trademark-match-rank">{match.rank}</span>
+                  <div className={`trademark-match-visual ${match.style}`} aria-hidden="true"><i /><b /><em /></div>
+                  <div className="trademark-match-copy">
+                    <strong>{match.name}</strong>
+                    <span>{match.category}</span>
+                    <p>{match.note}</p>
+                  </div>
+                  <strong className="trademark-match-score">{match.score}%</strong>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <p className="trademark-result-disclaimer"><Info aria-hidden="true" size={18} strokeWidth={1.8} /><span>본 결과는 로고 이미지의 시각적 유사성을 보여주는 참고 자료예요.<br />상표 등록 가능 여부나 법적 침해 여부를 판단하지 않아요.</span></p>
+
+          <div className="trademark-result-actions">
+            <button className="trademark-result-primary" type="button" onClick={() => setMode('result')}>로고 결과로 돌아가기 <ChevronRight aria-hidden="true" size={22} strokeWidth={1.8} /></button>
+          </div>
         </section>
       </main>
     )
@@ -880,51 +1207,62 @@ function App() {
     return (
       <main className="logo-result-screen" aria-labelledby="logo-result-title">
         <header className="logo-result-header">
-          <div className="logo-result-brand"><span aria-hidden="true">✦</span><strong>GenMark AI</strong></div>
-          <button className="logo-result-help" type="button" aria-label="도움말">?</button>
+          <div className="logo-result-brand"><Sparkles aria-hidden="true" size={26} strokeWidth={1.8} /><strong>GenMark AI</strong></div>
+          <button className="logo-result-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={23} strokeWidth={1.8} /></button>
         </header>
 
         <section className="logo-result-content">
-          <div className="logo-result-complete"><span aria-hidden="true">✓</span> 로고 후보가 완성됐어요</div>
+          <div className="logo-result-complete"><CircleCheck aria-hidden="true" size={21} strokeWidth={1.8} /> 로고 후보가 완성됐어요</div>
           <h1 id="logo-result-title">가장 마음에 드는 로고를 선택해주세요</h1>
           <p className="logo-result-lead">후보를 비교하고 색상이나 글씨체를 수정할 수 있어요.</p>
-          <div className="logo-result-counter" aria-label={`후보 ${resultCandidate + 1} / 4`}>후보 {resultCandidate + 1} / 4</div>
+          <div className="logo-result-counter" aria-label={`로고 ${resultCandidate + 1} / 4`}>{resultCandidate + 1} / 4</div>
 
           <section className="logo-candidate-panel" aria-label="로고 후보 미리보기">
-            <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => setResultCandidate((current) => (current + candidates.length - 1) % candidates.length)}>‹</button>
+            <button className={resultLiked ? 'logo-candidate-action like liked' : 'logo-candidate-action like'} type="button" aria-label={resultLiked ? '찜 취소' : '찜'} aria-pressed={resultLiked} onClick={() => setResultLiked((current) => !current)}>
+              <Heart size={22} strokeWidth={1.9} fill={resultLiked ? 'currentColor' : 'none'} />
+            </button>
+            <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => setResultCandidate((current) => (current + candidates.length - 1) % candidates.length)}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>
             <div className={`logo-candidate-art ${candidate.style}`}>
               <div className="candidate-emblem" aria-hidden="true"><span /><i /><b /></div>
               <strong>{candidate.name}</strong>
               <small>{candidate.subtitle}</small>
             </div>
-            <button className="logo-candidate-arrow next" type="button" aria-label="다음 후보" onClick={() => setResultCandidate((current) => (current + 1) % candidates.length)}>›</button>
+            <button className="logo-candidate-arrow next" type="button" aria-label="다음 후보" onClick={() => setResultCandidate((current) => (current + 1) % candidates.length)}><ChevronRight aria-hidden="true" size={26} strokeWidth={1.8} /></button>
+            <button className="logo-candidate-action download" type="button" aria-label="로고 파일 다운로드" onClick={() => requestLogoDownload(candidate)}>
+              <Download size={21} strokeWidth={1.9} />
+            </button>
           </section>
           <div className="logo-result-dots" aria-label="후보 선택">
             {candidates.map((item, index) => <button key={item.name} className={index === resultCandidate ? 'active' : ''} type="button" aria-label={`후보 ${index + 1}`} aria-pressed={index === resultCandidate} onClick={() => setResultCandidate(index)} />)}
           </div>
 
           <section className="logo-result-details" aria-label="로고 디자인 상세">
-            <div className="logo-result-detail-row"><span className="result-detail-icon compass" aria-hidden="true" /><strong>디자인 방향</strong><span>{candidate.direction}</span></div>
-            <div className="logo-result-detail-row"><span className="result-detail-icon type" aria-hidden="true">Aa</span><strong>추천 글씨체</strong><span>우아한 세리프 + 깔끔한 산세리프</span></div>
-            <div className="logo-result-detail-row"><span className="result-detail-icon drop" aria-hidden="true" /><strong>브랜드 컬러</strong><span className="result-color-swatches"><i /><i /><i /><i /></span></div>
-            <div className="logo-result-detail-row feeling"><span className="result-detail-icon heart" aria-hidden="true">♡</span><strong>이 로고가 전달하는 느낌</strong><span>부드럽고 깨끗하면서도<br />프리미엄한 스킨케어 브랜드 이미지</span></div>
+            <div className="logo-result-detail-row"><span className="result-detail-icon compass" aria-hidden="true"><Compass size={23} strokeWidth={1.8} /></span><strong>디자인 방향</strong><span>{candidate.direction}</span></div>
+            <div className="logo-result-detail-row"><span className="result-detail-icon type" aria-hidden="true"><TypeIcon size={23} strokeWidth={1.8} /></span><strong>추천 글씨체</strong><span>우아한 세리프 + 깔끔한 산세리프</span></div>
+            <div className="logo-result-detail-row"><span className="result-detail-icon drop" aria-hidden="true"><Droplets size={23} strokeWidth={1.8} /></span><strong>브랜드 컬러</strong><span className="result-color-swatches"><i /><i /><i /><i /></span></div>
+            <div className="logo-result-detail-row feeling"><span className="result-detail-icon heart" aria-hidden="true"><Heart size={26} strokeWidth={1.8} /></span><strong>이 로고가 전달하는 느낌</strong><span>부드럽고 깨끗하면서도<br />프리미엄한 스킨케어 브랜드 이미지</span></div>
           </section>
 
-          <section className="logo-result-trademark" aria-label="상표 이미지 유사도">
-            <span className="trademark-result-icon" aria-hidden="true"><i /><b /></span>
-            <div><strong>상표 이미지 유사도</strong><p>아직 상표 이미지 유사도를 확인하지 않았어요.</p><button type="button" onClick={() => openTrademarkSelection('result')}>비슷한 상표 이미지 확인하기 <span aria-hidden="true">›</span></button></div>
+          <section className={trademarkAnalysisCompleted ? 'logo-result-trademark analyzed' : 'logo-result-trademark'} aria-label="상표 이미지 유사도">
+            <span className="trademark-result-icon" aria-hidden="true"><Search size={44} strokeWidth={1.8} /></span>
+            {trademarkAnalysisCompleted ? (
+              <div><strong>상표 이미지 유사도 분석 완료</strong><p>가장 높은 유사도는 27%로, 현재 <b>안전</b> 범위예요.</p><button type="button" onClick={() => setMode('trademark-result')}>유사도 분석 결과 보기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+            ) : !canAnalyzeTrademark ? (
+              <div><strong>상표 이미지 유사도</strong><p>선택한 로고 스타일은 이미지 유사도 분석을 지원하지 않아요.</p></div>
+            ) : trademarkAnalysisSkipped ? (
+              <div><strong>상표 이미지 유사도</strong><p>이전 단계에서 유사도 분석을 건너뛰었어요.</p></div>
+            ) : (
+              <div><strong>상표 이미지 유사도</strong><p>아직 상표 이미지 유사도를 확인하지 않았어요.</p><button type="button" onClick={() => openTrademarkSelection('result')}>비슷한 상표 이미지 확인하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+            )}
           </section>
 
           <div className="logo-result-actions">
-            <button className="logo-result-primary" type="button" onClick={() => setResultSaved(true)}><span aria-hidden="true">✦</span>{resultSaved ? '이 로고를 선택했어요' : '이 로고 선택하기'}<span aria-hidden="true">›</span></button>
-            <button className="logo-result-edit" type="button" onClick={() => setMode('edit')}><span aria-hidden="true">⌕</span>색상 · 글씨체 수정<span aria-hidden="true">›</span></button>
+            <button className="logo-result-edit" type="button" onClick={() => setMode('edit')}><Pencil aria-hidden="true" size={23} strokeWidth={1.8} />색상 · 글씨체 수정<ChevronRight aria-hidden="true" size={25} strokeWidth={1.8} /></button>
           </div>
 
           <div className="logo-result-utility-grid">
-            <button type="button" onClick={() => setResultSaved(true)}><span className="result-utility-icon bookmark" aria-hidden="true" />후보로 저장<span aria-hidden="true">›</span></button>
-            <button type="button" onClick={() => setResultCandidate((current) => (current + 1) % candidates.length)}><span className="result-utility-icon refresh" aria-hidden="true" />조건을 바꿔<br />다시 만들기<span aria-hidden="true">›</span></button>
-            <button type="button"><span className="result-utility-icon download" aria-hidden="true" />로고 파일 받기<span aria-hidden="true">›</span></button>
-            <button type="button"><span className="result-utility-icon picture" aria-hidden="true" />제품 썸네일 만들기<span aria-hidden="true">›</span></button>
+            <button className="utility-primary" type="button" onClick={() => setResultCandidate((current) => (current + 1) % candidates.length)}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />조건을 바꿔<br />다시 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+            <button className="utility-secondary" type="button"><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />제품 썸네일 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
           </div>
         </section>
       </main>
@@ -938,16 +1276,16 @@ function App() {
     return (
       <main className="logo-editor-screen" aria-labelledby="logo-editor-title">
         <header className="logo-editor-header">
-          <button className="logo-editor-back" type="button" aria-label="결과 화면으로 돌아가기" onClick={() => setMode('result')}>‹</button>
-          <div className="logo-editor-brand"><span aria-hidden="true">✦</span><strong>GenMark AI</strong></div>
-          <button className="logo-editor-save" type="button" onClick={() => setEditorSaved(true)}>{editorSaved ? '저장됨' : '저장'}<span aria-hidden="true">⌄</span></button>
-          <button className="logo-editor-help" type="button" aria-label="도움말">?</button>
+          <button className="logo-editor-back" type="button" aria-label="결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+          <div className="logo-editor-brand"><Sparkles aria-hidden="true" size={22} strokeWidth={1.6} /><strong>GenMark AI</strong></div>
+          <button className="logo-editor-save" type="button" onClick={() => setEditorSaved(true)}>{editorSaved ? '저장됨' : '저장'}<ChevronDown aria-hidden="true" size={16} strokeWidth={1.8} /></button>
+          <button className="logo-editor-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         </header>
 
         <section className="logo-editor-content">
           <div className="logo-editor-meta">
-            <div className="logo-editor-counter"><button type="button" aria-label="이전 후보" onClick={() => setResultCandidate((current) => (current + 3) % 4)}>‹</button><strong>후보 {resultCandidate + 1} / 4</strong><button type="button" aria-label="다음 후보" onClick={() => setResultCandidate((current) => (current + 1) % 4)}>›</button></div>
-            <span className="logo-editor-autosave"><b>✓</b> 자동 저장됨</span>
+            <div className="logo-editor-counter"><button type="button" aria-label="이전 후보" onClick={() => setResultCandidate((current) => (current + 3) % 4)}><ChevronLeft size={18} strokeWidth={1.8} /></button><strong>후보 {resultCandidate + 1} / 4</strong><button type="button" aria-label="다음 후보" onClick={() => setResultCandidate((current) => (current + 1) % 4)}><ChevronRight size={18} strokeWidth={1.8} /></button></div>
+            <span className="logo-editor-autosave"><Check size={15} strokeWidth={2} /> 자동 저장됨</span>
           </div>
 
           <section className="logo-editor-preview-card" aria-label="로고 편집 캔버스">
@@ -960,10 +1298,10 @@ function App() {
                 <strong style={{ letterSpacing: `${editorLetterSpacing}px` }}>{editorBrandName}</strong>
                 <small>C O S M E T I C S</small>
               </button>
-              {editTarget === 'symbol' && <span className="editor-rotate-handle" aria-hidden="true">↻</span>}
+              {editTarget === 'symbol' && <span className="editor-rotate-handle" aria-hidden="true"><RefreshCw size={22} strokeWidth={1.8} /></span>}
             </div>
             <div className="logo-editor-preview-footer">
-              <div className="editor-history"><button type="button" aria-label="실행 취소">↶</button><button type="button" aria-label="다시 실행">↷</button></div>
+              <div className="editor-history"><button type="button" aria-label="실행 취소"><ArrowLeft size={20} strokeWidth={1.8} /></button><button type="button" aria-label="다시 실행"><ArrowRight size={20} strokeWidth={1.8} /></button></div>
               <div className="editor-mini-preview"><span className="mini-mark">L<em>V</em></span><small>❧</small></div>
             </div>
           </section>
@@ -982,7 +1320,7 @@ function App() {
                 <input id="editor-brand-name" value={editorBrandName} onChange={(event) => setEditorBrandName(event.target.value)} />
                 <div className="editor-control-heading"><strong>추천 글씨체</strong><span>상업적 이용 가능 <b>ⓘ</b></span></div>
                 <div className="editor-font-grid">
-                  {fontOptions.map((font, index) => <button key={index} type="button" className={index === 0 ? 'selected' : ''} style={{ fontFamily: index === 0 ? 'Georgia, serif' : index === 1 ? 'Arial, sans-serif' : index === 2 ? 'Garamond, serif' : 'Times New Roman, serif' }}>{font}{index === 0 && <span>✓</span>}</button>)}
+                  {fontOptions.map((font, index) => <button key={index} type="button" className={index === 0 ? 'selected' : ''} style={{ fontFamily: index === 0 ? 'Georgia, serif' : index === 1 ? 'Arial, sans-serif' : index === 2 ? 'Garamond, serif' : 'Times New Roman, serif' }}>{font}{index === 0 && <Check aria-hidden="true" size={11} strokeWidth={2.5} />}</button>)}
                 </div>
                 <div className="editor-control-heading"><strong>글자 설정</strong><button type="button" onClick={() => { setEditorScale(100); setEditorLetterSpacing(0) }}>초기화</button></div>
                 <label className="editor-slider-row"><span>크기</span><input type="range" min="70" max="140" value={editorScale} onChange={(event) => setEditorScale(Number(event.target.value))} /><output>{editorScale}%</output></label>
@@ -1001,14 +1339,14 @@ function App() {
                 <label className="editor-slider-row"><span>회전</span><input type="range" min="-180" max="180" value={editorRotation} onChange={(event) => setEditorRotation(Number(event.target.value))} /><output>{editorRotation}°</output></label>
                 <label className="editor-color-row"><span>색상</span><select value={editorColor} onChange={(event) => setEditorColor(event.target.value)}><option value="#7B5CDF">●  #7B5CDF</option><option value="#E36BAE">●  #E36BAE</option><option value="#2D3047">●  #2D3047</option></select></label>
                 <label className="editor-slider-row"><span>투명도</span><input type="range" min="30" max="100" value={editorOpacity} onChange={(event) => setEditorOpacity(Number(event.target.value))} /><output>{editorOpacity}%</output></label>
-                <button className="editor-regenerate" type="button" onClick={() => setEditorSymbol((current) => (current + 1) % symbolOptions.length)}>✦　심볼 다시 생성하기</button>
+                <button className="editor-regenerate" type="button" onClick={() => setEditorSymbol((current) => (current + 1) % symbolOptions.length)}><Sparkles aria-hidden="true" size={18} strokeWidth={1.8} />심볼 다시 생성하기</button>
               </div>
             )}
           </section>
 
           <div className="logo-editor-actions">
             <button className="logo-editor-apply" type="button" onClick={() => { setEditorSaved(true); setMode('result') }}>수정 적용하기</button>
-            <button className="logo-editor-trademark" type="button" onClick={() => openTrademarkSelection('result')}>상표 이미지 유사도 다시 확인하기</button>
+            {canAnalyzeTrademark && <button className="logo-editor-trademark" type="button" onClick={() => openTrademarkSelection('result')}>상표 이미지 유사도 다시 확인하기</button>}
           </div>
           <p className="logo-editor-note">· 로고의 형태나 배치를 변경하면 상표 이미지 유사도에 영향을 줄 수 있어요.</p>
         </section>
@@ -1016,8 +1354,123 @@ function App() {
     )
   }
 
+  const renderMypageScreen = () => {
+    const displayUserName = brandName.trim() || '사용자'
+    const completedProjects = [{ id: 'luvera', name: 'LUVÉRA', detail: '스킨케어 · 콤비네이션', status: '로고 생성 완료' }]
+
+    return (
+      <main className="mypage-screen" aria-labelledby="mypage-title">
+        <header className="workspace-header">
+          <div className="workspace-brand"><Sparkles aria-hidden="true" size={24} strokeWidth={1.7} /><strong>GenMark AI</strong></div>
+          <button className="workspace-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={22} strokeWidth={1.8} /></button>
+        </header>
+
+        <section className="mypage-content">
+          <header className="mypage-heading">
+            <p className="mypage-eyebrow">마이페이지</p>
+            <h1 id="mypage-title">{displayUserName}님의 브랜드 작업</h1>
+            <p>작성 중인 프로젝트와 완성된 로고를 한곳에서 확인하세요.</p>
+          </header>
+
+          <section className="mypage-section" aria-labelledby="continue-title">
+            <div className="section-title-row">
+              <div><h2 id="continue-title">이어서 만들기</h2><p>이전에 입력한 내용부터 계속 진행할 수 있어요.</p></div>
+              <PenLine aria-hidden="true" size={26} strokeWidth={1.8} />
+            </div>
+            <div className="continue-project-card">
+              <div className="project-art-placeholder" aria-hidden="true"><Sparkles size={30} strokeWidth={1.6} /></div>
+              <div className="project-card-copy"><strong>{brandKind === 'ci' ? '기업 로고 프로젝트' : '새 브랜드 프로젝트'}</strong><span>브랜드 설명 단계에서 작성 중</span></div>
+              <button className="gradient-button" type="button" onClick={() => setMode(brandKind === 'ci' ? 'company-details' : 'brand-details')}>이어서 작성하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+            </div>
+          </section>
+
+          <section className="mypage-section" aria-labelledby="completed-title">
+            <div className="section-title-row"><div><h2 id="completed-title">완성한 브랜드</h2><p>생성한 로고와 분석 결과를 다시 확인할 수 있어요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
+            {completedProjects.length > 0 ? completedProjects.map((project) => (
+              <article className="completed-project-card" key={project.id}>
+                <div className="completed-project-preview" aria-hidden="true"><span><Sparkles size={22} strokeWidth={1.5} /></span><strong>{project.name}</strong><small>COSMETICS</small></div>
+                <div className="completed-project-info"><div className="project-info-heading"><strong>{project.name}</strong><span className="project-status"><Check size={14} strokeWidth={2.3} /> {project.status}</span></div><p>{project.detail}</p><div className="project-status-list"><span><Check size={14} strokeWidth={2} /> 로고 생성 완료</span><span><Check size={14} strokeWidth={2} /> 상표 이미지 분석 완료</span><span><Check size={14} strokeWidth={2} /> 브랜드 키트 완료</span></div></div>
+                <div className="project-action-grid">
+                  <button type="button" onClick={() => setMode('result')}><ImageIcon size={19} strokeWidth={1.8} />결과 보기</button>
+                  <button type="button" onClick={() => setMode('trademark-result')}><Search size={19} strokeWidth={1.8} />유사도 결과 보기</button>
+                  <button type="button" onClick={() => downloadLogo({ name: project.name, subtitle: 'COSMETICS' })}><Download size={19} strokeWidth={1.8} />로고 다운로드</button>
+                  <button type="button" onClick={() => setMode('result')}><FolderCheck size={19} strokeWidth={1.8} />브랜드 키트 만들기</button>
+                  <button type="button" onClick={() => setMode('style')}><RefreshCw size={19} strokeWidth={1.8} />다시 생성하기</button>
+                </div>
+              </article>
+            )) : (
+              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 만든 브랜드가 없어요</h3><p>첫 번째 화장품 브랜드 로고를 만들어보세요.</p><button className="gradient-button" type="button" onClick={startOnboarding}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+            )}
+          </section>
+
+          <button className="survey-entry-card" type="button" onClick={() => { setSurveySubmitted(false); setMode('survey') }}><span><MessageSquare aria-hidden="true" size={23} strokeWidth={1.8} /></span><div><strong>서비스를 이용해보셨나요?</strong><p>더 쉬운 브랜드 제작을 위해 의견을 들려주세요.</p></div><ChevronRight aria-hidden="true" size={21} strokeWidth={1.8} /></button>
+        </section>
+      </main>
+    )
+  }
+
+  const renderSurveyScreen = () => {
+    return (
+      <main className="survey-screen" aria-labelledby="survey-title">
+        <header className="workspace-header">
+          <button className="workspace-back" type="button" aria-label="마이페이지로 돌아가기" onClick={() => setMode('mypage')}><ChevronLeft aria-hidden="true" size={23} strokeWidth={1.8} /></button>
+          <div className="workspace-brand"><Sparkles aria-hidden="true" size={24} strokeWidth={1.7} /><strong>GenMark AI</strong></div>
+          <span className="survey-step">만족도 평가</span>
+        </header>
+
+        {surveySubmitted ? (
+          <section className="survey-complete-card" aria-live="polite"><div className="survey-complete-icon"><Check aria-hidden="true" size={36} strokeWidth={2.2} /></div><h1>의견을 보내주셔서 감사합니다.</h1><p>더 쉬운 브랜드 제작 서비스를 만드는 데 활용할게요.</p><button className="gradient-button" type="button" onClick={() => setMode('mypage')}>마이페이지로 돌아가기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></section>
+        ) : (
+          <form className="survey-content" onSubmit={(event) => { event.preventDefault(); setSurveySubmitted(true) }}>
+            <header className="survey-heading"><div className="survey-heading-icon"><MessageSquare aria-hidden="true" size={28} strokeWidth={1.7} /></div><h1 id="survey-title">로고를 만드는 과정은 어떠셨나요?</h1><p>초기 화장품 창업자가 더 쉽게 사용할 수 있도록 의견을 들려주세요.</p></header>
+
+            <section className="survey-section" aria-labelledby="rating-title"><h2 id="rating-title">결과에 얼마나 만족하시나요?</h2><div className="rating-options" role="radiogroup" aria-label="결과 만족도"><button type="button" role="radio" aria-checked={surveyRating === 5} className={surveyRating === 5 ? 'rating-choice like selected' : 'rating-choice like'} onClick={() => setSurveyRating(5)}><ThumbsUp aria-hidden="true" size={34} strokeWidth={1.7} fill={surveyRating === 5 ? 'currentColor' : 'none'} /><span>좋아요</span></button><button type="button" role="radio" aria-checked={surveyRating === 1} className={surveyRating === 1 ? 'rating-choice dislike selected' : 'rating-choice dislike'} onClick={() => setSurveyRating(1)}><ThumbsDown aria-hidden="true" size={34} strokeWidth={1.7} fill={surveyRating === 1 ? 'currentColor' : 'none'} /><span>싫어요</span></button></div></section>
+
+            <section className="survey-section" aria-labelledby="improvement-title"><h2 id="improvement-title">어떤 부분이 더 좋아졌으면 하나요?</h2><p className="survey-helper">개선이 필요하다고 느낀 항목을 모두 선택해주세요.</p><div className="improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'improvement-option selected' : 'improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}><span>{selected ? <Check size={16} strokeWidth={2.4} /> : <Plus size={16} strokeWidth={1.8} />}</span>{item}</button> })}</div></section>
+
+            <section className="survey-section" aria-labelledby="comment-title"><h2 id="comment-title">추가 의견</h2><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /><div className="survey-character-count">{surveyComment.length} / 500</div></section>
+
+            <button className="survey-submit gradient-button" type="submit">의견 보내기 <ChevronRight aria-hidden="true" size={22} strokeWidth={1.8} /></button>
+          </form>
+        )}
+      </main>
+    )
+  }
+
+  const renderCreditModal = () => (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreditModal(null) }}>
+      <section className="credit-modal" role="dialog" aria-modal="true" aria-labelledby="credit-modal-title">
+        <button className="modal-close" type="button" aria-label="크레딧 안내 닫기" onClick={() => setCreditModal(null)}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
+        <div className="credit-modal-icon"><Download aria-hidden="true" size={28} strokeWidth={1.8} /></div>
+        <h2 id="credit-modal-title">크레딧을 확인해볼까요?</h2>
+        <p>현재 남은 크레딧은 <strong>{remainingCredits}개</strong>예요.</p>
+        <p>짧은 설문조사에 참여하시면 크레딧 <strong>1개</strong>를 더 드릴게요. 지금 의견을 남겨볼까요?</p>
+        <div className="credit-modal-actions">
+          <button className="gradient-button" type="button" onClick={() => setCreditModal('survey')}>설문 참여하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+          <button className="modal-secondary-button" type="button" onClick={remainingCredits > 0 ? downloadWithCredit : () => setCreditModal(null)}>{remainingCredits > 0 ? '크레딧 사용하고 다운로드' : '닫기'}</button>
+        </div>
+      </section>
+    </div>
+  )
+
+  const renderCreditSurveyModal = () => (
+    <div className="modal-backdrop" role="presentation">
+      <section className="credit-modal survey-modal" role="dialog" aria-modal="true" aria-labelledby="credit-survey-title">
+        <button className="modal-close" type="button" aria-label="설문 닫기" onClick={() => setCreditModal(null)}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
+        <div className="survey-modal-heading"><MessageSquare aria-hidden="true" size={24} strokeWidth={1.8} /><div><h2 id="credit-survey-title">잠깐만 의견을 들려주세요</h2><p>설문에 참여하시면 크레딧 1개를 드려요.</p></div></div>
+        <form onSubmit={submitCreditSurvey}>
+          <div className="modal-survey-block"><h3>결과에 얼마나 만족하시나요?</h3><div className="modal-rating-options" role="radiogroup" aria-label="결과 만족도"><button type="button" role="radio" aria-checked={surveyRating === 5} className={surveyRating === 5 ? 'modal-rating-choice like selected' : 'modal-rating-choice like'} onClick={() => setSurveyRating(5)}><ThumbsUp aria-hidden="true" size={24} strokeWidth={1.8} fill={surveyRating === 5 ? 'currentColor' : 'none'} /><span>좋아요</span></button><button type="button" role="radio" aria-checked={surveyRating === 1} className={surveyRating === 1 ? 'modal-rating-choice dislike selected' : 'modal-rating-choice dislike'} onClick={() => setSurveyRating(1)}><ThumbsDown aria-hidden="true" size={24} strokeWidth={1.8} fill={surveyRating === 1 ? 'currentColor' : 'none'} /><span>싫어요</span></button></div></div>
+          <div className="modal-survey-block"><h3>어떤 부분이 더 좋아졌으면 하나요?</h3><div className="modal-improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'modal-improvement-option selected' : 'modal-improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}><span>{selected ? <Check size={13} strokeWidth={2.4} /> : <Plus size={13} strokeWidth={1.8} />}</span>{item}</button> })}</div></div>
+          <div className="modal-survey-block"><h3>추가 의견</h3><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /></div>
+          <button className="gradient-button modal-submit" type="submit">의견 보내고 크레딧 받기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+        </form>
+      </section>
+    </div>
+  )
+
   const renderFlowScreen = () => (
     <main className="flow-screen">
+      {mode === 'setup' && <ScreenBackButton label="홈으로 돌아가기" onClick={() => setMode('home')} />}
       <section className="flow-card">
         {mode === 'setup' ? (
           <form onSubmit={submitProject}>
@@ -1085,7 +1538,7 @@ function App() {
           <button className="login-back" type="button" onClick={() => setMode('home')}>‹ <span>홈</span></button>
           <span className="login-header-state">안전하게 저장하기</span>
         </header>
-      ) : mode === 'onboarding' || mode === 'brand-details' || mode === 'hero' || mode === 'choice' || mode === 'tone' || mode === 'style' || mode === 'final' || mode === 'loading' || mode === 'trademark-loading' || mode === 'trademark-selection' || mode === 'result' || mode === 'edit' ? null : (
+      ) : mode === 'onboarding' || mode === 'brand-details' || mode === 'company-details' || mode === 'hero' || mode === 'choice' || mode === 'tone' || mode === 'style' || mode === 'final' || mode === 'loading' || mode === 'trademark-loading' || mode === 'trademark-selection' || mode === 'trademark-result' || mode === 'result' || mode === 'edit' || mode === 'mypage' || mode === 'survey' ? null : (
         <header className="main-header">
           <a className="main-brand" href="#home" aria-label="GenMark AI 홈" onClick={() => setMode('home')}>
             <BrandLogo />
@@ -1097,7 +1550,7 @@ function App() {
         </header>
       )}
 
-      {mode === 'login' ? renderLoginScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'result' ? renderLogoResultScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'hero' ? (
+      {mode === 'login' ? renderLoginScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'company-details' ? renderCompanyDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'trademark-result' ? renderTrademarkResultScreen() : mode === 'result' ? renderLogoResultScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'mypage' ? renderMypageScreen() : mode === 'survey' ? renderSurveyScreen() : mode === 'hero' ? (
         renderHeroScreen()
       ) : mode === 'home' ? (
         <main id="home" className="main-home">
@@ -1114,8 +1567,8 @@ function App() {
             <div className="section-heading">
               <h2 id="curation-title">큐레이션 갤러리</h2>
               <div className="gallery-controls">
-                <button type="button" aria-label="이전 로고 보기" onClick={() => scrollGallery(-340)}>‹</button>
-                <button type="button" aria-label="다음 로고 보기" onClick={() => scrollGallery(340)}>›</button>
+                <button type="button" aria-label="이전 로고 보기" onClick={() => scrollGallery(-340)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <button type="button" aria-label="다음 로고 보기" onClick={() => scrollGallery(340)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
               </div>
             </div>
             <div
@@ -1132,10 +1585,10 @@ function App() {
                   <article className="gallery-card" key={item.id}>
                     <div className={`gallery-visual ${item.tone}`} style={{ backgroundPosition: item.position }}>
                       <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
-                        {liked ? '♥' : '♡'}
+                        <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
                       </button>
                       <div className="gallery-art-copy">
-                        <span>{item.id === 'luna' ? '☾' : item.id === 'sora' ? '✿' : '◉'}</span>
+                        <span aria-hidden="true">{item.id === 'luna' ? <CircleCheck size={32} strokeWidth={1.4} /> : item.id === 'sora' ? <Droplets size={32} strokeWidth={1.4} /> : <Sparkles size={32} strokeWidth={1.4} />}</span>
                         <strong>{item.name}</strong>
                         <small>{item.category === '콤비네이션' ? 'CLEAN BEAUTY' : item.category.toUpperCase()}</small>
                       </div>
@@ -1146,7 +1599,7 @@ function App() {
                         <h3>{item.name}</h3>
                         <p>{item.meta}</p>
                       </div>
-                      <div className="like-count"><span>♥</span>{item.likes}</div>
+                      <div className="like-count"><Heart aria-hidden="true" size={17} strokeWidth={1.8} fill="currentColor" />{item.likes}</div>
                     </div>
                   </article>
                 )
@@ -1157,17 +1610,16 @@ function App() {
         </main>
       ) : renderFlowScreen()}
 
-      {mode !== 'login' && mode !== 'onboarding' && mode !== 'brand-details' && mode !== 'hero' && mode !== 'choice' && mode !== 'tone' && mode !== 'style' && mode !== 'final' && mode !== 'loading' && mode !== 'trademark-loading' && mode !== 'trademark-selection' && <nav className="bottom-nav" aria-label="주요 메뉴">
+      {mode !== 'loading' && mode !== 'trademark-loading' && <nav className="bottom-nav" aria-label="주요 메뉴">
         <button className={mode === 'home' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setMode('home')}>
-          <span className="nav-icon home-icon" aria-hidden="true">⌂</span><span>홈</span>
+          <House className="nav-icon" aria-hidden="true" size={26} strokeWidth={1.8} /><span>홈</span>
         </button>
-        <button className={mode !== 'home' ? 'nav-item active' : 'nav-item'} type="button" onClick={startOnboarding}>
-          <span className="nav-icon wand-icon" aria-hidden="true">✧</span><span>로고 생성</span>
-        </button>
-        <button className="nav-item" type="button" onClick={() => setLoggedIn((current) => !current)}>
-          <span className="nav-icon profile-icon" aria-hidden="true" /><span>마이페이지</span>
+        <button className={mode === 'mypage' || mode === 'survey' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setMode('mypage')}>
+          <UserRound className="nav-icon" aria-hidden="true" size={26} strokeWidth={1.8} /><span>마이페이지</span>
         </button>
       </nav>}
+
+      {creditModal === 'credit' ? renderCreditModal() : creditModal === 'survey' ? renderCreditSurveyModal() : null}
     </div>
   )
 }
