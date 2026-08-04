@@ -44,3 +44,8 @@ ai-server/data/faiss/*.json
 
 # Docker volumes
 .docker-data/
+
+ai-server/data/trademarks/
+ai-server/data/faiss/
+ai-server/data/outputs/
+!**/.gitkeep
