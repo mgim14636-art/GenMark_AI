@@ -1643,10 +1643,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .like-count { font-size: 13px; }
   .like-count span { font-size: 18px; }
   .gallery-dots { margin-top: 10px; }
-  .bottom-nav { position: fixed; bottom: 10px; width: calc(100% - 24px); margin: 0 12px; padding: 5px; }
-  .nav-item { min-height: 58px; border-radius: 17px; }
-  .nav-icon { font-size: 25px; }
-  .nav-item span:last-child { font-size: 12px; }
+  .bottom-nav { position: fixed; bottom: 10px; width: calc(100% - 24px); margin: 0 12px; padding: 3px; }
+  .nav-item { min-height: 46px; border-radius: 15px; }
+  .nav-icon { font-size: 21px; }
+  .nav-item span:last-child { font-size: 11px; }
   .flow-screen { min-height: calc(100dvh - 70px); padding: 20px 16px 120px; }
   .flow-card { border-radius: 22px; }
   .flow-actions .gradient-button { flex: 1; padding: 14px 16px; font-size: 14px; }
@@ -5095,6 +5095,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .company-details-screen .core-values-custom-input textarea {
     min-height: 126px;
     padding-bottom: 34px;
+  }
+
+  .company-details-screen .brand-details-next {
+    transform: translateY(-42px);
+    margin-bottom: -42px;
   }
 
   .company-motto-count {

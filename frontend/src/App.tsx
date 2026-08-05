@@ -2,7 +2,7 @@ import { FormEvent, PointerEvent, useEffect, useRef, useState } from 'react'
 import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Heart, House, Image as ImageIcon, Info, LoaderCircle, MessageSquare, Palette, Pencil, PenLine, Plus, RefreshCw, Search, ShieldCheck, Sparkle as LucideSparkle, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, X, Clock3 } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 
-type ViewMode = 'home' | 'hero' | 'onboarding' | 'brand-details' | 'company-details' | 'choice' | 'setup' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'edit' | 'login' | 'mypage' | 'survey'
+type ViewMode = 'home' | 'hero' | 'onboarding' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'edit' | 'login' | 'mypage' | 'survey'
 type OnboardingOption = 'online' | 'social' | 'offline'
 type AudienceOption = 'company' | 'owner' | 'hobby' | 'sidejob'
 type CoreValue = 'vegan' | 'crueltyFree' | 'lowIrritation' | 'derma' | 'cleanBeauty' | 'natural' | 'premium' | 'sustainable' | 'scientific' | 'reasonable' | 'emotional'
@@ -38,13 +38,13 @@ const surveyImprovementOptions = ['로고 디자인', '글씨체', '색상 조�
 
 const getModeFromUrl = (): ViewMode => {
   const requestedView = new URLSearchParams(window.location.search).get('view')
+  if (requestedView === 'home') return 'home'
   if (requestedView === 'login') return 'login'
   if (requestedView === 'hero') return 'hero'
   if (requestedView === 'onboarding') return 'onboarding'
   if (requestedView === 'brand-details' || requestedView === 'brand-info' || requestedView === 'values') return 'brand-details'
-  if (requestedView === 'company-details' || requestedView === 'ci-details' || requestedView === 'corporate-details') return 'company-details'
+  if (requestedView === 'company-details' || requestedView === 'ci-details' || requestedView === 'corporate-details') return 'choice'
   if (requestedView === 'choice' || requestedView === 'ci-bi' || requestedView === 'brand-type') return 'choice'
-  if (requestedView === 'setup') return 'setup'
   if (requestedView === 'tone' || requestedView === 'tone-color' || requestedView === 'tone-and-color') return 'tone'
   if (requestedView === 'style' || requestedView === 'logo-style' || requestedView === 'logo-shape') return 'style'
   if (requestedView === 'final' || requestedView === 'details' || requestedView === 'request') return 'final'
@@ -56,7 +56,7 @@ const getModeFromUrl = (): ViewMode => {
   if (requestedView === 'edit' || requestedView === 'logo-edit' || requestedView === 'logo-editor') return 'edit'
   if (requestedView === 'mypage' || requestedView === 'my-page' || requestedView === 'profile') return 'mypage'
   if (requestedView === 'survey' || requestedView === 'feedback' || requestedView === 'satisfaction') return 'survey'
-  return 'home'
+  return 'hero'
 }
 
 const clampColorChannel = (value: number) => Math.max(0, Math.min(255, Math.round(value)))
@@ -96,18 +96,29 @@ function BrandLogo() {
 function App() {
   const [mode, setModeState] = useState<ViewMode>(getModeFromUrl)
   const [loggedIn, setLoggedIn] = useState(false)
-  const [onboardingCompleted, setOnboardingCompleted] = useState(false)
+  const [onboardingCompleted, setOnboardingCompleted] = useState(() => window.localStorage.getItem('genmark-onboarding-completed') === 'true')
   const [activeCategory, setActiveCategory] = useState('전체')
   const [likedIds, setLikedIds] = useState<string[]>([])
   const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1)
   const [onboardingSelection, setOnboardingSelection] = useState<OnboardingOption[]>(['online'])
   const [audienceSelection, setAudienceSelection] = useState<AudienceOption[]>(['company'])
   const [brandKind, setBrandKind] = useState<'ci' | 'bi' | null>(null)
-  const [projectName, setProjectName] = useState('')
-  const [direction, setDirection] = useState('깨끗하고 신뢰감 있게')
   const [additionalRequest, setAdditionalRequest] = useState('')
   const [brandName, setBrandName] = useState('')
-  const [companyMotto, setCompanyMotto] = useState('')
+  const [companyName, setCompanyName] = useState(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem('genmark-company-profile') ?? '{}').name ?? ''
+    } catch {
+      return ''
+    }
+  })
+  const [companyMotto, setCompanyMotto] = useState(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem('genmark-company-profile') ?? '{}').motto ?? ''
+    } catch {
+      return ''
+    }
+  })
   const [coreValues, setCoreValues] = useState<CoreValue[]>([])
   const [coreValueInputMode, setCoreValueInputMode] = useState<'category' | 'direct'>('category')
   const [brandValueDescription, setBrandValueDescription] = useState('')
@@ -162,6 +173,14 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('view') !== 'setup') return
+
+    url.searchParams.set('view', 'home')
+    window.history.replaceState({ view: 'home' }, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [])
+
+  useEffect(() => {
     if (mode !== 'loading' && mode !== 'trademark-loading') return
 
     const timer = window.setTimeout(() => {
@@ -170,6 +189,11 @@ function App() {
     }, mode === 'loading' ? 1700 : 1900)
     return () => window.clearTimeout(timer)
   }, [mode])
+
+  useEffect(() => {
+    window.localStorage.setItem('genmark-company-profile', JSON.stringify({ name: companyName, motto: companyMotto }))
+  }, [companyName, companyMotto])
+
   const galleryRef = useRef<HTMLDivElement>(null)
   const galleryDragStartX = useRef(0)
   const galleryDragStartScrollLeft = useRef(0)
@@ -215,11 +239,6 @@ function App() {
     track.classList.remove('is-dragging')
   }
 
-  const submitProject = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (projectName.trim()) setMode('final')
-  }
-
   const toggleSurveyImprovement = (item: string) => {
     setSurveyImprovements((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])
   }
@@ -227,7 +246,7 @@ function App() {
   const completeLogin = () => {
     setLoggedIn(true)
     setOnboardingStep(1)
-    setMode(onboardingCompleted ? 'brand-details' : 'onboarding')
+    setMode(onboardingCompleted ? 'choice' : 'onboarding')
   }
 
   const startOnboarding = () => {
@@ -237,7 +256,7 @@ function App() {
     }
 
     setOnboardingStep(1)
-    setMode(onboardingCompleted ? 'brand-details' : 'onboarding')
+    setMode(onboardingCompleted ? 'choice' : 'onboarding')
   }
 
   const advanceOnboarding = () => {
@@ -246,8 +265,7 @@ function App() {
       return
     }
 
-    setOnboardingCompleted(true)
-    setMode('choice')
+    setMode('company-details')
   }
 
   const openTrademarkSelection = (entry: 'generation' | 'result') => {
@@ -507,9 +525,19 @@ function App() {
     )
   }
 
-  const renderCompanyDetailsScreen = () => (
-    <main className="brand-details-screen company-details-screen">
-      <ScreenBackButton label="CI·BI 선택 화면으로 돌아가기" onClick={() => setMode('choice')} />
+  const renderCompanyDetailsScreen = () => {
+    const handleCompanyDetailsNext = () => {
+      setOnboardingCompleted(true)
+      window.localStorage.setItem('genmark-onboarding-completed', 'true')
+      setMode('choice')
+    }
+
+    return (
+      <main className="brand-details-screen company-details-screen">
+      <ScreenBackButton
+        label="이전 화면으로 돌아가기"
+        onClick={() => { setOnboardingStep(2); setMode('onboarding') }}
+      />
       <section className="brand-details-content" aria-labelledby="company-details-title">
         <div className="brand-details-progress" aria-label="기업 로고 생성 4단계 중 2단계">
           <span className="brand-details-step-badge">2 / 4</span>
@@ -533,11 +561,11 @@ function App() {
             <input
               aria-label="기업명"
               maxLength={80}
-              value={brandName}
-              onChange={(event) => setBrandName(event.target.value)}
+              value={companyName}
+              onChange={(event) => setCompanyName(event.target.value)}
               placeholder="예: 그로우랩"
             />
-            <span>{brandName.length} / 80</span>
+            <span>{companyName.length} / 80</span>
           </div>
         </section>
 
@@ -557,12 +585,13 @@ function App() {
           </div>
         </section>
 
-        <button className="brand-details-next" type="button" onClick={() => setMode('tone')}>
+        <button className="brand-details-next" type="button" onClick={handleCompanyDetailsNext}>
           다음 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
         </button>
       </section>
-    </main>
-  )
+      </main>
+    )
+  }
 
   const renderToneSelectionScreen = () => (
     <main className="tone-selection-screen">
@@ -777,7 +806,7 @@ function App() {
   const renderChoiceScreen = () => {
     const chooseBrandKind = (kind: 'ci' | 'bi') => {
       setBrandKind(kind)
-      setMode(kind === 'ci' ? 'company-details' : 'brand-details')
+      setMode(kind === 'ci' ? 'tone' : 'brand-details')
     }
 
     return (
@@ -1468,41 +1497,6 @@ function App() {
     </div>
   )
 
-  const renderFlowScreen = () => (
-    <main className="flow-screen">
-      {mode === 'setup' && <ScreenBackButton label="홈으로 돌아가기" onClick={() => setMode('home')} />}
-      <section className="flow-card">
-        {mode === 'setup' ? (
-          <form onSubmit={submitProject}>
-            <p className="flow-eyebrow">{brandKind === 'ci' ? 'CI 브랜드 프로젝트' : brandKind === 'bi' ? 'BI 브랜드 프로젝트' : '새 브랜드 프로젝트'}</p>
-            <h1>어떤 브랜드를<br /><strong>만들고 싶나요?</strong></h1>
-            <p className="flow-helper">브랜드 이름과 원하는 인상을 알려주면 로고 생성을 시작합니다.</p>
-            <label htmlFor="project-name">브랜드 이름</label>
-            <input id="project-name" value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="예: Glow Lab" autoFocus />
-            <label htmlFor="brand-direction">브랜드가 주는 인상</label>
-            <select id="brand-direction" value={direction} onChange={(event) => setDirection(event.target.value)}>
-              <option>깨끗하고 신뢰감 있게</option>
-              <option>감각적이고 대담하게</option>
-              <option>자연스럽고 편안하게</option>
-            </select>
-            <div className="flow-actions">
-              <button className="secondary-button" type="button" onClick={() => setMode('home')}>홈으로</button>
-              <button className="gradient-button" type="submit">분석 시작 <Sparkle /></button>
-            </div>
-          </form>
-        ) : (
-          <div className="result-state">
-            <div className="result-symbol"><Sparkle /></div>
-            <p className="flow-eyebrow">첫 분석이 준비됐어요</p>
-            <h1><strong>{projectName}</strong>의<br />브랜드 방향을 잡아볼게요.</h1>
-            <p className="flow-helper">“{direction}” 방향으로 로고 후보를 준비합니다. 다음 단계에서 생성 결과와 상표 유사도를 함께 확인할 수 있습니다.</p>
-            <button className="gradient-button" type="button" onClick={() => setMode('home')}>홈으로 돌아가기 <Sparkle /></button>
-          </div>
-        )}
-      </section>
-    </main>
-  )
-
   const renderLoginScreen = () => (
     <main className="login-screen">
       <section className="login-content" aria-labelledby="login-title">
@@ -1608,9 +1602,9 @@ function App() {
             <div className="gallery-dots" aria-hidden="true"><span className="active" /><span /><span /><span /><span /></div>
           </section>
         </main>
-      ) : renderFlowScreen()}
+      ) : null}
 
-      {mode !== 'loading' && mode !== 'trademark-loading' && <nav className="bottom-nav" aria-label="주요 메뉴">
+      {!['loading', 'trademark-loading', 'hero', 'login'].includes(mode) && <nav className="bottom-nav" aria-label="주요 메뉴">
         <button className={mode === 'home' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setMode('home')}>
           <House className="nav-icon" aria-hidden="true" size={26} strokeWidth={1.8} /><span>홈</span>
         </button>
