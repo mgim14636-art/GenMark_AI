@@ -1,6 +1,8 @@
 import { FormEvent, PointerEvent, useEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Heart, House, Image as ImageIcon, Info, LoaderCircle, MessageSquare, Palette, Pencil, PenLine, Plus, RefreshCw, Search, ShieldCheck, Sparkle as LucideSparkle, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, X, Clock3 } from 'lucide-react'
+import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Heart, House, Image as ImageIcon, Info, LoaderCircle, MessageSquare, Palette, Pencil, PenLine, Plus, RefreshCw, Search, ShieldCheck, Sparkle as LucideSparkle, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, Video, X, Clock3 } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
+import AnimatedGallery from './components/ui/AnimatedGallery'
+import { AuthError, type AuthProvider, type AuthUser, loginWithProvider, logout, restoreSession } from './auth'
 
 type ViewMode = 'home' | 'hero' | 'onboarding' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'edit' | 'login' | 'mypage' | 'survey'
 type OnboardingOption = 'online' | 'social' | 'offline'
@@ -96,6 +98,9 @@ function BrandLogo() {
 function App() {
   const [mode, setModeState] = useState<ViewMode>(getModeFromUrl)
   const [loggedIn, setLoggedIn] = useState(false)
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authError, setAuthError] = useState('')
   const [onboardingCompleted, setOnboardingCompleted] = useState(() => window.localStorage.getItem('genmark-onboarding-completed') === 'true')
   const [activeCategory, setActiveCategory] = useState('전체')
   const [likedIds, setLikedIds] = useState<string[]>([])
@@ -173,6 +178,18 @@ function App() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+    void restoreSession()
+      .then((session) => {
+        if (cancelled || !session) return
+        setAuthUser(session.user)
+        setLoggedIn(true)
+      })
+      .catch(() => undefined)
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
     const url = new URL(window.location.href)
     if (url.searchParams.get('view') !== 'setup') return
 
@@ -243,10 +260,29 @@ function App() {
     setSurveyImprovements((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])
   }
 
-  const completeLogin = () => {
-    setLoggedIn(true)
-    setOnboardingStep(1)
-    setMode(onboardingCompleted ? 'choice' : 'onboarding')
+  const completeLogin = async (provider: AuthProvider) => {
+    if (authLoading) return
+    setAuthLoading(true)
+    setAuthError('')
+    try {
+      const session = await loginWithProvider(provider)
+      setAuthUser(session.user)
+      setLoggedIn(true)
+      setOnboardingStep(1)
+      setMode(session.user.isFirstLogin ? 'onboarding' : 'choice')
+    } catch (error) {
+      const message = error instanceof AuthError ? error.message : '로그인 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.'
+      setAuthError(message)
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    await logout()
+    setAuthUser(null)
+    setLoggedIn(false)
+    setMode('login')
   }
 
   const startOnboarding = () => {
@@ -800,6 +836,30 @@ function App() {
           <p className="hero-screen-note">◇ 디자인 경험이 없어도 괜찮아요&nbsp;&nbsp;·&nbsp;&nbsp;약 5분이면 시작할 수 있어요</p>
         </div>
       </section>
+    </main>
+  )
+
+  const renderAnimatedGalleryHeroScreen = () => (
+    <main className="gallery-hero-screen">
+      <AnimatedGallery>
+        <header className="gallery-hero-header">
+          <div className="gallery-hero-brand">
+            <span className="gallery-hero-mark" aria-hidden="true"><LucideSparkle size={15} strokeWidth={2.2} /></span>
+            <span>GenMark AI</span>
+          </div>
+          <button type="button" className="gallery-hero-login" onClick={() => setMode('login')}>로그인</button>
+        </header>
+
+        <div className="gallery-hero-copy">
+          <p className="gallery-hero-eyebrow"><Sparkles aria-hidden="true" size={16} strokeWidth={1.8} /> Beauty brand starter</p>
+          <h1 id="hero-screen-title">화장품 로고를 만들고<br /><strong>비슷한 상표가 있는지도</strong><br />확인하세요</h1>
+          <p className="gallery-hero-description">브랜드 정보를 입력하면 AI 로고 후보를 만들고,<br />기존 화장품 상표 표본 이미지와 비교해 안전성도 확인해드려요.</p>
+          <div className="gallery-hero-actions">
+            <button className="gallery-hero-cta" type="button" onClick={() => setMode('home')}><span>서비스 시작하기</span><Video aria-hidden="true" size={15} strokeWidth={2} /></button>
+          </div>
+          <p className="gallery-hero-note">◇ 디자인 경험이 없어도 괜찮아요&nbsp;&nbsp;·&nbsp;&nbsp;약 5분이면 시작할 수 있어요</p>
+        </div>
+      </AnimatedGallery>
     </main>
   )
 
@@ -1509,14 +1569,15 @@ function App() {
         </div>
         <h1 id="login-title">만들던 브랜드를<br /><strong>안전하게 저장하세요</strong></h1>
         <p className="login-description">로그인하면 작성 중인 내용과 생성한 로고,<br className="login-break" /> 상표 이미지 분석 결과를 나중에도 확인할 수 있어요.</p>
+        {authError ? <p className="login-error" role="alert">{authError}</p> : null}
         <div className="login-providers">
-          <button className="provider-button kakao-button" type="button" onClick={completeLogin}>
+          <button className="provider-button kakao-button" type="button" onClick={() => void completeLogin('kakao')} disabled={authLoading}>
             <img className="provider-logo" src="/kakao-logo.png" alt="" />
-            <span>카카오로 계속하기</span>
+            <span>{authLoading ? '로그인 처리 중…' : '카카오로 계속하기'}</span>
           </button>
-          <button className="provider-button google-button" type="button" onClick={completeLogin}>
+          <button className="provider-button google-button" type="button" onClick={() => void completeLogin('google')} disabled={authLoading}>
             <img className="provider-logo" src="/google-logo.png" alt="" />
-            <span>Google로 계속하기</span>
+            <span>{authLoading ? '로그인 처리 중…' : 'Google로 계속하기'}</span>
           </button>
         </div>
         <p className="login-terms">계속하면 GenMark AI의 <a href="#terms">이용약관</a>과<br /><a href="#privacy">개인정보 처리방침</a>에 동의하게 됩니다.</p>
@@ -1538,14 +1599,14 @@ function App() {
             <BrandLogo />
             <span>GenMark AI</span>
           </a>
-          <button className="outline-login" type="button" onClick={() => mode === 'home' ? setMode('login') : setLoggedIn((current) => !current)}>
+          <button className="outline-login" type="button" onClick={() => loggedIn ? void handleLogout() : setMode('login')}>
             {loggedIn ? '로그아웃' : '로그인'}
           </button>
         </header>
       )}
 
       {mode === 'login' ? renderLoginScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'company-details' ? renderCompanyDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'trademark-result' ? renderTrademarkResultScreen() : mode === 'result' ? renderLogoResultScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'mypage' ? renderMypageScreen() : mode === 'survey' ? renderSurveyScreen() : mode === 'hero' ? (
-        renderHeroScreen()
+        renderAnimatedGalleryHeroScreen()
       ) : mode === 'home' ? (
         <main id="home" className="main-home">
           {renderFeaturedHero()}
