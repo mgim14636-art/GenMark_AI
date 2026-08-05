@@ -1,5 +1,6 @@
 """DINOv2 임베딩 추출 + FAISS 인덱스 생성"""
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import torch
@@ -14,10 +15,17 @@ BATCH = 32
 
 
 def load_image(path: Path) -> Image.Image:
+    """이미지를 RGB로 로드. 투명 배경은 흰색으로 합성한다.
+
+    KIPRIS 상표 이미지는 모두 흰 배경이므로, 쿼리 이미지와 조건을 맞추지 않으면
+    투명 영역이 검은색으로 변환되어 임베딩이 어긋난다.
+    """
     im = Image.open(path)
-    if im.mode != "RGB":
-        im = im.convert("RGB")
-    return im
+    if im.mode in ("RGBA", "LA", "P"):
+        im = im.convert("RGBA")
+        bg = Image.new("RGBA", im.size, (255, 255, 255, 255))
+        im = Image.alpha_composite(bg, im)
+    return im.convert("RGB")
 
 
 def main():
