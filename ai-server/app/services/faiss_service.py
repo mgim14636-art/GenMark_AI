@@ -1,30 +1,41 @@
+from typing import Any, Dict, List
+
 import numpy as np
-from typing import List, Dict, Any
+
 from app.vector_store.index_manager import index_manager
 from app.vector_store.metadata_store import metadata_store
 
+DEDUP_THRESHOLD = 0.99
+
+
 class FaissService:
     @staticmethod
-    def search_similar(vector: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
-        query_arr = np.array([vector], dtype=np.float32)
-        scores, indices = index_manager.search(query_arr, top_k=top_k)
+    def search_similar(vector: List[float], top_k: int = 3, pool: int = 30) -> List[Dict[str, Any]]:
+        q = np.array(vector, dtype=np.float32)
 
-        results = []
-        if not indices or indices == [-1]:
-            # Mock return sample data if index is empty
-            return [
-                {"trademark_id": "TM-2026-001", "name": "Nexus Vector Logo", "similarity_score": 0.88},
-                {"trademark_id": "TM-2026-002", "name": "Aether Brand Mark", "similarity_score": 0.74}
-            ]
+        all_scores = index_manager.all_scores(q)
+        if all_scores.size == 0:
+            return []
+        mu, sd = float(all_scores.mean()), float(all_scores.std())
+        if sd == 0:
+            sd = 1e-6
 
+        scores, indices = index_manager.search(q.reshape(1, -1), top_k=pool)
+
+        results, kept = [], []
         for score, idx in zip(scores, indices):
             if idx == -1:
                 continue
-            meta = metadata_store.get(idx)
+            vec = index_manager.vectors[idx]
+            if any(float(vec @ index_manager.vectors[k]) > DEDUP_THRESHOLD for k in kept):
+                continue
+            kept.append(idx)
             results.append({
-                "trademark_id": meta.get("trademark_id"),
-                "name": meta.get("name"),
-                "similarity_score": float(score)
+                "index": int(idx),
+                "cos": float(score),
+                "z": (float(score) - mu) / sd,
+                "meta": metadata_store.get(idx),
             })
-
+            if len(results) == top_k:
+                break
         return results

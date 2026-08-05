@@ -10,7 +10,7 @@ BASE = Path(__file__).parent.parent / "data" / "trademarks"
 META = BASE / "meta" / "trademarks.csv"
 OUT = Path(__file__).parent.parent / "data" / "faiss"
 MODEL_ID = "facebook/dinov2-base"
-BATCH = 16
+BATCH = 32
 
 
 def load_image(path: Path) -> Image.Image:

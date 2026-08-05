@@ -1,23 +1,31 @@
-import json
 import os
-from app.core.config import settings
+
+import pandas as pd
+
+from app.core.logging import logger
+
+METADATA_CSV = os.path.join("data", "trademarks", "meta", "trademarks.csv")
+
 
 class MetadataStore:
     def __init__(self):
-        self.metadata_path = settings.metadata_store_path
-        self.store = self._load()
+        self.df = self._load()
 
-    def _load(self):
-        if os.path.exists(self.metadata_path):
-            with open(self.metadata_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {
-            "0": {"trademark_id": "TM-2026-001", "name": "Apex AI Logo"},
-            "1": {"trademark_id": "TM-2026-002", "name": "Vortex Design"},
-            "2": {"trademark_id": "TM-2026-003", "name": "Quantum Mark"}
-        }
+    def _load(self) -> pd.DataFrame:
+        if os.path.exists(METADATA_CSV):
+            df = pd.read_csv(METADATA_CSV, dtype=str)
+            logger.info(f"Metadata loaded: {len(df)} records")
+            return df
+        logger.warning(f"{METADATA_CSV} not found. Metadata store is empty.")
+        return pd.DataFrame()
 
-    def get(self, idx: int):
-        return self.store.get(str(idx), {"trademark_id": f"TM-{idx}", "name": "Unknown Trademark"})
+    def get(self, idx: int) -> dict:
+        if self.df.empty or idx < 0 or idx >= len(self.df):
+            return {}
+        return self.df.iloc[idx].to_dict()
+
+    def __len__(self) -> int:
+        return len(self.df)
+
 
 metadata_store = MetadataStore()
