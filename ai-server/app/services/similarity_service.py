@@ -5,7 +5,12 @@ import pandas as pd
 from app.services.dino_service import DinoService
 from app.services.faiss_service import FaissService
 
-Z_SCALE = 20
+# 실제 등록 상표 간 1위 z 분포에 앵커링 (200건 샘플, 중앙값 2.72 / 상위5% 4.91)
+# 이미 공존 등록된 상표 쌍의 유사 수준을 정상 범위로 보고,
+# 중앙값 → 30점(SAFE 경계), 상위 5% → 60점(CAUTION 경계)으로 선형 매핑
+Z_SLOPE = 13.7
+Z_INTERCEPT = -7.3
+
 DISCLAIMER = (
     "본 분석은 로고 이미지의 시각적 유사성을 보여주는 참고 자료이며, "
     "상표 등록 가능 여부나 법적 침해 여부를 판단하지 않습니다."
@@ -24,6 +29,10 @@ def _category(meta: dict) -> str:
     cls = str(meta.get("류", "")).split("|")[0]
     label = "화장품" if cls == "03" else f"{cls}류"
     return f"{label} · {meta.get('상표구분코드명', '')}"
+
+
+def _to_score(z: float) -> int:
+    return int(min(100, max(0, z * Z_SLOPE + Z_INTERCEPT)))
 
 
 def _risk_level(score: int) -> str:
@@ -48,7 +57,7 @@ class SimilarityService:
                 "applicationNumber": meta.get("출원번호", ""),
                 "name": _name(meta),
                 "category": _category(meta),
-                "similarity": int(min(100, max(0, r["z"] * Z_SCALE))),
+                "similarity": _to_score(r["z"]),
                 "imagePath": meta.get("이미지경로", ""),
             })
 
