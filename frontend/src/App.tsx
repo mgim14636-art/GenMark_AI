@@ -269,9 +269,11 @@ function App() {
       setAuthUser(session.user)
       setLoggedIn(true)
       setOnboardingStep(1)
-      setMode(session.user.isFirstLogin ? 'onboarding' : 'choice')
+      setMode(session.user.isFirstLogin ? 'onboarding' : 'home')
     } catch (error) {
-      const message = error instanceof AuthError ? error.message : '로그인 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.'
+      const message = error instanceof AuthError
+        ? `${error.message}${error.code ? ` (${error.code}${error.requestId ? `, requestId: ${error.requestId}` : ''})` : ''}`
+        : '로그인 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.'
       setAuthError(message)
     } finally {
       setAuthLoading(false)

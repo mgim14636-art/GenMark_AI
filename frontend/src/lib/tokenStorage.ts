@@ -1,4 +1,4 @@
-const REFRESH_TOKEN_KEY = 'genmark.refreshToken'
+const REFRESH_TOKEN_KEY = 'genmark.refresh-token'
 
 // accessToken is intentionally NOT stored here — it stays in React state only
 // (see docs/AUTH_INTEGRATION.md §6: avoid persisting the bearer token where
