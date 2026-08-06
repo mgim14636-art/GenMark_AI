@@ -87,7 +87,9 @@ services:
       - "${NGINX_PORT:-80}:80"
     volumes:
       - ./infra/nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
-      - ../genmark-ai_code/GenMark_AI/frontend/dist:/usr/share/nginx/html:ro
+      # 저장소 내 frontend를 빌드한 결과물(frontend/dist)을 정적 파일로 서빙한다.
+      # nginx 기동 전에 frontend 디렉터리에서 npm install && npm run build 를 먼저 실행할 것.
+      - ./frontend/dist:/usr/share/nginx/html:ro
     networks:
       - genmark-local-net
 
