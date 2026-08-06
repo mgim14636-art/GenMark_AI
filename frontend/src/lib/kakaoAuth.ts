@@ -43,7 +43,11 @@ export async function getKakaoAccessToken(): Promise<string> {
     throw new Error('카카오 SDK를 사용할 수 없어요.')
   }
   if (!Kakao.isInitialized()) {
-    Kakao.init(import.meta.env.VITE_KAKAO_JS_KEY)
+    const key = import.meta.env.VITE_KAKAO_JS_KEY
+    if (!key) {
+      throw new Error('Kakao JavaScript 키가 필요합니다. KAKAO_REST_API_KEY는 브라우저 SDK에 사용할 수 없습니다.')
+    }
+    Kakao.init(key)
   }
 
   return new Promise((resolve, reject) => {

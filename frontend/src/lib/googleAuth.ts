@@ -36,6 +36,7 @@ function loadGsiSdk(): Promise<void> {
 
 let initialized = false
 let hiddenButtonEl: HTMLElement | null = null
+const googleClientId = import.meta.env.GOOGLE_CLIENT_ID || import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 // initialize()'s callback is fixed at init time, so route every call's
 // resolve/reject through these module-level refs instead of re-initializing
@@ -61,8 +62,11 @@ function ensureInitialized() {
   if (!google) {
     throw new Error('Google Identity Services를 사용할 수 없어요.')
   }
+  if (!googleClientId) {
+    throw new Error('GOOGLE_CLIENT_ID가 설정되지 않았습니다.')
+  }
   google.accounts.id.initialize({
-    client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+    client_id: googleClientId,
     // GIS has no explicit "user closed the popup" callback, so a plain
     // response-timeout is what actually unblocks a stuck login button if
     // the user dismisses Google's account chooser without picking one.

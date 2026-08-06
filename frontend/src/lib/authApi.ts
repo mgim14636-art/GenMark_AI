@@ -41,7 +41,8 @@ export class ApiError extends Error {
   }
 }
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+const backendPort = import.meta.env.BACKEND_PORT || '8080'
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL || `http://localhost:${backendPort}/api/v1`).replace(/\/$/, '')
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
