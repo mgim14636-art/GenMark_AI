@@ -59,7 +59,7 @@ public class AuthService {
         OAuthUserInfo info = verifier.verify(token);
 
         Member member = memberRepository.findByProviderAndProviderId(provider, info.providerId()).orElse(null);
-        boolean isFirstLogin = member == null;
+        boolean isFirstLogin = member == null || "kakao".equals(provider);
         if (member == null) {
             member = createMember(provider, info);
         }
