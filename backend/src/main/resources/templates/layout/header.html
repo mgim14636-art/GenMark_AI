@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="header-head">
+    <meta charset="UTF-8">
+    <title>GenMark-AI | AI Trademark & Logo Generation</title>
+    <link rel="stylesheet" th:href="@{/css/common.css}">
+    <link rel="stylesheet" th:href="@{/css/main.css}">
+</head>
+<body>
+<header th:fragment="header-nav" style="background: rgba(15, 23, 42, 0.9); border-bottom: 1px solid #1e293b; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center;">
+    <a href="/" style="color: #fff; font-size: 1.5rem; font-weight: bold; text-decoration: none;">GenMark<span style="color: #06b6d4;">.AI</span></a>
+    <nav style="display: flex; gap: 1.5rem;">
+        <a href="/project/list" style="color: #94a3b8; text-decoration: none;">Projects</a>
+        <a href="/logo/generate" style="color: #94a3b8; text-decoration: none;">Generate Logo</a>
+        <a href="/member/login" style="color: #94a3b8; text-decoration: none;">Login</a>
+    </nav>
+</header>
