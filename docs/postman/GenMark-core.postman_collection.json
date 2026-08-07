@@ -1,0 +1,207 @@
+{
+  "info": {
+    "name": "GenMark Core Backend - Safe Verification",
+    "description": "인증 → 온보딩 SUBMITTED → 초기 프로젝트 조회/수정 → refresh/logout 흐름. NVIDIA 유료 생성은 포함하지 않습니다.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {"key": "token", "value": "{{accessToken}}", "type": "string"}
+    ]
+  },
+  "item": [
+    {
+      "name": "00 Health",
+      "item": [
+        {
+          "name": "Similarity AI health",
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "GET",
+            "url": "{{similarityAiUrl}}/health"
+          },
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('Similarity AI is healthy', () => pm.response.to.have.status(200));",
+            "pm.test('status=ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+          ]}}]
+        },
+        {
+          "name": "Logo AI health",
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "GET",
+            "url": "{{logoAiUrl}}/health"
+          },
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('Logo AI is healthy', () => pm.response.to.have.status(200));",
+            "pm.test('status=ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "01 Auth",
+      "item": [
+        {
+          "name": "Local fake login",
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"fake\",\n  \"idToken\": \"{{smokeProviderId}}\",\n  \"redirectUri\": \"http://localhost\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          },
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('login 200', () => pm.response.to.have.status(200));",
+            "var body = pm.response.json();",
+            "pm.expect(body.data.accessToken).to.be.a('string').and.not.empty;",
+            "pm.expect(body.data.refreshToken).to.be.a('string').and.not.empty;",
+            "pm.environment.set('accessToken', body.data.accessToken);",
+            "pm.environment.set('refreshToken', body.data.refreshToken);",
+            "pm.environment.set('memberId', body.data.user.id);",
+            "pm.test('onboardingCompleted is boolean', () => pm.expect(body.data.user.onboardingCompleted).to.be.a('boolean'));"
+          ]}}]
+        },
+        {
+          "name": "Get me",
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/me"},
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('me 200', () => pm.response.to.have.status(200));",
+            "pm.test('same member', () => pm.expect(pm.response.json().data.user.id).to.eql(pm.environment.get('memberId')));"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "02 Onboarding",
+      "item": [
+        {
+          "name": "Get onboarding before complete",
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/me/onboarding"},
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('onboarding lookup 200', () => pm.response.to.have.status(200));"
+          ]}}]
+        },
+        {
+          "name": "Complete onboarding - submitted",
+          "request": {
+            "method": "PUT",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usage\": [\"online\", \"social\"],\n  \"audience\": \"company\",\n  \"detailsDecision\": \"SUBMITTED\",\n  \"initialProject\": {\n    \"brandType\": \"CI\",\n    \"industry\": \"COSMETICS\",\n    \"brandName\": \"Postman GenMark\",\n    \"companyName\": \"GenMark AI\",\n    \"companyMotto\": \"Create safely\",\n    \"brandValues\": [\"cleanBeauty\", \"scientific\"],\n    \"brandValuesText\": \"신뢰할 수 있는 클린 뷰티\",\n    \"targetAge\": \"20-30\",\n    \"tone\": \"minimal\",\n    \"colorMode\": \"MANUAL\",\n    \"colors\": [\"#7B5CDF\"],\n    \"logoStyle\": \"combination\",\n    \"includeBrandName\": true,\n    \"additionalRequirements\": \"Postman 안전 검증\"\n  }\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/me/onboarding"
+          },
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('complete onboarding 200', () => pm.response.to.have.status(200));",
+            "var data = pm.response.json().data;",
+            "pm.test('completed=true', () => pm.expect(data.completed).to.eql(true));",
+            "pm.test('decision submitted', () => pm.expect(data.detailsDecision).to.eql('SUBMITTED'));",
+            "pm.expect(data.initialProjectId).to.be.a('string').and.not.empty;",
+            "pm.environment.set('projectId', data.initialProjectId);"
+          ]}}]
+        },
+        {
+          "name": "Get onboarding after complete",
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/me/onboarding"},
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('onboarding after complete 200', () => pm.response.to.have.status(200));",
+            "var data = pm.response.json().data;",
+            "pm.test('persisted complete state', () => pm.expect(data.completed).to.eql(true));",
+            "pm.test('project id persisted', () => pm.expect(data.initialProjectId).to.eql(pm.environment.get('projectId')));"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "03 Project",
+      "item": [
+        {
+          "name": "Get initial project",
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/projects/{{projectId}}"},
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('project 200', () => pm.response.to.have.status(200));",
+            "var data = pm.response.json().data;",
+            "pm.test('correct public id', () => pm.expect(data.id).to.eql(pm.environment.get('projectId')));",
+            "pm.test('brief ready', () => pm.expect(data.status).to.eql('BRIEF_READY'));"
+          ]}}]
+        },
+        {
+          "name": "Patch project",
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"tone\": \"professional\",\n  \"colors\": [\"#111827\", \"#7C3AED\"],\n  \"additionalRequirements\": \"Postman에서 수정됨\"\n}"},
+            "url": "{{baseUrl}}/api/v1/projects/{{projectId}}"
+          },
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('patch 200', () => pm.response.to.have.status(200));",
+            "var data = pm.response.json().data;",
+            "pm.test('tone updated', () => pm.expect(data.tone).to.eql('professional'));",
+            "pm.test('colors updated', () => pm.expect(data.colors).to.eql(['#111827', '#7C3AED']));"
+          ]}}]
+        },
+        {
+          "name": "Update final review step",
+          "request": {
+            "method": "PUT",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"logoStyle\": \"combination\",\n  \"includeBrandName\": true\n}"},
+            "url": "{{baseUrl}}/api/v1/projects/{{projectId}}/final-review"
+          },
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('final review 200', () => pm.response.to.have.status(200));",
+            "pm.test('logo style persisted', () => pm.expect(pm.response.json().data.logoStyle).to.eql('combination'));"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "04 Session",
+      "item": [
+        {
+          "name": "Refresh token",
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"},
+            "url": "{{baseUrl}}/api/v1/auth/refresh"
+          },
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('refresh 200', () => pm.response.to.have.status(200));",
+            "var data = pm.response.json().data;",
+            "pm.environment.set('accessToken', data.accessToken);",
+            "pm.environment.set('refreshToken', data.refreshToken);"
+          ]}}]
+        },
+        {
+          "name": "Get me with refreshed token",
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/me"},
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('refreshed token works', () => pm.response.to.have.status(200));",
+            "pm.test('onboarding completed in me', () => pm.expect(pm.response.json().data.user.onboardingCompleted).to.eql(true));"
+          ]}}]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"},
+            "url": "{{baseUrl}}/api/v1/auth/logout"
+          },
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('logout 204', () => pm.response.to.have.status(204));"
+          ]}}]
+        }
+      ]
+    }
+  ]
+}

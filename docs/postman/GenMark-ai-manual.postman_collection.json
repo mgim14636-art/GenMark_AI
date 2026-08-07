@@ -1,0 +1,84 @@
+{
+  "info": {
+    "name": "GenMark AI - PAID MANUAL FLOW",
+    "description": "주의: 로고 생성은 NVIDIA FLUX 외부 API를 최대 4회 호출합니다. Core 컬렉션 실행 후 projectId/accessToken을 유지하고, runPaidAi=true로 바꾼 경우에만 수동 실행하세요. similarity 데이터 파일이 없으면 분석은 실패하거나 빈 결과가 될 수 있습니다.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]
+  },
+  "event": [{
+    "listen": "prerequest",
+    "script": {"exec": [
+      "if (pm.environment.get('runPaidAi') !== 'true') {",
+      "  throw new Error('유료 AI 호출이 잠겨 있습니다. runPaidAi=true로 명시적으로 변경하세요.');",
+      "}"
+    ]}
+  }],
+  "item": [
+    {
+      "name": "1. Start logo generation (PAID)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Idempotency-Key", "value": "{{idempotencyKey}}"}],
+        "url": "{{baseUrl}}/api/v1/projects/{{projectId}}/logo-generations"
+      },
+      "event": [{"listen": "test", "script": {"exec": [
+        "pm.test('accepted', () => pm.response.to.have.status(202));",
+        "var data = pm.response.json().data;",
+        "pm.environment.set('generationId', data.id);"
+      ]}}]
+    },
+    {
+      "name": "2. Poll generation",
+      "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/projects/{{projectId}}/logo-generations/{{generationId}}"},
+      "event": [{"listen": "test", "script": {"exec": [
+        "pm.test('generation lookup 200', () => pm.response.to.have.status(200));",
+        "console.log('generation status:', pm.response.json().data.status);"
+      ]}}]
+    },
+    {
+      "name": "3. List candidates and select first id",
+      "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/projects/{{projectId}}/logo-candidates"},
+      "event": [{"listen": "test", "script": {"exec": [
+        "pm.test('candidate list 200', () => pm.response.to.have.status(200));",
+        "var candidates = pm.response.json().data;",
+        "if (candidates.length > 0) pm.environment.set('candidateId', candidates[0].id);",
+        "pm.test('exactly four after success', () => pm.expect(candidates.length).to.eql(4));"
+      ]}}]
+    },
+    {
+      "name": "4. Select candidate",
+      "request": {"method": "POST", "url": "{{baseUrl}}/api/v1/projects/{{projectId}}/logo-candidates/{{candidateId}}/select"},
+      "event": [{"listen": "test", "script": {"exec": [
+        "pm.test('candidate selected 200', () => pm.response.to.have.status(200));",
+        "pm.test('selected=true', () => pm.expect(pm.response.json().data.selected).to.eql(true));"
+      ]}}]
+    },
+    {
+      "name": "5. Start trademark analysis",
+      "request": {"method": "POST", "url": "{{baseUrl}}/api/v1/projects/{{projectId}}/trademark-analyses"},
+      "event": [{"listen": "test", "script": {"exec": [
+        "pm.test('analysis accepted', () => pm.response.to.have.status(202));",
+        "pm.environment.set('analysisId', pm.response.json().data.id);"
+      ]}}]
+    },
+    {
+      "name": "6. Poll analysis",
+      "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/projects/{{projectId}}/trademark-analyses/{{analysisId}}"},
+      "event": [{"listen": "test", "script": {"exec": [
+        "pm.test('analysis lookup 200', () => pm.response.to.have.status(200));",
+        "console.log('analysis status:', pm.response.json().data.status);"
+      ]}}]
+    },
+    {
+      "name": "7. Get matches",
+      "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/projects/{{projectId}}/trademark-analyses/{{analysisId}}/matches"},
+      "event": [{"listen": "test", "script": {"exec": [
+        "pm.test('matches 200', () => pm.response.to.have.status(200));",
+        "pm.test('three matches after success', () => pm.expect(pm.response.json().data.length).to.eql(3));"
+      ]}}]
+    }
+  ]
+}

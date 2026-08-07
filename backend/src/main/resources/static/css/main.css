@@ -1,0 +1,20 @@
+.hero {
+    text-align: center;
+    padding: 5rem 1rem;
+    background: radial-gradient(circle at top, rgba(79, 70, 229, 0.15), transparent 70%);
+}
+
+.hero h1 {
+    font-size: 3rem;
+    background: linear-gradient(135deg, #fff, var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 1rem;
+}
+
+.hero p {
+    color: var(--text-muted);
+    font-size: 1.25rem;
+    max-width: 600px;
+    margin: 0 auto 2rem;
+}

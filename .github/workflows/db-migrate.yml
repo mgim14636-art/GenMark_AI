@@ -1,0 +1,36 @@
+name: Database migration gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-database
+    env:
+      FLYWAY_URL: jdbc:mariadb://${{ secrets.DB_HOST }}:${{ secrets.DB_PORT }}/${{ secrets.DB_NAME }}?sslMode=verify-full
+      FLYWAY_USER: ${{ secrets.DB_MIGRATION_USER }}
+      FLYWAY_PASSWORD: ${{ secrets.DB_MIGRATION_PASSWORD }}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_BASELINE_ON_MIGRATE: "true"
+      FLYWAY_BASELINE_VERSION: "4"
+      FLYWAY_CLEAN_DISABLED: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and migrate MariaDB
+        run: >-
+          docker run --rm
+          -e FLYWAY_URL
+          -e FLYWAY_USER
+          -e FLYWAY_PASSWORD
+          -e FLYWAY_LOCATIONS
+          -e FLYWAY_BASELINE_ON_MIGRATE
+          -e FLYWAY_BASELINE_VERSION
+          -e FLYWAY_CLEAN_DISABLED
+          -v "${{ github.workspace }}/database/migration:/flyway/sql:ro"
+          flyway/flyway:12-alpine
+          migrate
