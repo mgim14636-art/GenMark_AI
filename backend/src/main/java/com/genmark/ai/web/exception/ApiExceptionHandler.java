@@ -8,6 +8,8 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -40,6 +42,11 @@ public class ApiExceptionHandler {
                 .map(fieldError -> new ApiErrorDetail(fieldError.getField(), fieldError.getDefaultMessage()))
                 .toList();
         return buildResponse(ErrorCode.VALIDATION_ERROR, ErrorCode.VALIDATION_ERROR.getDefaultMessage(), details);
+    }
+
+    @ExceptionHandler({HttpMessageNotReadableException.class, MissingRequestHeaderException.class})
+    public ResponseEntity<ApiErrorResponse> handleMalformedRequest(Exception ex) {
+        return buildResponse(ErrorCode.VALIDATION_ERROR, ErrorCode.VALIDATION_ERROR.getDefaultMessage(), List.of());
     }
 
     @ExceptionHandler(Exception.class)

@@ -21,6 +21,10 @@ backend/mvnw.cmd
 *.class
 *.jar
 
+# JavaScript dependencies
+node_modules/
+frontend/dist/
+
 # Python / AI Server
 ai-server/__pycache__/
 ai-server/*/__pycache__/

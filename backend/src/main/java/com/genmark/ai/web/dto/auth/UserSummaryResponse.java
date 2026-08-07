@@ -6,6 +6,7 @@ public record UserSummaryResponse(
         String email,
         String name,
         String provider,
-        boolean isFirstLogin
+        boolean isFirstLogin,
+        boolean onboardingCompleted
 ) {
 }
