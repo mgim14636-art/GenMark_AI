@@ -9,8 +9,10 @@ class Settings(BaseSettings):
     huggingface_token: str = os.getenv("HUGGINGFACE_TOKEN", "")
     faiss_index_path: str = os.getenv("FAISS_INDEX_PATH", "data/faiss/trademark.index")
     metadata_store_path: str = os.getenv("METADATA_STORE_PATH", "data/faiss/metadata.json")
+    kipris_api_key: str = os.getenv("KIPRIS_API_KEY", "")
 
     class Config:
+        extra = "ignore"
         env_file = ".env"
 
 settings = Settings()

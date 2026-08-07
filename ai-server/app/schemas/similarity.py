@@ -1,15 +1,25 @@
+from typing import List
+
 from pydantic import BaseModel
-from typing import List, Optional
+
 
 class SimilarityRequest(BaseModel):
-    image_url: str
-    top_k: int = 5
+    imageBase64: str
+    logoStyle: str = "combination"
+    topK: int = 3
+
 
 class MatchedTrademark(BaseModel):
-    trademark_id: str
-    trademark_name: Optional[str] = None
-    similarity_score: float
+    rank: int
+    applicationNumber: str
+    name: str
+    category: str
+    similarity: int
+    imagePath: str
+
 
 class SimilarityResponse(BaseModel):
-    image_url: str
+    maxSimilarity: int
+    riskLevel: str
     matches: List[MatchedTrademark]
+    disclaimer: str

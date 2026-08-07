@@ -21,6 +21,9 @@ backend/mvnw.cmd
 *.class
 *.jar
 
+# JavaScript dependencies
+node_modules/
+
 # Python / AI Server
 ai-server/__pycache__/
 ai-server/*/__pycache__/
@@ -44,3 +47,8 @@ ai-server/data/faiss/*.json
 
 # Docker volumes
 .docker-data/
+
+ai-server/data/trademarks/
+ai-server/data/faiss/
+ai-server/data/outputs/
+!**/.gitkeep
