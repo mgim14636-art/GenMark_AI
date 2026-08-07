@@ -1,0 +1,12 @@
+.venv/
+notebooks/
+__pycache__/
+*.pyc
+.env
+.ipynb_checkpoints/
+data/trademarks/raw/
+data/outputs/
+data/flux_logos/
+data/test_logos/
+data/test_logos_combo/
+b64.txt
