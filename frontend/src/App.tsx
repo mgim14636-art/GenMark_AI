@@ -1,10 +1,14 @@
-import { FormEvent, PointerEvent, useEffect, useRef, useState } from 'react'
+import { FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
 import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Heart, House, Image as ImageIcon, Info, LoaderCircle, MessageSquare, Palette, Pencil, PenLine, Plus, RefreshCw, Search, ShieldCheck, Sparkle as LucideSparkle, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, Video, X, Clock3 } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import { AuthError, type AuthProvider, type AuthUser, loginWithProvider, logout, restoreSession } from './auth'
 
+const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
+
 type ViewMode = 'home' | 'hero' | 'onboarding' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'edit' | 'login' | 'mypage' | 'survey'
+type LoginDestination = 'home' | 'choice'
+type LoginReturnMode = 'hero' | 'home'
 type OnboardingOption = 'online' | 'social' | 'offline'
 type AudienceOption = 'company' | 'owner' | 'hobby' | 'sidejob'
 type CoreValue = 'vegan' | 'crueltyFree' | 'lowIrritation' | 'derma' | 'cleanBeauty' | 'natural' | 'premium' | 'sustainable' | 'scientific' | 'reasonable' | 'emotional'
@@ -95,12 +99,14 @@ function BrandLogo() {
   )
 }
 
-function App() {
+function CustomerApp() {
   const [mode, setModeState] = useState<ViewMode>(getModeFromUrl)
   const [loggedIn, setLoggedIn] = useState(false)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState('')
+  const [loginDestination, setLoginDestination] = useState<LoginDestination>('home')
+  const [loginReturnMode, setLoginReturnMode] = useState<LoginReturnMode>('home')
   const [onboardingCompleted, setOnboardingCompleted] = useState(() => window.localStorage.getItem('genmark-onboarding-completed') === 'true')
   const [activeCategory, setActiveCategory] = useState('전체')
   const [likedIds, setLikedIds] = useState<string[]>([])
@@ -108,6 +114,7 @@ function App() {
   const [onboardingSelection, setOnboardingSelection] = useState<OnboardingOption[]>(['online'])
   const [audienceSelection, setAudienceSelection] = useState<AudienceOption[]>(['company'])
   const [brandKind, setBrandKind] = useState<'ci' | 'bi' | null>(null)
+  const [choiceBackMode, setChoiceBackMode] = useState<'home' | 'onboarding'>('home')
   const [additionalRequest, setAdditionalRequest] = useState('')
   const [brandName, setBrandName] = useState('')
   const [companyName, setCompanyName] = useState(() => {
@@ -201,8 +208,13 @@ function App() {
     if (mode !== 'loading' && mode !== 'trademark-loading') return
 
     const timer = window.setTimeout(() => {
-      if (mode === 'trademark-loading') setTrademarkAnalysisCompleted(true)
-      setMode('result')
+      if (mode === 'trademark-loading') {
+        setTrademarkAnalysisCompleted(true)
+        setMode('result')
+        return
+      }
+
+      setMode(trademarkAnalysisSkipped || !canAnalyzeTrademark ? 'result' : 'trademark-loading')
     }, mode === 'loading' ? 1700 : 1900)
     return () => window.clearTimeout(timer)
   }, [mode])
@@ -269,7 +281,9 @@ function App() {
       setAuthUser(session.user)
       setLoggedIn(true)
       setOnboardingStep(1)
-      setMode(session.user.isFirstLogin ? 'onboarding' : 'home')
+      setChoiceBackMode(session.user.isFirstLogin ? 'onboarding' : 'home')
+      setMode(session.user.isFirstLogin && loginDestination === 'choice' ? 'onboarding' : loginDestination)
+      setLoginDestination('home')
     } catch (error) {
       const message = error instanceof AuthError
         ? `${error.message}${error.code ? ` (${error.code}${error.requestId ? `, requestId: ${error.requestId}` : ''})` : ''}`
@@ -289,12 +303,19 @@ function App() {
 
   const startOnboarding = () => {
     if (!loggedIn) {
+      setLoginDestination('choice')
+      setLoginReturnMode('home')
       setMode('login')
       return
     }
 
     setOnboardingStep(1)
-    setMode(onboardingCompleted ? 'choice' : 'onboarding')
+    if (onboardingCompleted) {
+      setChoiceBackMode('home')
+      setMode('choice')
+    } else {
+      setMode('onboarding')
+    }
   }
 
   const advanceOnboarding = () => {
@@ -307,6 +328,7 @@ function App() {
   }
 
   const openTrademarkSelection = (entry: 'generation' | 'result') => {
+    setTrademarkAnalysisCompleted(false)
     if (!canAnalyzeTrademark) {
       setTrademarkAnalysisSkipped(true)
       setMode(entry === 'result' ? 'result' : 'loading')
@@ -424,7 +446,7 @@ function App() {
 
   const renderOnboardingScreen = () => (
     <main className={`onboarding-screen onboarding-step-${onboardingStep}`}>
-      <ScreenBackButton label="로그인 화면으로 돌아가기" onClick={() => onboardingStep === 1 ? setMode('login') : setOnboardingStep(1)} />
+      {onboardingStep === 2 && <ScreenBackButton label="온보딩 1단계로 돌아가기" onClick={() => setOnboardingStep(1)} />}
       <img className="onboarding-art" src="/aurora-bubbles.png" alt="" aria-hidden="true" />
       <div className="onboarding-overlay" />
       <section className="onboarding-content" aria-labelledby="onboarding-title">
@@ -567,6 +589,7 @@ function App() {
     const handleCompanyDetailsNext = () => {
       setOnboardingCompleted(true)
       window.localStorage.setItem('genmark-onboarding-completed', 'true')
+      setChoiceBackMode('onboarding')
       setMode('choice')
     }
 
@@ -633,7 +656,7 @@ function App() {
 
   const renderToneSelectionScreen = () => (
     <main className="tone-selection-screen">
-      <ScreenBackButton label="브랜드 설명 화면으로 돌아가기" onClick={() => setMode(brandKind === 'ci' ? 'company-details' : 'brand-details')} />
+      <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => setMode(brandKind === 'ci' ? 'choice' : 'brand-details')} />
       <section className="tone-selection-content" aria-labelledby="tone-selection-title">
         <div className="tone-progress" aria-label="브랜드 생성 4단계 중 3단계">
           <span className="tone-step-badge">3 / 4</span>
@@ -825,7 +848,7 @@ function App() {
     <main className="hero-screen">
       <header className="hero-screen-header">
         <div className="hero-screen-brand"><span className="hero-screen-mark" aria-hidden="true">✦</span><span>GenMark AI</span></div>
-        <button type="button" className="hero-screen-login" onClick={() => setMode('login')}>로그인</button>
+        <button type="button" className="hero-screen-login" onClick={() => { setLoginDestination('home'); setLoginReturnMode('hero'); setMode('login') }}>로그인</button>
       </header>
       <section className="hero-screen-panel" aria-labelledby="hero-screen-title">
         <CopperplateHatch className="hero-screen-art" density={1.1} intensity={1.1} speed={0.42} interactive />
@@ -849,7 +872,7 @@ function App() {
             <span className="gallery-hero-mark" aria-hidden="true"><LucideSparkle size={15} strokeWidth={2.2} /></span>
             <span>GenMark AI</span>
           </div>
-          <button type="button" className="gallery-hero-login" onClick={() => setMode('login')}>로그인</button>
+          <button type="button" className="gallery-hero-login" onClick={() => { setLoginDestination('home'); setLoginReturnMode('hero'); setMode('login') }}>로그인</button>
         </header>
 
         <div className="gallery-hero-copy">
@@ -873,7 +896,7 @@ function App() {
 
     return (
       <main className="brand-choice-screen">
-        <ScreenBackButton label="온보딩 화면으로 돌아가기" onClick={() => { setOnboardingStep(2); setMode('onboarding') }} />
+        <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => choiceBackMode === 'onboarding' ? (setOnboardingStep(2), setMode('onboarding')) : setMode('home')} />
         <section className="brand-choice-content" aria-label="CI와 BI 로고 선택">
           <div className="brand-choice-list">
             <article className="brand-choice-card ci-card">
@@ -1196,12 +1219,12 @@ function App() {
           </section>
 
           <div className="trademark-selection-actions">
-            <button className="trademark-check-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(false); setMode('trademark-loading') }}>
+            <button className="trademark-check-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(false); setTrademarkAnalysisCompleted(false); setMode('loading') }}>
               <span className="trademark-check-search" aria-hidden="true" />
               <span>비슷한 상표 이미지 확인하기</span>
               <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
             </button>
-            <button className="trademark-skip-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(true); setMode(trademarkEntry === 'result' ? 'result' : 'loading') }}>
+            <button className="trademark-skip-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(true); setTrademarkAnalysisCompleted(false); setMode(trademarkEntry === 'result' ? 'result' : 'loading') }}>
               <span>지금은 건너뛰기</span>
               <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
             </button>
@@ -1452,6 +1475,7 @@ function App() {
     return (
       <main className="mypage-screen" aria-labelledby="mypage-title">
         <header className="workspace-header">
+          <button className="workspace-back" type="button" aria-label="홈으로 돌아가기" onClick={() => setMode('home')}><ChevronLeft aria-hidden="true" size={23} strokeWidth={1.8} /></button>
           <div className="workspace-brand"><Sparkles aria-hidden="true" size={24} strokeWidth={1.7} /><strong>GenMark AI</strong></div>
           <button className="workspace-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         </header>
@@ -1583,7 +1607,7 @@ function App() {
           </button>
         </div>
         <p className="login-terms">계속하면 GenMark AI의 <a href="#terms">이용약관</a>과<br /><a href="#privacy">개인정보 처리방침</a>에 동의하게 됩니다.</p>
-        <button className="skip-login" type="button" onClick={() => setMode('home')}>나중에 할게요 <span aria-hidden="true">›</span></button>
+        <button className="skip-login" type="button" onClick={() => setMode(loginReturnMode)}>나중에 할게요 <span aria-hidden="true">›</span></button>
       </section>
     </main>
   )
@@ -1592,7 +1616,7 @@ function App() {
     <div className="app-shell light-shell">
       {mode === 'login' ? (
         <header className="login-header">
-          <button className="login-back" type="button" onClick={() => setMode('home')}>‹ <span>홈</span></button>
+          <button className="login-back" type="button" onClick={() => setMode(loginReturnMode)}>‹ <span>{loginReturnMode === 'hero' ? '랜딩' : '홈'}</span></button>
           <span className="login-header-state">안전하게 저장하기</span>
         </header>
       ) : mode === 'onboarding' || mode === 'brand-details' || mode === 'company-details' || mode === 'hero' || mode === 'choice' || mode === 'tone' || mode === 'style' || mode === 'final' || mode === 'loading' || mode === 'trademark-loading' || mode === 'trademark-selection' || mode === 'trademark-result' || mode === 'result' || mode === 'edit' || mode === 'mypage' || mode === 'survey' ? null : (
@@ -1679,6 +1703,20 @@ function App() {
       {creditModal === 'credit' ? renderCreditModal() : creditModal === 'survey' ? renderCreditSurveyModal() : null}
     </div>
   )
+}
+
+function App() {
+  const isAdminPath = window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/')
+
+  if (isAdminPath) {
+    return (
+      <Suspense fallback={<main aria-live="polite">관리자 화면을 불러오는 중입니다.</main>}>
+        <AdminDashboard />
+      </Suspense>
+    )
+  }
+
+  return <CustomerApp />
 }
 
 export default App
