@@ -37,10 +37,10 @@ public class AuthController {
     public ResponseEntity<ApiSuccessResponse<LoginResponseData>> login(@Valid @RequestBody LoginRequest request) {
         AuthService.LoginResult result = authService.login(request.provider(), request.idToken());
 
-        UserSummaryResponse user = toUserSummary(result.member(), result.isFirstLogin());
-        String resumeProjectId = result.resumeProjectId() == null ? null : String.valueOf(result.resumeProjectId());
+        UserSummaryResponse user = toUserSummary(
+                result.member(), result.isFirstLogin(), result.onboardingCompleted());
         LoginResponseData data = new LoginResponseData(
-                result.accessToken(), result.refreshToken(), result.expiresIn(), user, resumeProjectId);
+                result.accessToken(), result.refreshToken(), result.expiresIn(), user, result.resumeProjectId());
 
         return ResponseEntity.ok(ApiSuccessResponse.of(data));
     }
@@ -61,17 +61,18 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<ApiSuccessResponse<MeResponseData>> me(@AuthenticationPrincipal MemberPrincipal principal) {
         Member member = authService.getMember(principal.id());
-        UserSummaryResponse user = toUserSummary(member, false);
+        UserSummaryResponse user = toUserSummary(member, false, authService.isOnboardingCompleted(member.getId()));
         return ResponseEntity.ok(ApiSuccessResponse.of(new MeResponseData(user, null)));
     }
 
-    private UserSummaryResponse toUserSummary(Member member, boolean isFirstLogin) {
+    private UserSummaryResponse toUserSummary(Member member, boolean isFirstLogin, boolean onboardingCompleted) {
         return new UserSummaryResponse(
                 String.valueOf(member.getId()),
                 member.getEmail(),
                 member.getName(),
                 member.getProvider(),
-                isFirstLogin
+                isFirstLogin,
+                onboardingCompleted
         );
     }
 }

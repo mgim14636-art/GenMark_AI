@@ -3,12 +3,19 @@ package com.genmark.ai.web.dto;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import com.genmark.ai.web.RequestIdFilter;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 
 /** API_SPEC.md 2.2/2.3 공통 응답의 meta 필드. */
 public record ApiMeta(String requestId, String timestamp) {
 
     public static ApiMeta now() {
-        String requestId = "req_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+        Object current = attributes == null ? null
+                : attributes.getAttribute(RequestIdFilter.ATTRIBUTE, RequestAttributes.SCOPE_REQUEST);
+        String requestId = current instanceof String value ? value
+                : "req_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         String timestamp = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString();
         return new ApiMeta(requestId, timestamp);
     }

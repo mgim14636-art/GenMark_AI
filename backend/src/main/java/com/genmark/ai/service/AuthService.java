@@ -5,6 +5,8 @@ import com.genmark.ai.oauth.OAuthUserInfo;
 import com.genmark.ai.oauth.OAuthVerifier;
 import com.genmark.ai.oauth.OAuthVerifierResolver;
 import com.genmark.ai.repository.MemberRepository;
+import com.genmark.ai.repository.MemberOnboardingRepository;
+import com.genmark.ai.repository.ProjectRepository;
 import com.genmark.ai.security.JwtProvider;
 import com.genmark.ai.security.TokenHasher;
 import com.genmark.ai.web.exception.ApiException;
@@ -26,17 +28,23 @@ public class AuthService {
     private final MemberRepository memberRepository;
     private final OAuthVerifierResolver oAuthVerifierResolver;
     private final JwtProvider jwtProvider;
+    private final MemberOnboardingRepository onboardingRepository;
+    private final ProjectRepository projectRepository;
     private final long refreshTokenExpirationDays;
 
     public AuthService(
             MemberRepository memberRepository,
             OAuthVerifierResolver oAuthVerifierResolver,
             JwtProvider jwtProvider,
+            MemberOnboardingRepository onboardingRepository,
+            ProjectRepository projectRepository,
             @Value("${jwt.refresh-token-expiration-days:14}") long refreshTokenExpirationDays
     ) {
         this.memberRepository = memberRepository;
         this.oAuthVerifierResolver = oAuthVerifierResolver;
         this.jwtProvider = jwtProvider;
+        this.onboardingRepository = onboardingRepository;
+        this.projectRepository = projectRepository;
         this.refreshTokenExpirationDays = refreshTokenExpirationDays;
     }
 
@@ -46,7 +54,8 @@ public class AuthService {
             long expiresIn,
             Member member,
             boolean isFirstLogin,
-            Long resumeProjectId
+            boolean onboardingCompleted,
+            String resumeProjectId
     ) {
     }
 
@@ -59,7 +68,7 @@ public class AuthService {
         OAuthUserInfo info = verifier.verify(token);
 
         Member member = memberRepository.findByProviderAndProviderId(provider, info.providerId()).orElse(null);
-        boolean isFirstLogin = member == null || "kakao".equals(provider);
+        boolean isFirstLogin = member == null;
         if (member == null) {
             member = createMember(provider, info);
         }
@@ -68,8 +77,13 @@ public class AuthService {
         String refreshToken = issueRefreshToken(member);
 
         // Phase 1 범위에는 프로젝트 상태(status)가 없어 재개할 프로젝트를 판별할 수 없다.
+        boolean onboardingCompleted = onboardingRepository.existsByMemberIdAndCompletedAtIsNotNull(member.getId());
+        String resumeProjectId = projectRepository
+                .findFirstByMemberIdAndStatusNotOrderByUpdatedAtDesc(member.getId(), com.genmark.ai.entity.Project.Status.COMPLETED)
+                .map(com.genmark.ai.entity.Project::getPublicId)
+                .orElse(null);
         return new LoginResult(accessToken, refreshToken, jwtProvider.getAccessTokenExpirationSeconds(),
-                member, isFirstLogin, null);
+                member, isFirstLogin, onboardingCompleted, resumeProjectId);
     }
 
     @Transactional
@@ -93,6 +107,11 @@ public class AuthService {
     public Member getMember(Long memberId) {
         return memberRepository.findById(memberId)
                 .orElseThrow(() -> new ApiException(ErrorCode.AUTH_REQUIRED, "사용자를 찾을 수 없습니다."));
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isOnboardingCompleted(Long memberId) {
+        return onboardingRepository.existsByMemberIdAndCompletedAtIsNotNull(memberId);
     }
 
     private Member createMember(String provider, OAuthUserInfo info) {
