@@ -1,27 +1,4 @@
-"""심볼 이미지 + 브랜드명 폰트 레이어 합성 모듈 (단일 진입점).
 
-기획서 설계상 이미지 생성 모델(FLUX)은 심볼(도형)만 만들고, 브랜드명 문자는
-여기서 오픈 라이선스 폰트로 합성한다. 생성 모델에 글자를 맡기면 오탈자·깨짐이
-발생하고 특히 한글은 거의 렌더링되지 않기 때문이다.
-
-배경색은 흰색으로 고정하지 않는다. FLUX가 그린 배경(검정, 유색, 그라데이션 등)이
-로고의 분위기·팔레트에 맞춰 의도적으로 나온 색일 수 있으므로, 인접 픽셀끼리 색을
-비교하며 번져나가는 방식이 아니라 각 모서리의 "시작 색"과의 거리만 비교하는
-고정 기준색 flood-fill로 배경 영역만 찾아내고(_flatten_background), 그 영역의
-실제 평균색으로 균일하게 정리한다 — 노이즈·그라데이션 얼룩은 지우되 원래 배경이
-검정이면 검정, 파스텔이면 파스텔로, 로고 분위기와 어울리는 색을 그대로 유지한다.
-(인접 픽셀 체인 방식도 시도했으나, 심볼 자체가 그라데이션 채색이거나 가장자리가
-부드럽게 블러 처리된 경우 그 경계를 타고 심볼 내부까지 배경으로 오인해 지워버리는
-문제가 실측에서 확인되어 폐기했다.)
-
-텍스트는 캔버스를 무조건 아래로 늘려 붙이지 않고, 심볼이 실제로 차지하는 영역
-(바운딩 박스)을 찾아 그 바로 아래 남는 여백에 우선 넣는다 — 여백이 부족할 때만
-필요한 만큼만 같은 배경색으로 캔버스를 확장한다. 그래서 시안마다 심볼 크기·여백에
-따라 텍스트 위치가 자연스럽게 달라진다.
-
-유사도 분석(DINOv2+FAISS)은 KIPRIS 콤비네이션(도형+문자) 상표와 비교하므로,
-심볼 단독이 아니라 이 모듈을 거친 최종 로고로 검증해야 정확하다.
-"""
 
 import os
 import random
@@ -29,11 +6,18 @@ from typing import Optional
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
+from prompt_builder import _normalize_survey
+
 # LOGO_FONT_PATH 환경변수가 없을 때 순서대로 시도할 폰트 후보(굵기별).
 # 배포 컨테이너(Linux)와 로컬 개발(Windows) 양쪽을 커버하기 위해 여러 경로를 둔다.
 # 한글 브랜드명을 지원하려면 이 중 하나가 실제로 존재해야 한다 — 배포 환경에는
 # fonts/ 디렉터리에 한글 지원 TTF/OTF(예: Pretendard, Noto Sans KR)를 두고
 # LOGO_FONT_PATH로 지정하는 것을 권장한다(그 경우 굵기 다양화는 적용되지 않는다).
+#
+# [주의] 이 목록은 이제 "고정 우선순위"가 아니라 "후보 풀"로 쓰인다. 실제 어떤 파일이
+# 선택되는지는 _pick_random_font_path가 이 중 실제로 존재하는 파일들 중에서 무작위로
+# 고른다. LOGO_FONT_PATH 환경변수가 설정돼 있으면 그게 최우선으로 고정 사용된다
+# (무작위 선택보다 우선 — 배포 환경에서 특정 폰트로 강제 고정하고 싶을 때 쓴다).
 _FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 _FONT_CANDIDATES = {
     "bold": [
@@ -74,6 +58,25 @@ class FontNotFoundError(RuntimeError):
     """한글 렌더링 가능한 폰트를 찾지 못했을 때."""
 
 
+def _existing_font_candidates(weight: str) -> list:
+    """해당 굵기 후보 목록 중 실제로 디스크에 존재하는 파일 경로만 걸러서 반환한다."""
+    candidates = _FONT_CANDIDATES.get(weight, _FONT_CANDIDATES["bold"])
+    return [p for p in candidates if p and os.path.isfile(p)]
+
+
+def _pick_random_font_path(weight: str) -> Optional[str]:
+    """해당 굵기에서 실제로 존재하는 폰트 파일들 중 하나를 무작위로 고른다.
+
+    존재하는 후보가 하나도 없으면 None을 반환하고, 이 경우 _resolve_font가
+    ImageFont.load_default()로 최종 폴백한다. LOGO_FONT_PATH 환경변수가 설정돼
+    있으면 이 함수를 아예 거치지 않고 그쪽이 우선 사용된다(호출부에서 처리).
+    """
+    candidates = _existing_font_candidates(weight)
+    if not candidates:
+        return None
+    return random.choice(candidates)
+
+
 def _resolve_font(
     size: int, font_path: Optional[str] = None, weight: str = "bold"
 ) -> ImageFont.FreeTypeFont:
@@ -94,6 +97,22 @@ def _resolve_font(
     # 트루타입 폰트를 하나도 못 찾은 경우의 최후 폴백. PIL 내장 비트맵 폰트는 크기
     # 조절이 안 되고 한글도 지원하지 않으므로, 배포 환경에는 반드시 폰트를 둬야 한다.
     return ImageFont.load_default()
+
+
+def _resolve_font_path_for_call(font_path: Optional[str], weight: str) -> Optional[str]:
+    """이번 로고 한 장을 그리는 동안 고정해서 쓸 폰트 경로를 정한다.
+
+    우선순위: (1) 호출부가 직접 넘긴 font_path, (2) LOGO_FONT_PATH 환경변수(배포
+    환경에서 특정 폰트로 고정하고 싶을 때), (3) 존재하는 후보 중 무작위 선택.
+    여기서 정한 경로를 폰트 크기를 조정하는 동안(이분 탐색/축소 루프) 계속 재사용해야
+    폭 계산과 실제 그리기에 쓰이는 폰트가 어긋나지 않는다.
+    """
+    if font_path:
+        return font_path
+    env_font = os.environ.get("LOGO_FONT_PATH")
+    if env_font:
+        return env_font
+    return _pick_random_font_path(weight)
 
 
 def _color_distance(a: tuple, b: tuple) -> float:
@@ -194,7 +213,11 @@ def _text_size(draw: ImageDraw.ImageDraw, text: str, font) -> tuple:
 def _fit_font_to_width(
     draw: ImageDraw.ImageDraw, text: str, target_width: int, font_path: Optional[str]
 ) -> ImageFont.FreeTypeFont:
-    """텍스트가 target_width에 맞도록 폰트 크기를 이분 탐색으로 찾는다. (워드마크/레터마크용)"""
+    """텍스트가 target_width에 맞도록 폰트 크기를 이분 탐색으로 찾는다. (워드마크/레터마크용)
+
+    font_path는 호출부(compose_logo)가 _resolve_font_path_for_call로 이미 확정해
+    넘긴 값이라, 이분 탐색 도중에는 이 경로 하나로 고정해서 크기만 바꿔가며 잰다.
+    """
     low, high = 8, 400
     best = _resolve_font(low, font_path)
     while low <= high:
@@ -226,7 +249,8 @@ def compose_logo_with_text(
     노이즈만 균일하게 정리한다. 심볼의 실제 바운딩 박스를 찾아 그 아래 남는 여백에
     우선 배치하고, 여백이 모자랄 때만 같은 배경색으로 캔버스를 확장한다. text_style
     (굵기, 자간)과 text_color를 지정하지 않으면 각각 무작위 조합 / 심볼·배경에서
-    자동 결정된다. brand_name이 비어 있으면 원본을 그대로 반환한다.
+    자동 결정된다. font_path를 지정하지 않으면 폰트 패밀리 자체도(존재하는 후보 중)
+    무작위로 고른다. brand_name이 비어 있으면 원본을 그대로 반환한다.
     """
     name = " ".join((brand_name or "").split())
     if not name:
@@ -242,9 +266,12 @@ def compose_logo_with_text(
 
     weight, letter_spacing_em = text_style or random.choice(_TEXT_STYLE_POOL)
     resolved_color = text_color or _dominant_color(flattened, bg_rgb)
+    # 이 로고 한 장을 그리는 동안 폰트 경로를 한 번만 정하고 계속 재사용한다 —
+    # 축소 루프 중간에 폰트가 바뀌면 폭 계산이 어긋나 텍스트가 잘리거나 넘칠 수 있다.
+    resolved_font_path = _resolve_font_path_for_call(font_path, weight)
 
     font_size = max(14, round(symbol_h * font_size_ratio))
-    font = _resolve_font(font_size, font_path, weight)
+    font = _resolve_font(font_size, resolved_font_path, weight)
     gap = max(4, round(font_size * gap_ratio))
     letter_spacing = round(font_size * letter_spacing_em)
 
@@ -265,7 +292,7 @@ def compose_logo_with_text(
     shrink_attempts = 0
     while text_w > max_text_w and shrink_attempts < 5 and font_size > 12:
         font_size = round(font_size * 0.85)
-        font = _resolve_font(font_size, font_path, weight)
+        font = _resolve_font(font_size, resolved_font_path, weight)
         letter_spacing = round(font_size * letter_spacing_em)
         text_w, text_h, tbbox = _measure(font)
         shrink_attempts += 1
@@ -304,8 +331,8 @@ def compose_logo_with_text(
 def compose_logos_with_text(logos, brand_name: str, **kwargs):
     """generate_logo_from_survey가 반환하는 여러 시안에 브랜드명을 일괄 합성한다.
 
-    text_style/text_color를 kwargs로 고정하지 않는 한, 시안 각각에 대해
-    compose_logo_with_text가 스타일과 색과 배치를 독립적으로 자동 결정한다.
+    text_style/text_color/font_path를 kwargs로 고정하지 않는 한, 시안 각각에 대해
+    compose_logo_with_text가 스타일·색·폰트·배치를 독립적으로 자동 결정한다.
     """
     return [compose_logo_with_text(logo, brand_name, **kwargs) for logo in logos]
 
@@ -336,7 +363,10 @@ def compose_logo(
         canvas = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(canvas)
         text = _initials(brand_name) if style == "레터마크" else brand_name
-        font = _fit_font_to_width(draw, text, int(canvas_size * 0.7), font_path)
+        # 워드마크/레터마크는 항상 "bold" 굵기를 써왔으므로(_fit_font_to_width의
+        # 기존 동작과 동일하게) weight="bold" 기준으로 폰트 경로를 무작위 선택한다.
+        resolved_font_path = _resolve_font_path_for_call(font_path, "bold")
+        font = _fit_font_to_width(draw, text, int(canvas_size * 0.7), resolved_font_path)
         tw, th = _text_size(draw, text, font)
         left, top, _, _ = draw.textbbox((0, 0), text, font=font)
         draw.text(
@@ -378,7 +408,14 @@ def compose_final_logo(symbol: Image.Image, survey: dict) -> Image.Image:
 
     app.py의 단일 진입점 — 텍스트 합성 여부 판단부터 배경 정리, compose_logo
     호출까지 이 함수 하나로 처리한다.
+
+    survey는 CI/BI 어느 화면의 원본 필드명(company_name 등)으로 와도 되고 이미
+    정규화된 형태(brand_name)로 와도 된다 — prompt_builder._normalize_survey를
+    그대로 재사용해 이 함수 안에서 한 번 더 정규화하므로, 호출부(app.py)가
+    build_prompt_from_survey에 넘긴 것과 같은 survey를 그대로 넘기기만 하면
+    brand_name 필드명 차이로 텍스트 합성이 조용히 스킵되는 문제가 생기지 않는다.
     """
+    survey = _normalize_survey(survey)
     style_key = survey.get("style", "심볼")
     brand_name = " ".join((survey.get("brand_name") or "").strip().split())
 

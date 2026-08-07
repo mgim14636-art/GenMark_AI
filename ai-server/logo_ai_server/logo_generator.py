@@ -16,8 +16,7 @@ load_dotenv()
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY")
 NVIDIA_API_URL = "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b"
 
-# flux.2-klein-4b NIM API는 steps > 4를 422로 거부한다(few-step 증류 모델이라 실제
-# 서버 스펙 자체가 1~4로 고정돼 있음 — 문서/주석에 8까지 된다고 적혀 있던 건 오기였음).
+# NVIDIA API가 이 엔드포인트에 steps<=4를 강제한다(초과 시 422). 실측 확인됨.
 MAX_STEPS = 4
 REQUEST_TIMEOUT = 60
 MAX_RETRIES = 1
@@ -47,6 +46,7 @@ def _call_flux_klein(prompt: str, steps: int, seed: int) -> Image.Image:
 
     last_error = None
     for attempt in range(MAX_RETRIES + 1):
+        call_started = time.monotonic()
         try:
             response = _session.post(
                 NVIDIA_API_URL, headers=headers, json=payload, timeout=REQUEST_TIMEOUT
@@ -76,13 +76,16 @@ def _call_flux_klein(prompt: str, steps: int, seed: int) -> Image.Image:
                 f"프롬프트가 NVIDIA 콘텐츠 필터에 걸렸을 수 있습니다. prompt={prompt!r}"
             )
 
+        # 장당 실제 API 왕복 시간 — 시연 전 용량 산정에 쓰려고 개별로 남긴다
+        print(f"[logo_generator]   단일 이미지 {time.monotonic() - call_started:.1f}s (steps={steps})")
+
         image_bytes = base64.b64decode(artifact["base64"])
         return Image.open(BytesIO(image_bytes)).convert("RGBA")
 
     raise last_error or RuntimeError("NVIDIA API 요청이 알 수 없는 이유로 실패했습니다.")
 
 
-def generate_logo_from_survey(survey: dict, num_variants: int = 4, steps: int = 4):
+def generate_logo_from_survey(survey: dict, num_variants: int = 4, steps: int = MAX_STEPS):
     """설문 기반 로고 시안을 병렬로 생성한다.
 
     변형(variant)마다 별도 HTTP 요청이 필요한 API라서, 순차 호출 시 총 소요 시간이
@@ -112,7 +115,7 @@ def generate_logo_from_survey(survey: dict, num_variants: int = 4, steps: int = 
             try:
                 results[idx] = future.result()
             except Exception as e:
-                errors.append(str(e)) 
+                errors.append(str(e))
 
     images = [img for img in results if img is not None]
     elapsed = time.monotonic() - started
