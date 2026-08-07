@@ -12,8 +12,8 @@ services:
       MYSQL_USER: ${MARIADB_USER:-genmark_user}
       MYSQL_PASSWORD: ${MARIADB_PASSWORD:-genmark_pass}
       TZ: Asia/Seoul
-    ports:
-      - "${MARIADB_PORT:-3306}:3306"
+      #ports:
+      #- "${MARIADB_PORT:-3306}:3306"
     volumes:
       - mariadb_local_data:/var/lib/mysql
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -35,7 +35,7 @@ services:
     restart: always
     environment:
       SPRING_PROFILES_ACTIVE: local
-      SPRING_DATASOURCE_URL: jdbc:mariadb://${MARIADB_HOST:-localhost}:${MARIADB_PORT:-3306}/${MARIADB_DATABASE:-genmark_db}?useUnicode=true&characterEncoding=utf8
+      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/${MARIADB_DATABASE:-genmark_db}?useUnicode=true&characterEncoding=utf8
       SPRING_DATASOURCE_USERNAME: ${MARIADB_USER:-genmark_user}
       SPRING_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD:-genmark_pass}
       AI_SERVER_URL: http://ai-server:8000
