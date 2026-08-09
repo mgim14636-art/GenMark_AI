@@ -10,6 +10,7 @@ export type AuthUser = {
   name: string
   provider: AuthProvider
   isFirstLogin: boolean
+  onboardingCompleted: boolean
 }
 
 export type AuthSession = {

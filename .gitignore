@@ -12,6 +12,8 @@ Thumbs.db
 .env
 .env.local
 *.env
+/.env
+/frontend/.env
 
 # Java / Maven
 backend/target/

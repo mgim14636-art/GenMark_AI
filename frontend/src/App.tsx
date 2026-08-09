@@ -1,16 +1,18 @@
 import { FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Heart, House, Image as ImageIcon, Info, LoaderCircle, MessageSquare, Palette, Pencil, PenLine, Plus, RefreshCw, Search, ShieldCheck, Sparkle as LucideSparkle, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, Video, X, Clock3 } from 'lucide-react'
+import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, LoaderCircle, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkle as LucideSparkle, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import { AuthError, type AuthProvider, type AuthUser, loginWithProvider, logout, restoreSession } from './auth'
+import { onboardingApi, projectsApi, type LogoCandidate, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
 
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
 
-type ViewMode = 'home' | 'hero' | 'onboarding' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'edit' | 'login' | 'mypage' | 'survey'
-type LoginDestination = 'home' | 'choice'
+type ViewMode = 'home' | 'hero' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'edit' | 'login' | 'mypage' | 'survey'
+type LoginDestination = 'home' | 'industry' | 'choice'
 type LoginReturnMode = 'hero' | 'home'
 type OnboardingOption = 'online' | 'social' | 'offline'
 type AudienceOption = 'company' | 'owner' | 'hobby' | 'sidejob'
+type IndustryOption = 'beauty' | 'fashion' | 'food' | 'health' | 'tech' | 'education' | 'pet' | 'other'
 type CoreValue = 'vegan' | 'crueltyFree' | 'lowIrritation' | 'derma' | 'cleanBeauty' | 'natural' | 'premium' | 'sustainable' | 'scientific' | 'reasonable' | 'emotional'
 type ToneOption = 'friendly' | 'professional' | 'warm' | 'trendy' | 'minimal'
 type RgbColor = { r: number; g: number; b: number }
@@ -24,6 +26,17 @@ const toneOptions: Array<{ id: ToneOption; label: string; description: string; c
   { id: 'warm', label: '감성적이고 따뜻한', description: '섬세하고 따뜻한 인상', colors: ['#d29474', '#f2eadc'] },
   { id: 'trendy', label: '유니크하고 트렌디한', description: '개성 있고 감각적인 인상', colors: ['#171713', '#f2f2f4'] },
   { id: 'minimal', label: '미니멀하고 직관적인', description: '군더더기 없이 명확한 인상', colors: ['#396fc8', '#dde4ff'] },
+]
+
+const industryOptions: Array<{ id: IndustryOption; title: string; description: string; apiValue: string; icon: LucideIcon }> = [
+  { id: 'beauty', title: '뷰티', description: '스킨케어 · 메이크업 · 향수', apiValue: 'COSMETICS', icon: Sparkles },
+  { id: 'fashion', title: '패션', description: '의류 · 액세서리 · 슈즈', apiValue: 'FASHION', icon: Shirt },
+  { id: 'food', title: '푸드 · 카페', description: '카페 · 베이커리 · 식품', apiValue: 'FOOD', icon: Utensils },
+  { id: 'health', title: '헬스 · 웰니스', description: '피트니스 · 건강 · 요가', apiValue: 'HEALTH_WELLNESS', icon: Heart },
+  { id: 'tech', title: '테크', description: 'IT · 앱 · 소프트웨어', apiValue: 'TECH', icon: Laptop },
+  { id: 'education', title: '교육', description: '학원 · 강의 · 교육', apiValue: 'EDUCATION', icon: GraduationCap },
+  { id: 'pet', title: '펫', description: '반려동물 용품 · 서비스', apiValue: 'PET', icon: PawPrint },
+  { id: 'other', title: '기타', description: '그 외 업종', apiValue: 'OTHER', icon: Shapes },
 ]
 
 const logoStyleOptions: Array<{ id: LogoStyle; label: string; description: string; fit: string; recommended?: boolean }> = [
@@ -48,6 +61,7 @@ const getModeFromUrl = (): ViewMode => {
   if (requestedView === 'login') return 'login'
   if (requestedView === 'hero') return 'hero'
   if (requestedView === 'onboarding') return 'onboarding'
+  if (requestedView === 'industry' || requestedView === 'industry-selection' || requestedView === 'domain') return 'industry'
   if (requestedView === 'brand-details' || requestedView === 'brand-info' || requestedView === 'values') return 'brand-details'
   if (requestedView === 'company-details' || requestedView === 'ci-details' || requestedView === 'corporate-details') return 'choice'
   if (requestedView === 'choice' || requestedView === 'ci-bi' || requestedView === 'brand-type') return 'choice'
@@ -107,14 +121,20 @@ function CustomerApp() {
   const [authError, setAuthError] = useState('')
   const [loginDestination, setLoginDestination] = useState<LoginDestination>('home')
   const [loginReturnMode, setLoginReturnMode] = useState<LoginReturnMode>('home')
-  const [onboardingCompleted, setOnboardingCompleted] = useState(() => window.localStorage.getItem('genmark-onboarding-completed') === 'true')
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false)
+  const [onboardingSaving, setOnboardingSaving] = useState(false)
+  const [onboardingError, setOnboardingError] = useState('')
   const [activeCategory, setActiveCategory] = useState('전체')
   const [likedIds, setLikedIds] = useState<string[]>([])
   const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1)
+  const [onboardingTransition, setOnboardingTransition] = useState<'idle' | 'exit' | 'enter'>('idle')
+  const onboardingTransitionTimer = useRef<number | null>(null)
   const [onboardingSelection, setOnboardingSelection] = useState<OnboardingOption[]>(['online'])
   const [audienceSelection, setAudienceSelection] = useState<AudienceOption[]>(['company'])
+  const [industrySelection, setIndustrySelection] = useState<IndustryOption | null>(null)
   const [brandKind, setBrandKind] = useState<'ci' | 'bi' | null>(null)
-  const [choiceBackMode, setChoiceBackMode] = useState<'home' | 'onboarding'>('home')
+  const [choiceBackMode, setChoiceBackMode] = useState<'home' | 'onboarding' | 'industry'>('home')
+  const [industryBackMode, setIndustryBackMode] = useState<'home' | 'onboarding'>('home')
   const [additionalRequest, setAdditionalRequest] = useState('')
   const [brandName, setBrandName] = useState('')
   const [companyName, setCompanyName] = useState(() => {
@@ -152,12 +172,28 @@ function CustomerApp() {
   const [editorSaved, setEditorSaved] = useState(false)
   const [trademarkEntry, setTrademarkEntry] = useState<'generation' | 'result'>('generation')
   const [trademarkAnalysisCompleted, setTrademarkAnalysisCompleted] = useState(false)
+  const [projectId, setProjectId] = useState<string | null>(() => window.localStorage.getItem('genmark-project-id'))
+  const [generationId, setGenerationId] = useState<string | null>(null)
+  const [generationError, setGenerationError] = useState('')
+  const [generationLoading, setGenerationLoading] = useState(false)
+  const [projectSaving, setProjectSaving] = useState(false)
+  const [projectError, setProjectError] = useState('')
+  const [logoCandidates, setLogoCandidates] = useState<LogoCandidate[]>([])
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null)
+  const [analysisId, setAnalysisId] = useState<string | null>(null)
+  const [analysisError, setAnalysisError] = useState('')
+  const [trademarkMatches, setTrademarkMatches] = useState<TrademarkMatch[]>([])
+  const [trademarkDisclaimer, setTrademarkDisclaimer] = useState('')
+  const [trademarkSimilarity, setTrademarkSimilarity] = useState<number | null>(null)
+  const [trademarkRiskLabel, setTrademarkRiskLabel] = useState('')
+  const [trademarkRiskDescription, setTrademarkRiskDescription] = useState('')
   const [surveyRating, setSurveyRating] = useState(0)
   const [surveyImprovements, setSurveyImprovements] = useState<string[]>([])
   const [surveyComment, setSurveyComment] = useState('')
   const [surveySubmitted, setSurveySubmitted] = useState(false)
   const [remainingCredits, setRemainingCredits] = useState(2)
   const [creditModal, setCreditModal] = useState<'credit' | 'survey' | null>(null)
+  const [choiceInfoModal, setChoiceInfoModal] = useState<'ci' | 'bi' | null>(null)
   const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string } | null>(null)
 
   const setMode = (nextMode: ViewMode, options: { replace?: boolean } = {}) => {
@@ -186,13 +222,29 @@ function CustomerApp() {
 
   useEffect(() => {
     let cancelled = false
-    void restoreSession()
-      .then((session) => {
+    void (async () => {
+      try {
+        const session = await restoreSession()
         if (cancelled || !session) return
         setAuthUser(session.user)
         setLoggedIn(true)
-      })
-      .catch(() => undefined)
+        setOnboardingCompleted(session.user.onboardingCompleted)
+        if (session.user.onboardingCompleted) window.localStorage.setItem('genmark-onboarding-completed', 'true')
+
+        const onboarding = await onboardingApi.get()
+        if (cancelled) return
+        setOnboardingSelection(onboarding.usage.filter((value): value is OnboardingOption => value === 'online' || value === 'social' || value === 'offline'))
+        if (onboarding.audience === 'company' || onboarding.audience === 'owner' || onboarding.audience === 'hobby' || onboarding.audience === 'sidejob') {
+          setAudienceSelection([onboarding.audience])
+        }
+        if (onboarding.initialProjectId) {
+          setProjectId(onboarding.initialProjectId)
+          window.localStorage.setItem('genmark-project-id', onboarding.initialProjectId)
+        }
+      } catch {
+        if (!cancelled) setLoggedIn(false)
+      }
+    })()
     return () => { cancelled = true }
   }, [])
 
@@ -205,23 +257,21 @@ function CustomerApp() {
   }, [])
 
   useEffect(() => {
-    if (mode !== 'loading' && mode !== 'trademark-loading') return
-
-    const timer = window.setTimeout(() => {
-      if (mode === 'trademark-loading') {
-        setTrademarkAnalysisCompleted(true)
-        setMode('result')
-        return
-      }
-
-      setMode(trademarkAnalysisSkipped || !canAnalyzeTrademark ? 'result' : 'trademark-loading')
-    }, mode === 'loading' ? 1700 : 1900)
-    return () => window.clearTimeout(timer)
-  }, [mode])
-
-  useEffect(() => {
     window.localStorage.setItem('genmark-company-profile', JSON.stringify({ name: companyName, motto: companyMotto }))
   }, [companyName, companyMotto])
+
+  useEffect(() => () => {
+    if (onboardingTransitionTimer.current !== null) window.clearTimeout(onboardingTransitionTimer.current)
+  }, [])
+
+  useEffect(() => {
+    if (!choiceInfoModal) return undefined
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setChoiceInfoModal(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [choiceInfoModal])
 
   const galleryRef = useRef<HTMLDivElement>(null)
   const galleryDragStartX = useRef(0)
@@ -280,9 +330,10 @@ function CustomerApp() {
       const session = await loginWithProvider(provider)
       setAuthUser(session.user)
       setLoggedIn(true)
+      setOnboardingCompleted(session.user.onboardingCompleted)
       setOnboardingStep(1)
-      setChoiceBackMode(session.user.isFirstLogin ? 'onboarding' : 'home')
-      setMode(session.user.isFirstLogin && loginDestination === 'choice' ? 'onboarding' : loginDestination)
+      setIndustryBackMode(session.user.onboardingCompleted ? 'home' : 'onboarding')
+      setMode(session.user.onboardingCompleted ? loginDestination : 'onboarding')
       setLoginDestination('home')
     } catch (error) {
       const message = error instanceof AuthError
@@ -303,7 +354,7 @@ function CustomerApp() {
 
   const startOnboarding = () => {
     if (!loggedIn) {
-      setLoginDestination('choice')
+      setLoginDestination('industry')
       setLoginReturnMode('home')
       setMode('login')
       return
@@ -311,20 +362,74 @@ function CustomerApp() {
 
     setOnboardingStep(1)
     if (onboardingCompleted) {
-      setChoiceBackMode('home')
-      setMode('choice')
+      setIndustryBackMode('home')
+      setMode('industry')
     } else {
       setMode('onboarding')
     }
   }
 
-  const advanceOnboarding = () => {
-    if (onboardingStep === 1) {
-      setOnboardingStep(2)
+  const completeOnboarding = async () => {
+    if (onboardingSaving) return
+    if (onboardingSelection.length === 0) {
+      setOnboardingError('사용처를 하나 이상 선택해주세요.')
+      return
+    }
+    const audience = audienceSelection[0]
+    if (!audience) {
+      setOnboardingError('방문 목적을 선택해주세요.')
       return
     }
 
-    setMode('company-details')
+    setOnboardingSaving(true)
+    setOnboardingError('')
+    try {
+      await onboardingApi.complete({
+        usage: onboardingSelection,
+        audience,
+        // The project type and detailed project fields are collected after this
+        // onboarding gate, so this first completion intentionally skips them.
+        detailsDecision: 'SKIPPED',
+      })
+      setOnboardingCompleted(true)
+      window.localStorage.setItem('genmark-onboarding-completed', 'true')
+      setIndustryBackMode('onboarding')
+      setMode('industry')
+    } catch (error) {
+      const message = error instanceof AuthError ? error.message : '온보딩 정보를 저장하지 못했어요. 잠시 후 다시 시도해주세요.'
+      setOnboardingError(message)
+    } finally {
+      setOnboardingSaving(false)
+    }
+  }
+
+  const transitionToOnboardingStep = (nextStep: 1 | 2) => {
+    if (onboardingTransition !== 'idle' || nextStep === onboardingStep) return
+
+    setOnboardingTransition('exit')
+    onboardingTransitionTimer.current = window.setTimeout(() => {
+      setOnboardingStep(nextStep)
+      setOnboardingTransition('enter')
+      onboardingTransitionTimer.current = window.setTimeout(() => {
+        setOnboardingTransition('idle')
+        onboardingTransitionTimer.current = null
+      }, 920)
+    }, 340)
+  }
+
+  const advanceOnboarding = () => {
+    if (onboardingStep === 1) {
+      transitionToOnboardingStep(2)
+      return
+    }
+
+    void completeOnboarding()
+  }
+
+  const advanceIndustrySelection = () => {
+    if (!industrySelection) return
+    setChoiceBackMode('industry')
+    setMode('choice')
   }
 
   const openTrademarkSelection = (entry: 'generation' | 'result') => {
@@ -366,6 +471,135 @@ function CustomerApp() {
 
   const updateManualColorFromHex = (hex: string) => {
     setManualColor(hexToRgb(hex))
+  }
+
+  const buildProjectInput = (): ProjectInput => ({
+    brandType: brandKind === 'ci' ? 'CI' : 'BI',
+    industry: industryOptions.find((option) => option.id === industrySelection)?.apiValue ?? 'COSMETICS',
+    brandName: brandName.trim() || undefined,
+    companyName: companyName.trim() || undefined,
+    companyMotto: companyMotto.trim() || undefined,
+    brandValues: coreValueInputMode === 'category' ? coreValues : undefined,
+    brandValuesText: coreValueInputMode === 'direct' ? brandValueDescription.trim() || undefined : undefined,
+    tone: toneSelection,
+    colorMode: 'MANUAL',
+    colors: [rgbToHex(manualColor)],
+    logoStyle,
+    includeBrandName: true,
+    additionalRequirements: additionalRequest.trim() || undefined,
+  })
+
+  const ensureProject = async (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review' = 'final-review') => {
+    const input = buildProjectInput()
+    if (projectId) {
+      await projectsApi.updateStep(projectId, step, input)
+      return projectId
+    }
+
+    const project = await projectsApi.create(input)
+    setProjectId(project.id)
+    window.localStorage.setItem('genmark-project-id', project.id)
+    return project.id
+  }
+
+  const saveProjectStep = async (step: 'brand-brief' | 'tone' | 'logo-style', nextMode: ViewMode) => {
+    if (projectSaving) return
+    setProjectSaving(true)
+    setProjectError('')
+    try {
+      await ensureProject(step)
+      setMode(nextMode)
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : '프로젝트 정보를 저장하지 못했어요.')
+    } finally {
+      setProjectSaving(false)
+    }
+  }
+
+  const saveEditorChanges = async () => {
+    if (!projectId) {
+      setEditorSaved(true)
+      return
+    }
+    try {
+      await projectsApi.patch(projectId, { brandName: editorBrandName, colors: [editorColor] })
+      setEditorSaved(true)
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : '편집 내용을 저장하지 못했어요.')
+    }
+  }
+
+  const startLogoGeneration = async () => {
+    if (generationLoading) return
+    setGenerationLoading(true)
+    setGenerationError('')
+    setMode('loading')
+    try {
+      const nextProjectId = await ensureProject('final-review')
+      const generation = await projectsApi.createGeneration(nextProjectId, crypto.randomUUID())
+      setGenerationId(generation.id)
+      const completedGeneration = await waitForLogoGeneration(nextProjectId, generation.id)
+      if (completedGeneration.status === 'FAILED') {
+        throw new Error(completedGeneration.errorMessage ?? '로고 생성에 실패했어요.')
+      }
+
+      const candidates = await projectsApi.getCandidates(nextProjectId)
+      if (candidates.length !== 4) throw new Error('로고 후보를 4개 불러오지 못했어요.')
+      setLogoCandidates(candidates)
+      const selected = candidates.findIndex((candidate) => candidate.selected)
+      setResultCandidate(selected >= 0 ? selected : 0)
+      setSelectedCandidateId(selected >= 0 ? candidates[selected].id : null)
+      setMode('result')
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : '로고 생성 중 문제가 발생했어요.')
+    } finally {
+      setGenerationLoading(false)
+    }
+  }
+
+  const selectLogoCandidate = async (candidate: LogoCandidate, index: number) => {
+    if (!projectId) return
+    setResultCandidate(index)
+    try {
+      const selected = await projectsApi.selectCandidate(projectId, candidate.id)
+      setSelectedCandidateId(selected.id)
+      setLogoCandidates((current) => current.map((item) => ({ ...item, selected: item.id === selected.id })))
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : '로고 후보를 선택하지 못했어요.')
+    }
+  }
+
+  const startTrademarkAnalysis = async () => {
+    if (!projectId || trademarkAnalysisCompleted) return
+    const candidate = logoCandidates[resultCandidate]
+    if (!candidate) {
+      setAnalysisError('먼저 로고 후보를 생성해주세요.')
+      return
+    }
+
+    setAnalysisError('')
+    setMode('trademark-loading')
+    try {
+      await projectsApi.selectCandidate(projectId, candidate.id)
+      setSelectedCandidateId(candidate.id)
+      const analysis = await projectsApi.createAnalysis(projectId)
+      setAnalysisId(analysis.id)
+      const completedAnalysis = await waitForTrademarkAnalysis(projectId, analysis.id)
+      if (completedAnalysis.status === 'FAILED') {
+        throw new Error(completedAnalysis.errorMessage ?? '상표 분석에 실패했어요.')
+      }
+      const matches = await projectsApi.getMatches(projectId, analysis.id)
+      setTrademarkMatches(matches)
+      setTrademarkSimilarity(completedAnalysis.maxSimilarity)
+      setTrademarkRiskLabel(completedAnalysis.riskLabel ?? '')
+      setTrademarkRiskDescription(completedAnalysis.riskDescription ?? '')
+      setTrademarkDisclaimer(completedAnalysis.disclaimer ?? '')
+      setTrademarkAnalysisCompleted(true)
+      setMode('trademark-result')
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : '상표 분석 중 문제가 발생했어요.')
+      setMode('result')
+    }
   }
 
   const downloadLogo = (candidate: { name: string; subtitle: string }) => {
@@ -414,81 +648,103 @@ function CustomerApp() {
     eyebrow: string
     title: string
     description: string
-    illustration: string
   }> = [
-    { id: 'company', eyebrow: '회사 / 팀', title: '회사 / 팀', description: '법인 · 팀 프로젝트', illustration: '/onboarding-company.svg' },
-    { id: 'owner', eyebrow: '자영업', title: '자영업', description: '개인 사업 · 가게', illustration: '/onboarding-owner.svg' },
-    { id: 'hobby', eyebrow: '취미 / 창작', title: '취미 / 창작', description: '개인 활동 · 포트폴리오', illustration: '/onboarding-hobby.svg' },
-    { id: 'sidejob', eyebrow: '부업 & 투잡', title: '부업 & 투잡', description: 'N잡 · 사이드 프로젝트', illustration: '/onboarding-sidejob.svg' },
+    { id: 'company', eyebrow: '회사 / 팀', title: '회사 / 팀', description: '법인 · 팀 프로젝트' },
+    { id: 'owner', eyebrow: '자영업', title: '자영업', description: '개인 사업 · 가게' },
+    { id: 'hobby', eyebrow: '취미 / 창작', title: '취미 / 창작', description: '개인 활동 · 포트폴리오' },
+    { id: 'sidejob', eyebrow: '부업 & 투잡', title: '부업 & 투잡', description: 'N잡 · 사이드 프로젝트' },
   ]
 
-  const renderOnboardingIllustration = (option: OnboardingOption) => {
-    const illustration = option === 'online'
-      ? '/onboarding-online.svg'
-      : option === 'social'
-        ? '/onboarding-social.svg'
-        : '/onboarding-offline.svg'
-    return (
-      <div className={`onboarding-illustration illustration-${option}`} aria-hidden="true">
-        <img className="onboarding-card-art" src={illustration} alt="" />
-      </div>
-    )
-  }
-
-  const renderAudienceIllustration = (option: AudienceOption) => {
-    const audience = audienceOptions.find((item) => item.id === option)
-    return (
-      <div className={`onboarding-illustration illustration-${option}`} aria-hidden="true">
-        <img className="onboarding-card-art" src={audience?.illustration ?? ''} alt="" />
-      </div>
-    )
-  }
-
   const renderOnboardingScreen = () => (
-    <main className={`onboarding-screen onboarding-step-${onboardingStep}`}>
-      {onboardingStep === 2 && <ScreenBackButton label="온보딩 1단계로 돌아가기" onClick={() => setOnboardingStep(1)} />}
-      <img className="onboarding-art" src="/aurora-bubbles.png" alt="" aria-hidden="true" />
+    <main className={`onboarding-screen onboarding-step-${onboardingStep}${onboardingTransition === 'idle' ? '' : ` onboarding-transition-${onboardingTransition}`}`}>
+      <div className="onboarding-transition-wash" aria-hidden="true" />
+      {onboardingStep === 2 && <ScreenBackButton label="온보딩 1단계로 돌아가기" onClick={() => transitionToOnboardingStep(1)} />}
       <div className="onboarding-overlay" />
       <section className="onboarding-content" aria-labelledby="onboarding-title">
-        <div className="onboarding-brand"><BrandLogo /><span>GenMark AI</span></div>
-        <div className="onboarding-step"><span>{onboardingStep} / 2</span></div>
-        {onboardingStep === 1 ? (
-          <h1 id="onboarding-title">로고를 어디에<br /><strong>사용할 예정인가요?</strong></h1>
-        ) : (
-          <h1 id="onboarding-title">어떤 계기로<br /><strong>방문하게 되셨나요?</strong></h1>
-        )}
-        <p className="onboarding-selection-hint">{onboardingStep === 1 ? '복수 선택 가능' : '하나만 선택 가능'}</p>
-        <div className="onboarding-options">
-          {onboardingStep === 1 ? onboardingOptions.map((option) => {
-            const selected = onboardingSelection.includes(option.id)
+        <div className="onboarding-intro">
+          <div className="onboarding-brand"><span>GenMark</span></div>
+          <div className="onboarding-step"><span>{onboardingStep} / 2</span></div>
+          {onboardingStep === 1 ? (
+            <h1 id="onboarding-title">로고를 어디에<br /><strong>사용할 예정인가요?</strong></h1>
+          ) : (
+            <h1 id="onboarding-title">어떤 계기로<br /><strong>방문하게 되셨나요?</strong></h1>
+          )}
+        </div>
+        <div className="onboarding-interaction">
+          <p className="onboarding-selection-hint">{onboardingStep === 1 ? '복수 선택 가능' : '하나만 선택 가능'}</p>
+          <div className="onboarding-options">
+            {onboardingStep === 1 ? onboardingOptions.map((option) => {
+              const selected = onboardingSelection.includes(option.id)
+              return (
+                <button key={option.id} type="button" className={selected ? 'onboarding-option selected' : 'onboarding-option'} onClick={() => toggleOnboardingSelection(option.id)} aria-pressed={selected}>
+                  <span className="onboarding-option-copy">
+                    <small>{option.eyebrow}</small>
+                    <strong>{option.title}</strong>
+                    <span>{option.description}</span>
+                  </span>
+                  <span className="onboarding-radio" aria-hidden="true">{selected && <Check size={24} strokeWidth={2.5} />}</span>
+                </button>
+              )
+            }) : audienceOptions.map((option) => {
+              const selected = audienceSelection.includes(option.id)
+              return (
+                <button key={option.id} type="button" className={selected ? 'onboarding-option selected' : 'onboarding-option'} onClick={() => toggleAudienceSelection(option.id)} aria-pressed={selected}>
+                  <span className="onboarding-option-copy">
+                    <small>{option.eyebrow}</small>
+                    <strong>{option.title}</strong>
+                    <span>{option.description}</span>
+                  </span>
+                  <span className="onboarding-radio" aria-hidden="true">{selected && <Check size={24} strokeWidth={2.5} />}</span>
+                </button>
+              )
+            })}
+          </div>
+          {onboardingError && <p className="onboarding-error" role="alert">{onboardingError}</p>}
+          <button className="onboarding-next" type="button" onClick={advanceOnboarding}>
+            {onboardingSaving ? '저장 중...' : onboardingStep === 1 ? '다음' : '시작하기'}
+          </button>
+        </div>
+      </section>
+    </main>
+  )
+
+  const renderIndustrySelectionScreen = () => (
+    <main className="industry-selection-screen" aria-labelledby="industry-selection-title">
+      <ScreenBackButton
+        label="이전 화면으로 돌아가기"
+        onClick={() => industryBackMode === 'onboarding' ? (setOnboardingStep(2), setMode('onboarding')) : setMode('home')}
+      />
+      <section className="industry-selection-content">
+        <header className="industry-selection-heading">
+          <h1 id="industry-selection-title">어떤 업종의<br /><strong>브랜드인가요?</strong></h1>
+          <p>업종에 맞춰 로고의 분위기와 방향을 잡아드려요.</p>
+        </header>
+
+        <div className="industry-options" role="group" aria-label="업종 선택">
+          {industryOptions.map((option) => {
+            const selected = industrySelection === option.id
+            const Icon = option.icon
             return (
-              <button key={option.id} type="button" className={selected ? 'onboarding-option selected' : 'onboarding-option'} onClick={() => toggleOnboardingSelection(option.id)} aria-pressed={selected}>
-                {renderOnboardingIllustration(option.id)}
-                <span className="onboarding-option-copy">
-                  <small>{option.eyebrow}</small>
+              <button
+                key={option.id}
+                type="button"
+                className={selected ? 'industry-option selected' : 'industry-option'}
+                aria-pressed={selected}
+                onClick={() => setIndustrySelection((current) => current === option.id ? null : option.id)}
+              >
+                <span className="industry-option-icon" aria-hidden="true"><Icon size={21} strokeWidth={1.8} /></span>
+                <span className="industry-option-copy">
                   <strong>{option.title}</strong>
-                  <span>{option.description}</span>
+                  <small>{option.description}</small>
                 </span>
-                <span className="onboarding-radio" aria-hidden="true">{selected && <Check size={24} strokeWidth={2.5} />}</span>
-              </button>
-            )
-          }) : audienceOptions.map((option) => {
-            const selected = audienceSelection.includes(option.id)
-            return (
-              <button key={option.id} type="button" className={selected ? 'onboarding-option selected' : 'onboarding-option'} onClick={() => toggleAudienceSelection(option.id)} aria-pressed={selected}>
-                {renderAudienceIllustration(option.id)}
-                <span className="onboarding-option-copy">
-                  <small>{option.eyebrow}</small>
-                  <strong>{option.title}</strong>
-                  <span>{option.description}</span>
-                </span>
-                <span className="onboarding-radio" aria-hidden="true">{selected && <Check size={24} strokeWidth={2.5} />}</span>
+                <span className="industry-option-check" aria-hidden="true">{selected && <Check size={16} strokeWidth={2.4} />}</span>
               </button>
             )
           })}
         </div>
-        <button className="onboarding-next" type="button" onClick={advanceOnboarding}>
-          {onboardingStep === 1 ? '다음' : '시작하기'}
+
+        <button className="industry-next" type="button" onClick={advanceIndustrySelection} disabled={!industrySelection}>
+          다음 <ChevronRight aria-hidden="true" size={22} strokeWidth={1.8} />
         </button>
       </section>
     </main>
@@ -577,9 +833,10 @@ function CustomerApp() {
             )}
           </section>
 
-          <button className="brand-details-next" type="button" onClick={() => setMode('tone')}>
-            다음 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
+          <button className="brand-details-next" type="button" onClick={() => void saveProjectStep('brand-brief', 'tone')} disabled={projectSaving}>
+            {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
           </button>
+          {projectError && <p className="project-error" role="alert">{projectError}</p>}
         </section>
       </main>
     )
@@ -587,10 +844,7 @@ function CustomerApp() {
 
   const renderCompanyDetailsScreen = () => {
     const handleCompanyDetailsNext = () => {
-      setOnboardingCompleted(true)
-      window.localStorage.setItem('genmark-onboarding-completed', 'true')
-      setChoiceBackMode('onboarding')
-      setMode('choice')
+      void saveProjectStep('brand-brief', 'tone')
     }
 
     return (
@@ -646,9 +900,10 @@ function CustomerApp() {
           </div>
         </section>
 
-        <button className="brand-details-next" type="button" onClick={handleCompanyDetailsNext}>
-          다음 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
+        <button className="brand-details-next" type="button" onClick={handleCompanyDetailsNext} disabled={projectSaving}>
+          {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
         </button>
+        {projectError && <p className="project-error" role="alert">{projectError}</p>}
       </section>
       </main>
     )
@@ -754,9 +1009,10 @@ function CustomerApp() {
           )}
         </section>
 
-        <button className="tone-next" type="button" onClick={() => setMode('style')}>
-          다음 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
+        <button className="tone-next" type="button" onClick={() => void saveProjectStep('tone', 'style')} disabled={projectSaving}>
+          {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
         </button>
+        {projectError && <p className="project-error" role="alert">{projectError}</p>}
       </section>
     </main>
   )
@@ -810,9 +1066,10 @@ function CustomerApp() {
           })}
         </section>
 
-        <button className="logo-style-next" type="button" onClick={() => setMode('final')}>
-          다음 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
+        <button className="logo-style-next" type="button" onClick={() => void saveProjectStep('logo-style', 'final')} disabled={projectSaving}>
+          {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
         </button>
+        {projectError && <p className="project-error" role="alert">{projectError}</p>}
       </section>
     </main>
   )
@@ -854,11 +1111,15 @@ function CustomerApp() {
         <CopperplateHatch className="hero-screen-art" density={1.1} intensity={1.1} speed={0.42} interactive />
         <div className="hero-screen-overlay" />
         <div className="hero-screen-copy">
-          <p className="hero-screen-eyebrow"><Sparkle /> Beauty brand starter</p>
-          <h1 id="hero-screen-title">화장품 로고를 만들고<br /><strong>비슷한 상표가 있는지도</strong><br />확인하세요</h1>
-          <p className="hero-screen-description">브랜드 정보를 입력하면 AI 로고 후보를 만들고,<br />기존 화장품 상표 표본 이미지와 비교해 안전성도 확인해드려요.</p>
-          <button className="hero-screen-cta" type="button" onClick={() => setMode('home')}><Sparkle /> <span>서비스 시작하기</span></button>
-          <p className="hero-screen-note">◇ 디자인 경험이 없어도 괜찮아요&nbsp;&nbsp;·&nbsp;&nbsp;약 5분이면 시작할 수 있어요</p>
+          <p className="hero-screen-eyebrow hero-copy-reveal hero-copy-reveal-eyebrow"><Sparkle /> Brand starter</p>
+          <h1 id="hero-screen-title">
+            <span className="hero-title-line hero-title-line-1">로고를 만들고</span>
+            <span className="hero-title-line hero-title-line-2"><strong>비슷한 상표가 있는지도</strong></span>
+            <span className="hero-title-line hero-title-line-3">확인하세요</span>
+          </h1>
+          <p className="hero-screen-description hero-copy-reveal hero-copy-reveal-description">브랜드 정보를 입력하면 AI 로고 후보를 만들고,<br />기존 상표 표본 이미지와 비교해 안전성도 확인해드려요.</p>
+          <button className="hero-screen-cta hero-copy-reveal hero-copy-reveal-cta" type="button" onClick={() => setMode('home')}><Sparkle /> <span>서비스 시작하기</span></button>
+          <p className="hero-screen-note hero-copy-reveal hero-copy-reveal-note">◇ 디자인 경험이 없어도 괜찮아요&nbsp;&nbsp;·&nbsp;&nbsp;약 5분이면 시작할 수 있어요</p>
         </div>
       </section>
     </main>
@@ -876,13 +1137,17 @@ function CustomerApp() {
         </header>
 
         <div className="gallery-hero-copy">
-          <p className="gallery-hero-eyebrow"><Sparkles aria-hidden="true" size={16} strokeWidth={1.8} /> Beauty brand starter</p>
-          <h1 id="hero-screen-title">화장품 로고를 만들고<br /><strong>비슷한 상표가 있는지도</strong><br />확인하세요</h1>
-          <p className="gallery-hero-description">브랜드 정보를 입력하면 AI 로고 후보를 만들고,<br />기존 화장품 상표 표본 이미지와 비교해 안전성도 확인해드려요.</p>
-          <div className="gallery-hero-actions">
+          <p className="gallery-hero-eyebrow hero-copy-reveal hero-copy-reveal-eyebrow"><Sparkles aria-hidden="true" size={16} strokeWidth={1.8} /> Brand starter</p>
+          <h1 id="hero-screen-title">
+            <span className="hero-title-line hero-title-line-1">로고를 만들고</span>
+            <span className="hero-title-line hero-title-line-2"><strong>비슷한 상표가 있는지도</strong></span>
+            <span className="hero-title-line hero-title-line-3">확인하세요</span>
+          </h1>
+          <p className="gallery-hero-description hero-copy-reveal hero-copy-reveal-description">브랜드 정보를 입력하면 AI 로고 후보를 만들고,<br />기존 상표 표본 이미지와 비교해 안전성도 확인해드려요.</p>
+          <div className="gallery-hero-actions hero-copy-reveal hero-copy-reveal-cta">
             <button className="gallery-hero-cta" type="button" onClick={() => setMode('home')}><span>서비스 시작하기</span><Video aria-hidden="true" size={15} strokeWidth={2} /></button>
           </div>
-          <p className="gallery-hero-note">◇ 디자인 경험이 없어도 괜찮아요&nbsp;&nbsp;·&nbsp;&nbsp;약 5분이면 시작할 수 있어요</p>
+          <p className="gallery-hero-note hero-copy-reveal hero-copy-reveal-note">◇ 디자인 경험이 없어도 괜찮아요&nbsp;&nbsp;·&nbsp;&nbsp;약 5분이면 시작할 수 있어요</p>
         </div>
       </AnimatedGallery>
     </main>
@@ -894,37 +1159,76 @@ function CustomerApp() {
       setMode(kind === 'ci' ? 'tone' : 'brand-details')
     }
 
+    const choiceDetails = {
+      ci: {
+        label: '회사 · 기업 로고',
+        title: 'CI란?',
+        summary: '회사나 매장 전체를 대표하는 로고예요.',
+        recommendations: ['회사명을 로고로 만들고 싶어요', '여러 제품을 하나의 회사 브랜드로 운영할 예정이에요', '명함이나 회사 소개 자료에도 사용할 예정이에요'],
+        result: '기업 로고 · 대표 컬러 · 추천 글씨체 · 명함 시안',
+      },
+      bi: {
+        label: '제품 · 브랜드 로고',
+        title: 'BI란?',
+        summary: '특정 화장품 브랜드나 제품 라인을 대표하는 로고예요.',
+        recommendations: ['새로운 화장품 브랜드를 출시하려고 해요', '기존 회사에서 새로운 제품 라인을 만들고 있어요', '스마트스토어 제품 썸네일에 사용할 로고가 필요해요'],
+        result: '제품 브랜드 로고 · 대표 컬러 · 추천 글씨체 · 제품 썸네일',
+      },
+    } as const
+
+    const activeChoiceDetails = choiceInfoModal ? choiceDetails[choiceInfoModal] : null
+
     return (
       <main className="brand-choice-screen">
-        <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => choiceBackMode === 'onboarding' ? (setOnboardingStep(2), setMode('onboarding')) : setMode('home')} />
+        <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => choiceBackMode === 'onboarding' ? (setOnboardingStep(2), setMode('onboarding')) : choiceBackMode === 'industry' ? setMode('industry') : setMode('home')} />
         <section className="brand-choice-content" aria-label="CI와 BI 로고 선택">
           <div className="brand-choice-list">
             <article className="brand-choice-card ci-card">
               <div className="brand-choice-art-wrap"><img src="/ci-white.svg" alt="회사와 기업을 대표하는 CI 로고 예시" /></div>
               <div className="brand-choice-copy">
-                <span className="brand-choice-label">회사 · 기업 로고</span>
+                <div className="brand-choice-heading">
+                  <span className="brand-choice-label">회사 · 기업 로고</span>
+                  <button className="brand-choice-info" type="button" aria-label="CI 설명 보기" onClick={() => setChoiceInfoModal('ci')}><Info aria-hidden="true" size={19} strokeWidth={2} /></button>
+                </div>
                 <h2>CI 만들기</h2>
                 <p>회사나 매장 전체를<br />대표하는 로고예요.</p>
-                <div className="brand-choice-recommend"><strong>✦ 이런 경우 추천</strong><ul><li>회사명을 로고로 만들고 싶어요</li><li>여러 제품을 하나의 회사 브랜드로 운영할 예정이에요</li><li>명함이나 회사 소개 자료에도 사용할 예정이에요</li></ul></div>
-                <div className="brand-choice-result"><strong><span className="choice-gift" aria-hidden="true" />결과물</strong><span>기업 로고 · 대표 컬러 · 추천 글씨체 · 명함 시안</span></div>
                 <button className="brand-choice-cta ci-cta" type="button" onClick={() => chooseBrandKind('ci')}>회사 로고 만들기 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
               </div>
             </article>
             <article className="brand-choice-card bi-card">
+              <div className="brand-choice-art-wrap"><img src="/bi-white.svg" alt="제품과 화장품 브랜드를 대표하는 BI 로고 예시" /></div>
               <div className="brand-choice-copy">
-                <span className="brand-choice-label">제품 · 브랜드 로고</span>
+                <div className="brand-choice-heading">
+                  <span className="brand-choice-label">제품 · 브랜드 로고</span>
+                  <button className="brand-choice-info" type="button" aria-label="BI 설명 보기" onClick={() => setChoiceInfoModal('bi')}><Info aria-hidden="true" size={19} strokeWidth={2} /></button>
+                </div>
                 <h2>BI 만들기</h2>
                 <p>특정 화장품 브랜드나 제품 라인을<br />대표하는 로고예요.</p>
-                <div className="brand-choice-recommend"><strong>✦ 이런 경우 추천</strong><ul><li>새로운 화장품 브랜드를 출시하려고 해요</li><li>기존 회사에서 새로운 제품 라인을 만들고 있어요</li><li>스마트스토어 제품 썸네일에 사용할 로고가 필요해요</li></ul></div>
-                <div className="brand-choice-result"><strong><span className="choice-gift" aria-hidden="true" />결과물</strong><span>제품 브랜드 로고 · 대표 컬러 · 추천 글씨체 · 제품 썸네일</span></div>
                 <button className="brand-choice-cta bi-cta" type="button" onClick={() => chooseBrandKind('bi')}>제품 · 브랜드 로고 만들기 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
               </div>
-              <div className="brand-choice-art-wrap"><img src="/bi-white.svg" alt="제품과 화장품 브랜드를 대표하는 BI 로고 예시" /></div>
             </article>
           </div>
         </section>
-        <button className="brand-choice-edit" type="button" onClick={() => setMode('onboarding')}>편집</button>
-        <button className="brand-choice-share" type="button" aria-label="선택 화면 공유"><span className="share-glyph" aria-hidden="true" /></button>
+        {activeChoiceDetails && choiceInfoModal && (
+          <div className={`brand-choice-info-backdrop ${choiceInfoModal === 'bi' ? 'is-bi' : 'is-ci'}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setChoiceInfoModal(null) }}>
+            <section className="brand-choice-info-modal" role="dialog" aria-modal="true" aria-labelledby="brand-choice-info-title">
+              <div className="brand-choice-info-header">
+                <span className="brand-choice-label">{activeChoiceDetails.label}</span>
+                <button className="brand-choice-info-close" type="button" aria-label="설명 닫기" onClick={() => setChoiceInfoModal(null)}><X aria-hidden="true" size={21} strokeWidth={2} /></button>
+              </div>
+              <h2 id="brand-choice-info-title">{activeChoiceDetails.title}</h2>
+              <p className="brand-choice-info-summary">{activeChoiceDetails.summary}</p>
+              <div className="brand-choice-info-section">
+                <h3><Sparkles aria-hidden="true" size={17} strokeWidth={2} /> 이런 경우 추천</h3>
+                <ul>{activeChoiceDetails.recommendations.map((recommendation) => <li key={recommendation}>{recommendation}</li>)}</ul>
+              </div>
+              <div className="brand-choice-info-section result-section">
+                <h3><Gift aria-hidden="true" size={18} strokeWidth={2} />결과물</h3>
+                <p>{activeChoiceDetails.result}</p>
+              </div>
+            </section>
+          </div>
+        )}
       </main>
     )
   }
@@ -1026,18 +1330,12 @@ function CustomerApp() {
             </div>
           </section>
 
-          <button className="final-generate-button" type="button" onClick={() => {
-            if (canAnalyzeTrademark) {
-              openTrademarkSelection('generation')
-            } else {
-              setTrademarkAnalysisSkipped(true)
-              setMode('loading')
-            }
-          }}>
+          <button className="final-generate-button" type="button" onClick={() => void startLogoGeneration()} disabled={generationLoading}>
             <span className="final-sparkle-cluster" aria-hidden="true"><i>✧</i><i>✧</i><i>✧</i></span>
             로고 생성하기
             <ChevronRight className="final-generate-arrow" aria-hidden="true" size={28} strokeWidth={1.8} />
           </button>
+          {generationError && <p className="generation-error" role="alert">{generationError}</p>}
           <p className="final-footnote"><Info aria-hidden="true" size={18} strokeWidth={1.8} /> 생성된 후보는 나중에 색상과 글씨체를 수정할 수 있어요.</p>
         </section>
       </main>
@@ -1067,7 +1365,8 @@ function CustomerApp() {
               <LucideSparkle className="logo-loading-sparkle sparkle-two" aria-hidden="true" size={40} strokeWidth={1.8} />
             </div>
           </div>
-          <div className="logo-loading-status">로고 생성 중...</div>
+          <div className="logo-loading-status">{generationError ? '로고 생성에 문제가 발생했어요' : '로고 생성 중...'}</div>
+          {generationError && <div className="logo-loading-error" role="alert"><p>{generationError}</p><button type="button" onClick={() => void startLogoGeneration()}>다시 시도하기</button></div>}
 
           <section className="logo-loading-steps" aria-label="로고 생성 단계">
             {loadingSteps.map((step, index) => (
@@ -1219,7 +1518,7 @@ function CustomerApp() {
           </section>
 
           <div className="trademark-selection-actions">
-            <button className="trademark-check-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(false); setTrademarkAnalysisCompleted(false); setMode('loading') }}>
+            <button className="trademark-check-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(false); setTrademarkAnalysisCompleted(false); void startTrademarkAnalysis() }}>
               <span className="trademark-check-search" aria-hidden="true" />
               <span>비슷한 상표 이미지 확인하기</span>
               <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
@@ -1237,11 +1536,7 @@ function CustomerApp() {
   }
 
   const renderTrademarkResultScreen = () => {
-    const matches = [
-      { rank: 1, name: 'LUNÉA Beauty', category: '스킨케어 · 워드마크', score: 27, style: 'trademark-match-lunea', note: '원형 배지와 잎사귀 형태가 일부 유사해요.' },
-      { rank: 2, name: 'MORÉA Skin', category: '클린뷰티 · 심볼마크', score: 19, style: 'trademark-match-morea', note: '중앙 심볼 배치가 부분적으로 유사해요.' },
-      { rank: 3, name: 'LUVIA Cosmetics', category: '코스메틱 · 콤비네이션', score: 14, style: 'trademark-match-luvia', note: '부드러운 곡선의 인상이 일부 겹쳐요.' },
-    ]
+    const matches = trademarkMatches
     const topMatch = matches[0]
 
     return (
@@ -1261,20 +1556,20 @@ function CustomerApp() {
             <div className="trademark-result-summary-icon" aria-hidden="true"><span /><i /><b /></div>
             <div className="trademark-result-summary-copy">
               <span>가장 유사한 상표</span>
-              <strong>{topMatch.name}</strong>
-              <p>{topMatch.category}</p>
+              <strong>{topMatch?.name ?? '분석 결과 없음'}</strong>
+              <p>{topMatch?.category ?? '비슷한 상표가 없어요.'}</p>
             </div>
             <div className="trademark-result-score">
-              <strong>{topMatch.score}%</strong>
+              <strong>{trademarkSimilarity ?? topMatch?.similarity ?? 0}%</strong>
               <span>이미지 유사도</span>
             </div>
           </section>
 
-          <section className="trademark-risk-card safe" aria-label="유사도 안전 범주">
+          <section className={`trademark-risk-card ${trademarkRiskLabel === '안전' ? 'safe' : 'caution'}`} aria-label="유사도 위험 범주">
             <div className="trademark-risk-mark" aria-hidden="true"><Check size={24} strokeWidth={2.5} /></div>
             <div>
-              <div className="trademark-risk-heading"><strong>안전</strong><span>낮은 유사도</span></div>
-              <p>현재 결과에서는 눈에 띄는 시각적 유사성이 낮아요. 그래도 실제 상표 등록 전에는 전문가의 확인을 권장해요.</p>
+              <div className="trademark-risk-heading"><strong>{trademarkRiskLabel || '분석 완료'}</strong><span>{trademarkSimilarity ?? 0}% 유사도</span></div>
+              <p>{trademarkRiskDescription || '실제 상표 등록 전에는 전문가의 확인을 권장해요.'}</p>
             </div>
           </section>
 
@@ -1287,19 +1582,19 @@ function CustomerApp() {
               {matches.map((match) => (
                 <article className="trademark-match-row" key={match.name}>
                   <span className="trademark-match-rank">{match.rank}</span>
-                  <div className={`trademark-match-visual ${match.style}`} aria-hidden="true"><i /><b /><em /></div>
+                  <div className="trademark-match-visual trademark-match-placeholder" aria-hidden="true"><i /><b /><em /></div>
                   <div className="trademark-match-copy">
                     <strong>{match.name}</strong>
                     <span>{match.category}</span>
-                    <p>{match.note}</p>
+                    <p>출원번호 {match.applicationNumber}</p>
                   </div>
-                  <strong className="trademark-match-score">{match.score}%</strong>
+                  <strong className="trademark-match-score">{match.similarity}%</strong>
                 </article>
               ))}
             </div>
           </section>
 
-          <p className="trademark-result-disclaimer"><Info aria-hidden="true" size={18} strokeWidth={1.8} /><span>본 결과는 로고 이미지의 시각적 유사성을 보여주는 참고 자료예요.<br />상표 등록 가능 여부나 법적 침해 여부를 판단하지 않아요.</span></p>
+          <p className="trademark-result-disclaimer"><Info aria-hidden="true" size={18} strokeWidth={1.8} /><span>{trademarkDisclaimer || '본 결과는 로고 이미지의 시각적 유사성을 보여주는 참고 자료예요. 상표 등록 가능 여부나 법적 침해 여부를 판단하지 않아요.'}</span></p>
 
           <div className="trademark-result-actions">
             <button className="trademark-result-primary" type="button" onClick={() => setMode('result')}>로고 결과로 돌아가기 <ChevronRight aria-hidden="true" size={22} strokeWidth={1.8} /></button>
@@ -1310,13 +1605,27 @@ function CustomerApp() {
   }
 
   const renderLogoResultScreen = () => {
-    const candidates = [
-      { name: 'LUVÉRA', subtitle: 'COSMETICS', style: 'lavender', direction: '미니멀 · 내추럴' },
-      { name: 'LUNÉE', subtitle: 'SKINCARE', style: 'rose', direction: '우아한 · 감성적' },
-      { name: 'VERA', subtitle: 'BOTANICAL BEAUTY', style: 'sage', direction: '깨끗한 · 프리미엄' },
-      { name: 'NOVA', subtitle: 'BEAUTY LAB', style: 'pearl', direction: '현대적 · 세련된' },
+    const candidateProfiles = [
+      { name: '후보 1', subtitle: 'GENMARK AI', style: 'lavender', direction: '미니멀 · 내추럴' },
+      { name: '후보 2', subtitle: 'GENMARK AI', style: 'rose', direction: '우아한 · 감성적' },
+      { name: '후보 3', subtitle: 'GENMARK AI', style: 'sage', direction: '깨끗한 · 프리미엄' },
+      { name: '후보 4', subtitle: 'GENMARK AI', style: 'pearl', direction: '현대적 · 세련된' },
     ]
-    const candidate = candidates[resultCandidate]
+    const candidates = logoCandidates.map((candidate, index) => ({ ...candidate, ...candidateProfiles[index] }))
+    const candidate = candidates[resultCandidate] ?? candidates[0]
+
+    if (!candidate) {
+      return (
+        <main className="logo-result-screen" aria-labelledby="logo-result-title">
+          <section className="logo-result-content">
+            <h1 id="logo-result-title">로고 후보를 아직 불러오지 못했어요</h1>
+            <p className="logo-result-lead">로고 생성이 완료되면 후보 4개가 이곳에 표시됩니다.</p>
+            {generationError && <p className="generation-error" role="alert">{generationError}</p>}
+            <button className="final-generate-button" type="button" onClick={() => void startLogoGeneration()}>다시 확인하기</button>
+          </section>
+        </main>
+      )
+    }
 
     return (
       <main className="logo-result-screen" aria-labelledby="logo-result-title">
@@ -1335,19 +1644,19 @@ function CustomerApp() {
             <button className={resultLiked ? 'logo-candidate-action like liked' : 'logo-candidate-action like'} type="button" aria-label={resultLiked ? '찜 취소' : '찜'} aria-pressed={resultLiked} onClick={() => setResultLiked((current) => !current)}>
               <Heart size={22} strokeWidth={1.9} fill={resultLiked ? 'currentColor' : 'none'} />
             </button>
-            <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => setResultCandidate((current) => (current + candidates.length - 1) % candidates.length)}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>
+            <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => { const next = (resultCandidate + candidates.length - 1) % candidates.length; void selectLogoCandidate(candidates[next], next) }}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>
             <div className={`logo-candidate-art ${candidate.style}`}>
               <div className="candidate-emblem" aria-hidden="true"><span /><i /><b /></div>
               <strong>{candidate.name}</strong>
               <small>{candidate.subtitle}</small>
             </div>
-            <button className="logo-candidate-arrow next" type="button" aria-label="다음 후보" onClick={() => setResultCandidate((current) => (current + 1) % candidates.length)}><ChevronRight aria-hidden="true" size={26} strokeWidth={1.8} /></button>
+            <button className="logo-candidate-arrow next" type="button" aria-label="다음 후보" onClick={() => { const next = (resultCandidate + 1) % candidates.length; void selectLogoCandidate(candidates[next], next) }}><ChevronRight aria-hidden="true" size={26} strokeWidth={1.8} /></button>
             <button className="logo-candidate-action download" type="button" aria-label="로고 파일 다운로드" onClick={() => requestLogoDownload(candidate)}>
               <Download size={21} strokeWidth={1.9} />
             </button>
           </section>
           <div className="logo-result-dots" aria-label="후보 선택">
-            {candidates.map((item, index) => <button key={item.name} className={index === resultCandidate ? 'active' : ''} type="button" aria-label={`후보 ${index + 1}`} aria-pressed={index === resultCandidate} onClick={() => setResultCandidate(index)} />)}
+            {candidates.map((item, index) => <button key={item.id} className={index === resultCandidate ? 'active' : ''} type="button" aria-label={`후보 ${index + 1}`} aria-pressed={index === resultCandidate} onClick={() => void selectLogoCandidate(item, index)} />)}
           </div>
 
           <section className="logo-result-details" aria-label="로고 디자인 상세">
@@ -1360,7 +1669,7 @@ function CustomerApp() {
           <section className={trademarkAnalysisCompleted ? 'logo-result-trademark analyzed' : 'logo-result-trademark'} aria-label="상표 이미지 유사도">
             <span className="trademark-result-icon" aria-hidden="true"><Search size={44} strokeWidth={1.8} /></span>
             {trademarkAnalysisCompleted ? (
-              <div><strong>상표 이미지 유사도 분석 완료</strong><p>가장 높은 유사도는 27%로, 현재 <b>안전</b> 범위예요.</p><button type="button" onClick={() => setMode('trademark-result')}>유사도 분석 결과 보기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+              <div><strong>상표 이미지 유사도 분석 완료</strong><p>가장 높은 유사도는 {trademarkSimilarity ?? 0}%로, 현재 <b>{trademarkRiskLabel || '분석 완료'}</b> 범위예요.</p><button type="button" onClick={() => setMode('trademark-result')}>유사도 분석 결과 보기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
             ) : !canAnalyzeTrademark ? (
               <div><strong>상표 이미지 유사도</strong><p>선택한 로고 스타일은 이미지 유사도 분석을 지원하지 않아요.</p></div>
             ) : trademarkAnalysisSkipped ? (
@@ -1375,7 +1684,7 @@ function CustomerApp() {
           </div>
 
           <div className="logo-result-utility-grid">
-            <button className="utility-primary" type="button" onClick={() => setResultCandidate((current) => (current + 1) % candidates.length)}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />조건을 바꿔<br />다시 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+            <button className="utility-primary" type="button" onClick={() => void startLogoGeneration()}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />조건을 바꿔<br />다시 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
             <button className="utility-secondary" type="button"><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />제품 썸네일 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
           </div>
         </section>
@@ -1392,7 +1701,7 @@ function CustomerApp() {
         <header className="logo-editor-header">
           <button className="logo-editor-back" type="button" aria-label="결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
           <div className="logo-editor-brand"><Sparkles aria-hidden="true" size={22} strokeWidth={1.6} /><strong>GenMark AI</strong></div>
-          <button className="logo-editor-save" type="button" onClick={() => setEditorSaved(true)}>{editorSaved ? '저장됨' : '저장'}<ChevronDown aria-hidden="true" size={16} strokeWidth={1.8} /></button>
+          <button className="logo-editor-save" type="button" onClick={() => void saveEditorChanges()}>{editorSaved ? '저장됨' : '저장'}<ChevronDown aria-hidden="true" size={16} strokeWidth={1.8} /></button>
           <button className="logo-editor-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         </header>
 
@@ -1459,7 +1768,7 @@ function CustomerApp() {
           </section>
 
           <div className="logo-editor-actions">
-            <button className="logo-editor-apply" type="button" onClick={() => { setEditorSaved(true); setMode('result') }}>수정 적용하기</button>
+            <button className="logo-editor-apply" type="button" onClick={() => void saveEditorChanges().then(() => setMode('result'))}>수정 적용하기</button>
             {canAnalyzeTrademark && <button className="logo-editor-trademark" type="button" onClick={() => openTrademarkSelection('result')}>상표 이미지 유사도 다시 확인하기</button>}
           </div>
           <p className="logo-editor-note">· 로고의 형태나 배치를 변경하면 상표 이미지 유사도에 영향을 줄 수 있어요.</p>
@@ -1619,7 +1928,7 @@ function CustomerApp() {
           <button className="login-back" type="button" onClick={() => setMode(loginReturnMode)}>‹ <span>{loginReturnMode === 'hero' ? '랜딩' : '홈'}</span></button>
           <span className="login-header-state">안전하게 저장하기</span>
         </header>
-      ) : mode === 'onboarding' || mode === 'brand-details' || mode === 'company-details' || mode === 'hero' || mode === 'choice' || mode === 'tone' || mode === 'style' || mode === 'final' || mode === 'loading' || mode === 'trademark-loading' || mode === 'trademark-selection' || mode === 'trademark-result' || mode === 'result' || mode === 'edit' || mode === 'mypage' || mode === 'survey' ? null : (
+      ) : mode === 'onboarding' || mode === 'industry' || mode === 'brand-details' || mode === 'company-details' || mode === 'hero' || mode === 'choice' || mode === 'tone' || mode === 'style' || mode === 'final' || mode === 'loading' || mode === 'trademark-loading' || mode === 'trademark-selection' || mode === 'trademark-result' || mode === 'result' || mode === 'edit' || mode === 'mypage' || mode === 'survey' ? null : (
         <header className="main-header">
           <a className="main-brand" href="#home" aria-label="GenMark AI 홈" onClick={() => setMode('home')}>
             <BrandLogo />
@@ -1631,7 +1940,7 @@ function CustomerApp() {
         </header>
       )}
 
-      {mode === 'login' ? renderLoginScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'company-details' ? renderCompanyDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'trademark-result' ? renderTrademarkResultScreen() : mode === 'result' ? renderLogoResultScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'mypage' ? renderMypageScreen() : mode === 'survey' ? renderSurveyScreen() : mode === 'hero' ? (
+      {mode === 'login' ? renderLoginScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'industry' ? renderIndustrySelectionScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'company-details' ? renderCompanyDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'trademark-result' ? renderTrademarkResultScreen() : mode === 'result' ? renderLogoResultScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'mypage' ? renderMypageScreen() : mode === 'survey' ? renderSurveyScreen() : mode === 'hero' ? (
         renderAnimatedGalleryHeroScreen()
       ) : mode === 'home' ? (
         <main id="home" className="main-home">
