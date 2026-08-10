@@ -12,7 +12,6 @@ from app.services.similarity_service import SimilarityService
 
 router = APIRouter()
 
-
 @router.post("/search", response_model=SimilarityResponse)
 def search(req: SimilarityRequest):
     # 데이터가 없으면 가짜 성공(200 + 빈 matches)을 내지 않고 503으로 끊는다.

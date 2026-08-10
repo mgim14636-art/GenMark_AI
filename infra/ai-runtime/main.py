@@ -1,12 +1,16 @@
 """컨테이너 런타임 진입점.
 
 Dockerfile.ai-similarity가 이 파일을 app/main.py 자리에 덮어쓴다.
-유사도 검색만 노출하며, /health는 app.core.readiness의 실제 준비 상태를 따른다.
+따라서 여기에 등록하지 않은 라우터는 컨테이너에서 404가 된다.
+로컬 실행(app/main.py)과 노출 라우트를 반드시 일치시킬 것.
+
+/health는 app.core.readiness의 실제 준비 상태를 따른다.
 """
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.api.routes.generation import router as generation_router
 from app.api.routes.health import router as health_router
 from app.api.routes.similarity import router as similarity_router
 from app.core.config import settings
@@ -17,6 +21,7 @@ from app.core.readiness import get_state
 app = FastAPI(title=settings.app_name)
 app.include_router(health_router, tags=["health"])
 app.include_router(similarity_router, prefix="/api/v1/similarity", tags=["similarity"])
+app.include_router(generation_router, prefix="/api/v1/generation", tags=["generation"])
 
 
 @app.on_event("startup")
