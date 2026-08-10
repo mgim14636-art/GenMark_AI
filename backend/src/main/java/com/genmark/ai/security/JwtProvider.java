@@ -36,12 +36,11 @@ public class JwtProvider {
         return accessTokenExpirationSeconds;
     }
 
-    public String generateAccessToken(Long memberId, String email, String role) {
+    public String generateAccessToken(Long memberId, String email) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(String.valueOf(memberId))
                 .claim("email", email)
-                .claim("role", role)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(accessTokenExpirationSeconds)))
                 .signWith(signingKey, Jwts.SIG.HS256)

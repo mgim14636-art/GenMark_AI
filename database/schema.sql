@@ -5,9 +5,7 @@ USE `genmark_db`;
 CREATE TABLE IF NOT EXISTS members (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(100) NOT NULL UNIQUE,
-    password VARCHAR(255) NULL,
     name VARCHAR(50) NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'ROLE_USER',
     provider VARCHAR(20) NOT NULL DEFAULT 'local',
     provider_id VARCHAR(100) NULL,
     refresh_token_hash VARCHAR(128) NULL,

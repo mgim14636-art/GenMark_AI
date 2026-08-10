@@ -73,7 +73,7 @@ public class AuthService {
             member = createMember(provider, info);
         }
 
-        String accessToken = jwtProvider.generateAccessToken(member.getId(), member.getEmail(), member.getRole());
+        String accessToken = jwtProvider.generateAccessToken(member.getId(), member.getEmail());
         String refreshToken = issueRefreshToken(member);
 
         // Phase 1 범위에는 프로젝트 상태(status)가 없어 재개할 프로젝트를 판별할 수 없다.
@@ -89,7 +89,7 @@ public class AuthService {
     @Transactional
     public RefreshResult refresh(String rawRefreshToken) {
         Member member = findByValidRefreshToken(rawRefreshToken);
-        String accessToken = jwtProvider.generateAccessToken(member.getId(), member.getEmail(), member.getRole());
+        String accessToken = jwtProvider.generateAccessToken(member.getId(), member.getEmail());
         String newRefreshToken = issueRefreshToken(member);
         return new RefreshResult(accessToken, newRefreshToken, jwtProvider.getAccessTokenExpirationSeconds());
     }
@@ -120,9 +120,7 @@ public class AuthService {
 
         Member member = Member.builder()
                 .email(email)
-                .password(null)
                 .name(name)
-                .role("ROLE_USER")
                 .provider(provider)
                 .providerId(info.providerId())
                 .build();
