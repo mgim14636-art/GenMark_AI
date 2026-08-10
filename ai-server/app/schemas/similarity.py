@@ -1,4 +1,4 @@
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,11 @@ class MatchedTrademark(BaseModel):
     category: str = Field(min_length=1)
     similarity: int = Field(ge=0, le=100)
     imagePath: str = Field(min_length=1)
+
+    # 왜 닮았는지에 대한 한 줄 설명(Gemini). 부가 정보이므로 없을 수 있다.
+    # 외부 API 실패·지연·콘텐츠 필터링 시 생략되며, 그래도 응답은 정상이다.
+    # 소비 측은 note가 없을 수 있음을 전제해야 한다.
+    note: Optional[str] = None
 
 
 class SimilarityResponse(BaseModel):

@@ -39,13 +39,38 @@ def collect_targets() -> list[Path]:
     return found
 
 
+# 리포트 라벨에 한글이 들어가므로 PIL 기본 비트맵 폰트로는 글자가 깨진다.
+# 로고 합성용으로 이미 들어와 있는 한글 폰트를 재사용한다.
+_FONT_CANDIDATES = (
+    "app/fonts/modern_sans/regular/Pretendard-Regular.ttf",
+    "app/fonts/modern_sans/bold/NanumGothicBold.ttf",
+    "app/fonts/elegant_serif/regular/NanumMyeongjo-Regular.ttf",
+)
+
+
+def load_font(size: int = 18):
+    from PIL import ImageFont
+
+    for rel in _FONT_CANDIDATES:
+        path = ROOT / rel
+        if path.exists():
+            try:
+                return ImageFont.truetype(str(path), size)
+            except OSError:
+                continue
+    return ImageFont.load_default()
+
+
 def build_report(query_path: Path, result: dict, trademark_root: Path) -> Path | None:
     """쿼리 이미지와 검출된 상표를 가로로 붙여 한 장으로 만든다."""
     from PIL import Image, ImageDraw
 
     tile = 320
     pad = 12
-    label_h = 46
+    label_h = 84
+    f_big = load_font(20)
+    f_mid = load_font(16)
+    f_small = load_font(14)
 
     cells = [("쿼리 (생성 로고)", query_path, None)]
     for m in result["matches"]:
@@ -71,13 +96,17 @@ def build_report(query_path: Path, result: dict, trademark_root: Path) -> Path |
             im.thumbnail((tile, tile))
             canvas.paste(im, (x + (tile - im.width) // 2, pad + (tile - im.height) // 2))
         except Exception:
-            draw.text((x + 8, pad + tile // 2), "(이미지 없음)", fill="red")
+            draw.text((x + 8, pad + tile // 2), "(이미지 없음)", fill="red", font=f_mid)
 
-        draw.text((x + 4, pad + tile + 6), label, fill="black")
+        draw.text((x + 4, pad + tile + 8), label, fill="black", font=f_big)
         if m:
-            name = m["name"][:18]
-            draw.text((x + 4, pad + tile + 24), name, fill="#444")
-            draw.text((x + 4, pad + tile + 40), m["category"][:22], fill="#888")
+            draw.text((x + 4, pad + tile + 34), m["name"][:18], fill="#444", font=f_mid)
+            draw.text((x + 4, pad + tile + 54), m["category"][:22], fill="#888", font=f_small)
+            note = m.get("note")
+            if note:
+                # 20자에서 줄바꿈 — 타일 폭을 넘지 않게
+                for li, chunk in enumerate([note[i:i + 20] for i in range(0, len(note), 20)][:2]):
+                    draw.text((x + 4, pad + tile + 74 + li * 18), chunk, fill="#1a6", font=f_small)
 
     out = OUT_DIR / f"similarity_report_{query_path.stem}.png"
     canvas.save(out)
@@ -136,6 +165,8 @@ def main() -> int:
                 f"{m['applicationNumber']}  {m['name'][:16]:<16}  {m['category']}",
                 flush=True,
             )
+            if m.get("note"):
+                print(f"         └ {m['note']}", flush=True)
 
         try:
             report = build_report(path, result, trademark_root)

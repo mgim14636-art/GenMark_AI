@@ -92,7 +92,7 @@ def stub_search(monkeypatch):
 def test_score_is_clamped_to_0_100():
     """입력은 코사인 유사도. 앵커 범위 밖은 clamp 된다."""
     assert _to_score(-1.0) == 0         # 하한 밖
-    assert _to_score(0.50) == 0         # 첫 앵커
+    assert _to_score(0.42) == 0         # 첫 앵커
     assert _to_score(1.0) == 100        # 상한
     assert _to_score(2.0) == 100        # 이론상 불가하지만 방어
     assert 0 <= _to_score(0.67) <= 100
@@ -381,3 +381,72 @@ def test_health_never_reports_plain_ok(monkeypatch):
     state = Readiness(ready=False, reason="x")
     monkeypatch.setattr("app.api.routes.health.get_state", lambda *a, **k: state)
     assert client.get("/health").json()["status"] != "ok"
+
+
+# --------------------------------------------------------------------------
+# note (Gemini 설명) — 부가 정보이므로 실패해도 응답은 정상이어야 한다
+# --------------------------------------------------------------------------
+def test_note_is_attached_when_available(ready, stub_search, monkeypatch):
+    stub_search([0.95, 0.85, 0.75])
+    monkeypatch.setattr("app.services.note_service.is_enabled", lambda: True)
+    monkeypatch.setattr(
+        "app.services.note_service.generate_notes",
+        lambda query, paths: ["방패 외곽선이 닮았어요", "곡선 흐름이 비슷해요", None],
+    )
+    body = client.post(
+        "/api/v1/similarity/search",
+        json={"imageBase64": png_base64(), "topK": 3},
+    ).json()
+
+    assert body["matches"][0]["note"] == "방패 외곽선이 닮았어요"
+    assert body["matches"][1]["note"] == "곡선 흐름이 비슷해요"
+    assert body["matches"][2]["note"] is None   # 일부만 생성돼도 정상
+
+
+def test_note_failure_does_not_break_response(ready, stub_search, monkeypatch):
+    """Gemini가 죽어도 유사도 결과는 그대로 나가야 한다."""
+    stub_search([0.95, 0.85, 0.75])
+    monkeypatch.setattr("app.services.note_service.is_enabled", lambda: True)
+    monkeypatch.setattr(
+        "app.services.note_service.generate_notes",
+        lambda query, paths: (_ for _ in ()).throw(RuntimeError("gemini down")),
+    )
+    res = client.post(
+        "/api/v1/similarity/search",
+        json={"imageBase64": png_base64(), "topK": 3},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body["matches"]) == 3
+    assert body["maxSimilarity"] == body["matches"][0]["similarity"]
+    assert all(m["note"] is None for m in body["matches"])
+
+
+def test_note_omitted_when_api_key_missing(ready, stub_search, monkeypatch):
+    stub_search([0.95, 0.85, 0.75])
+    monkeypatch.setattr("app.services.note_service.is_enabled", lambda: False)
+    body = client.post(
+        "/api/v1/similarity/search",
+        json={"imageBase64": png_base64(), "topK": 3},
+    ).json()
+    assert all(m["note"] is None for m in body["matches"])
+
+
+def test_note_content_filter_drops_legal_judgement():
+    """LLM이 법적 판단을 뱉으면 서버가 버려야 한다."""
+    from app.services.note_service import _sanitize
+
+    assert _sanitize("방패 형태와 중앙 분할이 닮았어요") == "방패 형태와 중앙 분할이 닮았어요"
+    assert _sanitize("상표권 침해 소지가 있어 보여요") is None
+    assert _sanitize("이대로는 등록 가능성이 낮아요") is None
+    assert _sanitize("거절될 수 있어요") is None
+    assert _sanitize("") is None
+    assert _sanitize(None) is None
+    assert _sanitize(123) is None
+
+
+def test_note_is_truncated():
+    from app.services.note_service import MAX_NOTE_CHARS, _sanitize
+
+    long_note = "곡" * 200
+    assert len(_sanitize(long_note)) == MAX_NOTE_CHARS

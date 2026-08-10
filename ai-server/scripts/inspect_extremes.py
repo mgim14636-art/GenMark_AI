@@ -29,11 +29,35 @@ OUT_DIR = ROOT / "data" / "outputs"
 DEST = OUT_DIR / "extremes"
 
 
+# 리포트 라벨에 한글이 들어가므로 PIL 기본 비트맵 폰트로는 글자가 깨진다.
+# 로고 합성용으로 이미 들어와 있는 한글 폰트를 재사용한다.
+_FONT_CANDIDATES = (
+    "app/fonts/modern_sans/regular/Pretendard-Regular.ttf",
+    "app/fonts/modern_sans/bold/NanumGothicBold.ttf",
+    "app/fonts/elegant_serif/regular/NanumMyeongjo-Regular.ttf",
+)
+
+
+def load_font(size: int = 18):
+    from PIL import ImageFont
+
+    for rel in _FONT_CANDIDATES:
+        path = ROOT / rel
+        if path.exists():
+            try:
+                return ImageFont.truetype(str(path), size)
+            except OSError:
+                continue
+    return ImageFont.load_default()
+
+
 def make_strip(query: Path, hits: list[tuple[float, str, str]], trademark_root: Path, dest: Path):
     """쿼리 + 상위 3건을 가로로 붙인다. hits = [(cos, 상표명, 이미지경로), ...]"""
     from PIL import Image, ImageDraw
 
-    tile, pad, label_h = 300, 10, 40
+    tile, pad, label_h = 300, 10, 52
+    f_big = load_font(19)
+    f_mid = load_font(15)
     cells = [("쿼리", None, str(query))] + [
         (f"{c:.3f}", name, str(trademark_root / rel)) for c, name, rel in hits
     ]
@@ -53,10 +77,10 @@ def make_strip(query: Path, hits: list[tuple[float, str, str]], trademark_root: 
             im.thumbnail((tile, tile))
             canvas.paste(im, (x + (tile - im.width) // 2, pad + (tile - im.height) // 2))
         except Exception:
-            draw.text((x + 8, pad + tile // 2), "(없음)", fill="red")
-        draw.text((x + 4, pad + tile + 6), label, fill="black")
+            draw.text((x + 8, pad + tile // 2), "(없음)", fill="red", font=f_mid)
+        draw.text((x + 4, pad + tile + 8), label, fill="black", font=f_big)
         if name:
-            draw.text((x + 4, pad + tile + 22), name[:22], fill="#555")
+            draw.text((x + 4, pad + tile + 32), name[:22], fill="#555", font=f_mid)
 
     canvas.save(dest)
 

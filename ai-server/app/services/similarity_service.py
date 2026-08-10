@@ -6,6 +6,7 @@ from app.core.exceptions import SimilarityDataNotReady
 from app.core.logging import logger
 from app.services.dino_service import DinoService
 from app.services.faiss_service import FaissService
+from app.services import note_service
 
 # 점수는 원시 코사인 유사도를 구간별 선형으로 매핑한다.
 #
@@ -19,7 +20,10 @@ from app.services.faiss_service import FaissService
 #   0.89 = 등록 상표 간 최근접 중앙값    → 60점 (CAUTION 진입)
 #          이미 공존 등록된 상표 쌍의 유사 수준이므로 여기서부터 경고한다
 #   1.00 = 사실상 동일                  → 100점
-COS_ANCHORS = ((0.50, 0.0), (0.80, 30.0), (0.89, 60.0), (1.00, 100.0))
+#   0.42 = 코퍼스 쌍별 코사인 평균(0.488) 아래. 이 밑은 "무작위 상표 쌍 수준"이라
+#          유사성 신호가 없다고 본다. 평균에 딱 붙이면 저점 구간이 전부 0점으로
+#          뭉개져 결과 화면이 고장 난 것처럼 보이므로 조금 낮춰 눈금을 남긴다.
+COS_ANCHORS = ((0.42, 0.0), (0.80, 30.0), (0.89, 60.0), (1.00, 100.0))
 
 DISCLAIMER = (
     "본 분석은 로고 이미지의 시각적 유사성을 보여주는 참고 자료이며, "
@@ -76,7 +80,9 @@ def _risk_level(score: int) -> str:
 
 class SimilarityService:
     @staticmethod
-    def process_similarity_search(image_src: str, top_k: int = 3) -> Dict[str, Any]:
+    def process_similarity_search(
+        image_src: str, top_k: int = 3, with_notes: bool = True
+    ) -> Dict[str, Any]:
         vector = DinoService.extract_features(image_src)
         raw = FaissService.search_similar(vector, top_k=top_k)
 
@@ -106,6 +112,19 @@ class SimilarityService:
         # 계약: similarity 내림차순 정렬 + rank 1부터 순차 증가
         rows.sort(key=lambda m: m["similarity"], reverse=True)
         matches = [{"rank": i, **m} for i, m in enumerate(rows, 1)]
+
+        # 설명 생성은 정렬이 끝난 뒤에 한다. 순서가 바뀌면 설명이 엉뚱한 상표에 붙는다.
+        if with_notes and note_service.is_enabled():
+            try:
+                notes = note_service.generate_notes(
+                    DinoService.to_bytes(image_src), [m["imagePath"] for m in matches]
+                )
+                for m, note in zip(matches, notes):
+                    if note:
+                        m["note"] = note
+            except Exception as e:
+                # note는 부가 정보다. 어떤 실패도 점수 결과를 막아서는 안 된다.
+                logger.warning("Note attach skipped: %s", type(e).__name__)
 
         max_sim = matches[0]["similarity"]
         return {
