@@ -1,6 +1,7 @@
 package com.genmark.ai.service;
 
 import com.genmark.ai.entity.Member;
+import com.genmark.ai.entity.Project;
 import com.genmark.ai.oauth.OAuthUserInfo;
 import com.genmark.ai.oauth.OAuthVerifier;
 import com.genmark.ai.oauth.OAuthVerifierResolver;
@@ -19,8 +20,6 @@ import java.time.LocalDateTime;
 
 /**
  * API_SPEC.md 5.1 인증 흐름의 구현체.
- * 프로젝트 진행상태(status) 필드가 아직 projects 테이블에 없어서 resumeProjectId는
- * 항상 null을 반환한다 (Phase 2에서 프로젝트 도메인이 구현되면 채워야 함).
  */
 @Service
 public class AuthService {
@@ -76,12 +75,8 @@ public class AuthService {
         String accessToken = jwtProvider.generateAccessToken(member.getId(), member.getEmail());
         String refreshToken = issueRefreshToken(member);
 
-        // Phase 1 범위에는 프로젝트 상태(status)가 없어 재개할 프로젝트를 판별할 수 없다.
-        boolean onboardingCompleted = onboardingRepository.existsByMemberIdAndCompletedAtIsNotNull(member.getId());
-        String resumeProjectId = projectRepository
-                .findFirstByMemberIdAndStatusNotOrderByUpdatedAtDesc(member.getId(), com.genmark.ai.entity.Project.Status.COMPLETED)
-                .map(com.genmark.ai.entity.Project::getPublicId)
-                .orElse(null);
+        boolean onboardingCompleted = isOnboardingCompleted(member.getId());
+        String resumeProjectId = findResumeProjectId(member.getId());
         return new LoginResult(accessToken, refreshToken, jwtProvider.getAccessTokenExpirationSeconds(),
                 member, isFirstLogin, onboardingCompleted, resumeProjectId);
     }
@@ -112,6 +107,15 @@ public class AuthService {
     @Transactional(readOnly = true)
     public boolean isOnboardingCompleted(Long memberId) {
         return onboardingRepository.existsByMemberIdAndCompletedAtIsNotNull(memberId);
+    }
+
+    /** 완료(COMPLETED) 상태가 아닌 프로젝트 중 가장 최근에 수정된 것을 "이어서 작업할 프로젝트"로 본다. */
+    @Transactional(readOnly = true)
+    public String findResumeProjectId(Long memberId) {
+        return projectRepository
+                .findFirstByMemberIdAndStatusNotOrderByUpdatedAtDesc(memberId, Project.Status.COMPLETED)
+                .map(Project::getPublicId)
+                .orElse(null);
     }
 
     private Member createMember(String provider, OAuthUserInfo info) {

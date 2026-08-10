@@ -2,7 +2,6 @@ package com.genmark.ai.service;
 
 import com.genmark.ai.entity.Member;
 import com.genmark.ai.entity.MemberOnboarding;
-import com.genmark.ai.entity.Project;
 import com.genmark.ai.repository.MemberOnboardingRepository;
 import com.genmark.ai.repository.MemberRepository;
 import com.genmark.ai.web.dto.onboarding.OnboardingResponse;
@@ -14,6 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -46,18 +48,24 @@ public class OnboardingService {
             throw new ApiException(ErrorCode.VALIDATION_ERROR,
                     "상세정보를 건너뛸 때는 initialProject를 보내지 마세요.");
         }
+        if (request.usage().size() > 3) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "usage는 최대 3개까지 선택할 수 있습니다.");
+        }
 
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new ApiException(ErrorCode.AUTH_REQUIRED));
-        Project initialProject = request.detailsDecision() == MemberOnboarding.DetailsDecision.SUBMITTED
-                ? projectService.createInitial(member, request.initialProject()) : null;
+        if (request.detailsDecision() == MemberOnboarding.DetailsDecision.SUBMITTED) {
+            projectService.createInitial(member, request.initialProject());
+        }
 
+        List<String> usage = request.usage();
         MemberOnboarding onboarding = MemberOnboarding.builder()
                 .member(member)
-                .usageJson(projectService.writeList(request.usage()))
+                .usage1(usage.get(0))
+                .usage2(usage.size() > 1 ? usage.get(1) : null)
+                .usage3(usage.size() > 2 ? usage.get(2) : null)
                 .audience(request.audience().trim())
                 .detailsDecision(request.detailsDecision())
-                .initialProject(initialProject)
                 .completedAt(LocalDateTime.now())
                 .schemaVersion(1)
                 .build();
@@ -65,8 +73,13 @@ public class OnboardingService {
     }
 
     private OnboardingResponse toResponse(MemberOnboarding onboarding) {
-        String projectId = onboarding.getInitialProject() == null ? null : onboarding.getInitialProject().getPublicId();
-        return new OnboardingResponse(true, projectService.readList(onboarding.getUsageJson()), onboarding.getAudience(),
-                onboarding.getDetailsDecision(), projectId, onboarding.getCompletedAt(), onboarding.getSchemaVersion());
+        return new OnboardingResponse(true, readUsage(onboarding), onboarding.getAudience(),
+                onboarding.getDetailsDecision(), onboarding.getCompletedAt(), onboarding.getSchemaVersion());
+    }
+
+    private List<String> readUsage(MemberOnboarding onboarding) {
+        return Stream.of(onboarding.getUsage1(), onboarding.getUsage2(), onboarding.getUsage3())
+                .filter(Objects::nonNull)
+                .toList();
     }
 }
