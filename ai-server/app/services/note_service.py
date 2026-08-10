@@ -16,34 +16,60 @@ import base64
 import io
 import json
 import os
+import re
 from pathlib import Path
 from typing import Optional, Sequence
 
 import requests
+from dotenv import load_dotenv
 
 from app.core.config import settings
 from app.core.logging import logger
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+# 유사도 경로는 flux_service를 import하지 않으므로 .env가 로드되지 않은 채로
+# 여기까지 올 수 있다. 그 상태에서 키를 읽으면 항상 비어 있어 note가 조용히 꺼진다.
+load_dotenv()
 
-# 점수 계산은 로컬에서 0.3초면 끝난다. 외부 호출이 그보다 훨씬 오래 걸리면
-# 설명을 포기하는 편이 낫다.
-REQUEST_TIMEOUT = float(os.environ.get("NOTE_TIMEOUT_SECONDS", "8"))
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 MAX_NOTE_CHARS = 60
+
+
+def _api_key() -> str:
+    """import 시점이 아니라 호출 시점에 읽는다.
+
+    모듈 import 순서나 .env 로드 타이밍에 따라 값이 달라지는 것을 막는다.
+    테스트에서 monkeypatch로 갈아끼우기도 쉬워진다.
+    """
+    return os.environ.get("GEMINI_API_KEY", "").strip()
+
+
+def _model() -> str:
+    return os.environ.get("GEMINI_MODEL", "gemini-flash-latest").strip()
+
+
+def _timeout() -> float:
+    # 점수 계산은 로컬에서 0.3초면 끝난다. 외부 호출이 그보다 훨씬 오래 걸리면
+    # 설명을 포기하는 편이 낫다.
+    try:
+        return float(os.environ.get("NOTE_TIMEOUT_SECONDS", "8"))
+    except ValueError:
+        return 8.0
+
+
 THUMB_SIZE = 384
 
-PROMPT = """첫 번째 이미지는 사용자가 생성한 로고이고, 나머지는 기존 등록 상표입니다.
-각 등록 상표가 생성 로고와 시각적으로 어떤 점이 닮았는지 한 문장씩 설명하세요.
+PROMPT = """첫 번째 이미지는 사용자가 만든 로고이고, 나머지는 기존 등록 상표입니다.
+각 등록 상표가 첫 번째 로고와 시각적으로 어떤 점이 닮았는지 설명하세요.
 
-규칙:
-- 도형의 형태·구도·배치 중심으로 설명 (색상은 부수적)
-- 40자 이내, "~해요" 체
-- 닮은 점이 뚜렷하지 않으면 그렇게 쓰세요
-- 법적 판단(침해 여부, 등록 가능성)은 절대 언급 금지
+작성 규칙:
+- 반드시 한국어로만 작성 (영어 단어 사용 금지)
+- 도형의 형태·구도·배치를 중심으로 서술 (색상은 부수적)
+- 각 항목 15~40자, "~해요" 로 끝나는 평서문
+- 닮은 점이 뚜렷하지 않으면 "뚜렷하게 닮은 점은 없어요" 라고 쓰세요
+- 침해 여부·등록 가능성 같은 법적 판단은 절대 쓰지 마세요
+- 이 지시문의 내용을 그대로 옮겨 적지 마세요
 
-JSON 배열로만 답하세요: ["설명1", "설명2", "설명3"]"""
+등록 상표 개수만큼의 문자열 배열로 답하세요."""
 
 # 법적 판단으로 읽힐 수 있는 표현. 하나라도 걸리면 그 note는 버린다.
 BANNED = (
@@ -53,7 +79,12 @@ BANNED = (
 
 
 def is_enabled() -> bool:
-    return bool(GEMINI_API_KEY)
+    return bool(_api_key())
+
+
+# 한글이 한 글자도 없으면 지시문이 영어로 새어나온 경우다.
+# 실제로 "Under 40 characters per" 같은 응답이 사용자에게 노출된 적이 있다.
+_HANGUL = re.compile(r"[가-힣]")
 
 
 def _sanitize(text: object) -> Optional[str]:
@@ -62,6 +93,18 @@ def _sanitize(text: object) -> Optional[str]:
         return None
     note = " ".join(text.split()).strip().strip('"')
     if not note:
+        return None
+
+    # JSON 파편이 흘러든 흔적
+    if note[0] in '[]{}:,"\'' or note.startswith("```"):
+        logger.warning("Note dropped, looks like a fragment: %r", note[:60])
+        return None
+
+    if not _HANGUL.search(note):
+        logger.warning("Note dropped, no Korean text: %r", note[:60])
+        return None
+
+    if len(note) < 5:
         return None
     if any(word in note for word in BANNED):
         # 원문을 로그에 남겨 프롬프트 튜닝에 쓴다. 사용자에게는 나가지 않는다.
@@ -123,7 +166,8 @@ def generate_notes(
     if not image_paths:
         return blank
     if not is_enabled():
-        logger.debug("GEMINI_API_KEY 미설정 — note 생략")
+        # debug로 두면 왜 note가 안 나오는지 아무도 모른다. 설정 실수는 눈에 띄어야 한다.
+        logger.warning("GEMINI_API_KEY가 없어 note를 생성하지 않습니다 (.env 확인)")
         return blank
 
     root = Path(settings.trademark_data_root)
@@ -141,33 +185,101 @@ def generate_notes(
 
     try:
         res = requests.post(
-            GEMINI_URL.format(model=GEMINI_MODEL),
-            params={"key": GEMINI_API_KEY},
+            GEMINI_URL.format(model=_model()),
+            params={"key": _api_key()},
             json={
                 "contents": [{"parts": parts}],
-                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 300},
+                "generationConfig": {
+                    "temperature": 0.3,
+                    # Gemini 2.5/3 Flash 계열은 thinking이 기본 활성이고 그 토큰이
+                    # maxOutputTokens에서 차감된다. 예산의 대부분을 내부 추론에 쓰고
+                    # 실제 문장이 첫 줄에서 잘리는 사고가 있었다.
+                    # 짧은 설명 3개에 추론은 필요 없으므로 아예 끈다.
+                    "thinkingConfig": {"thinkingBudget": 0},
+                    # 한글은 토큰 소모가 크다. 잘린 JSON은 파싱에 실패한다.
+                    "maxOutputTokens": 800,
+                    # 스키마를 강제하면 코드펜스·머리말·객체 감싸기가 원천 차단된다.
+                    "responseMimeType": "application/json",
+                    "responseSchema": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
+                },
             },
-            timeout=REQUEST_TIMEOUT,
+            timeout=_timeout(),
         )
         res.raise_for_status()
-        text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+        payload = res.json()
+        candidate = payload["candidates"][0]
+        # MAX_TOKENS면 응답이 잘린 것이다. 원인을 바로 알 수 있게 남긴다.
+        finish = candidate.get("finishReason")
+        if finish and finish not in ("STOP", "FINISH_REASON_STOP"):
+            usage = payload.get("usageMetadata", {})
+            logger.warning(
+                "Note response not finished (%s). thoughts=%s output=%s",
+                finish,
+                usage.get("thoughtsTokenCount"),
+                usage.get("candidatesTokenCount"),
+            )
+        text = candidate["content"]["parts"][0]["text"]
     except requests.exceptions.Timeout:
-        logger.warning("Note generation timed out (%.0fs)", REQUEST_TIMEOUT)
+        logger.warning("Note generation timed out (%.0fs)", _timeout())
         return blank
     except Exception as e:
         # API 키가 로그에 실리지 않도록 예외 타입만 남긴다.
         logger.warning("Note generation failed: %s", type(e).__name__)
         return blank
 
-    try:
-        cleaned = text.replace("```json", "").replace("```", "").strip()
-        raw = json.loads(cleaned)
-        if not isinstance(raw, list):
-            raise ValueError("expected a JSON array")
-    except Exception as e:
-        logger.warning("Note parse failed: %s", type(e).__name__)
+    raw = _parse_notes(text)
+    if raw is None:
+        # 무엇을 받았는지 남기지 않으면 프롬프트를 고칠 수 없다.
+        # 모델 출력이라 민감정보는 아니지만 길이는 제한한다.
+        logger.warning("Note parse failed. 응답 앞부분: %r", text[:200])
         return blank
 
     notes = [_sanitize(item) for item in raw[: len(image_paths)]]
     notes += [None] * (len(image_paths) - len(notes))
     return notes
+
+
+def _parse_notes(text: str) -> Optional[list]:
+    """LLM 응답에서 설명 배열을 최대한 건져낸다.
+
+    "JSON 배열로만 답하라"고 지시해도 코드펜스·머리말·객체 감싸기 등이 섞여 나온다.
+    형식이 조금 어긋났다고 기능 전체를 포기하는 것보다 관대하게 파싱하는 편이 낫다.
+    """
+    if not text:
+        return None
+
+    cleaned = re.sub(r"```(?:json)?", "", text).strip()
+
+    # 1) 통째로 JSON인 경우
+    for candidate in (cleaned,):
+        try:
+            parsed = json.loads(candidate)
+        except Exception:
+            break
+        if isinstance(parsed, list):
+            return parsed
+        if isinstance(parsed, dict):
+            # {"notes": [...]} 처럼 감싸서 오는 경우
+            for value in parsed.values():
+                if isinstance(value, list):
+                    return value
+        break
+
+    # 2) 본문 어딘가에 박힌 배열만 뽑아내기
+    match = re.search(r"\[.*?\]", cleaned, re.S)
+    if match:
+        try:
+            parsed = json.loads(match.group(0))
+            if isinstance(parsed, list):
+                return parsed
+        except Exception:
+            pass
+
+    # 줄 단위 폴백은 두지 않는다.
+    # 응답이 잘렸을 때 JSON 파편("[\"곡선 형태의...", ": 전체적인 방패...")을
+    # 그대로 note로 통과시키는 사고가 있었다. 형식이 어긋나면 note를 포기하는 편이
+    # 깨진 문구를 사용자에게 보여주는 것보다 낫다.
+    return None

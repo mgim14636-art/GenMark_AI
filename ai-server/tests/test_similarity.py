@@ -450,3 +450,40 @@ def test_note_is_truncated():
 
     long_note = "곡" * 200
     assert len(_sanitize(long_note)) == MAX_NOTE_CHARS
+
+
+def test_note_rejects_truncated_json_fragments():
+    """응답이 잘려 JSON 파편이 흘러들면 note를 버려야 한다.
+
+    실제로 ': 전체적인 방패 모양', '["곡선 형태의...' 같은 파편이
+    사용자에게 노출된 적이 있다. maxOutputTokens 부족 + 관대한 폴백 파서 조합이 원인.
+    """
+    from app.services.note_service import _sanitize
+
+    for junk in (
+        ": 전체적인 방패 모양 테두리 형태",
+        '["곡선 형태의 문자 모노그램 요소 외',
+        "```json",
+        "}",
+        ",",
+    ):
+        assert _sanitize(junk) is None, junk
+
+
+def test_note_rejects_english_instruction_echo():
+    """지시문이 영어로 새어나오는 경우를 차단한다."""
+    from app.services.note_service import _sanitize
+
+    assert _sanitize("Under 40 characters per") is None
+    assert _sanitize("Describe the shape similarity") is None
+    assert _sanitize("방패 외곽선이 닮았어요") is not None
+
+
+def test_note_parser_has_no_line_fallback():
+    """잘린 JSON을 줄 단위로 억지 파싱하지 않는다."""
+    from app.services.note_service import _parse_notes
+
+    assert _parse_notes('["곡선 형태의 문자') is None
+    assert _parse_notes("설명을 드리자면 다음과 같습니다") is None
+    # 정상 JSON은 그대로 통과
+    assert _parse_notes('["가나다라마", "바사아자차"]') == ["가나다라마", "바사아자차"]
