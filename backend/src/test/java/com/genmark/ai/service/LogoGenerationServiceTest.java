@@ -21,7 +21,7 @@ class LogoGenerationServiceTest {
         LogoGenerationService service = new LogoGenerationService(projectService, mock(ProjectRepository.class),
                 mock(LogoGenerationRepository.class), mock(LogoCandidateRepository.class),
                 mock(LogoGenerationWorker.class), new ObjectMapper());
-        Project project = Project.builder().brandName("GenMark").industry("IT")
+        Project project = Project.builder().brandType("BI").brandName("GenMark").industry("IT")
                 .brandValuesJson("[\"TRUST\"]").brandValuesText("reliable").targetAge("20s")
                 .tone("modern").colorMode("MANUAL").colorsJson("[\"#112233\"]")
                 .logoStyle("combination").includeBrandName(true).additionalRequirements("simple").build();
@@ -30,9 +30,27 @@ class LogoGenerationServiceTest {
 
         Map<String, Object> survey = service.toSurvey(project);
 
-        assertThat(survey).containsEntry("brand_name", "GenMark")
+        assertThat(survey).containsEntry("ci_bi", "BI")
+                .containsEntry("brand_name", "GenMark")
                 .containsEntry("style", "combination")
                 .containsEntry("include_brand_name_in_logo", true)
-                .containsEntry("color_manual", List.of("#112233"));
+                .containsEntry("color_manual", List.of("#112233"))
+                .containsEntry("num_variants", 4);
+    }
+
+    @Test
+    void mapsCompanyNameForCiGeneration() {
+        ProjectService projectService = mock(ProjectService.class);
+        LogoGenerationService service = new LogoGenerationService(projectService, mock(ProjectRepository.class),
+                mock(LogoGenerationRepository.class), mock(LogoCandidateRepository.class),
+                mock(LogoGenerationWorker.class), new ObjectMapper());
+        Project project = Project.builder().brandType("CI").companyName("GenMark Company")
+                .brandValuesJson("[]").colorsJson("[]").includeBrandName(true).build();
+        when(projectService.readList("[]")).thenReturn(List.of());
+
+        Map<String, Object> survey = service.toSurvey(project);
+
+        assertThat(survey).containsEntry("ci_bi", "CI")
+                .containsEntry("company_name", "GenMark Company");
     }
 }

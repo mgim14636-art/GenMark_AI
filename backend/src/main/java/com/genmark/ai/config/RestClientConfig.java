@@ -16,11 +16,6 @@ public class RestClientConfig {
     }
 
     @Bean
-    public RestClient logoAiRestClient(@Value("${logo.ai.server.url:http://localhost:5000}") String baseUrl) {
-        return RestClient.builder().requestFactory(aiRequestFactory()).baseUrl(baseUrl).build();
-    }
-
-    @Bean
     public RestClient oauthRestClient() {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(5_000);
@@ -31,7 +26,8 @@ public class RestClientConfig {
     private SimpleClientHttpRequestFactory aiRequestFactory() {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(5_000);
-        requestFactory.setReadTimeout(120_000);
+        // FLUX can retry one 60-second request; leave room for response decoding/composition.
+        requestFactory.setReadTimeout(180_000);
         return requestFactory;
     }
 }
