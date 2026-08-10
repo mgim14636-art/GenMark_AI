@@ -64,7 +64,7 @@ const getModeFromUrl = (): ViewMode => {
   if (requestedView === 'onboarding') return 'onboarding'
   if (requestedView === 'industry' || requestedView === 'industry-selection' || requestedView === 'domain') return 'industry'
   if (requestedView === 'brand-details' || requestedView === 'brand-info' || requestedView === 'values') return 'brand-details'
-  if (requestedView === 'company-details' || requestedView === 'ci-details' || requestedView === 'corporate-details') return 'choice'
+  if (requestedView === 'company-details' || requestedView === 'ci-details' || requestedView === 'corporate-details') return 'company-details'
   if (requestedView === 'choice' || requestedView === 'ci-bi' || requestedView === 'brand-type') return 'choice'
   if (requestedView === 'tone' || requestedView === 'tone-color' || requestedView === 'tone-and-color') return 'tone'
   if (requestedView === 'style' || requestedView === 'logo-style' || requestedView === 'logo-shape') return 'style'
@@ -103,6 +103,24 @@ function ScreenBackButton({ label, onClick }: { label: string; onClick: () => vo
   )
 }
 
+type BrandFlowStep = 1 | 2 | 3 | 4
+
+function BrandFlowProgress({ step }: { step: BrandFlowStep }) {
+  return (
+    <div className={`brand-flow-progress is-step-${step}`} aria-label={`브랜드 생성 4단계 중 ${step}단계`}>
+      <span className="brand-flow-step-badge">{step} / 4</span>
+      <div className="brand-flow-progress-track" aria-hidden="true">
+        <span className="brand-flow-progress-line" />
+        {[1, 2, 3, 4].map((node) => (
+          <span key={node} className={`brand-flow-progress-node ${node < step ? 'complete' : node === step ? 'active' : ''}`}>
+            {node < step ? <Check size={14} strokeWidth={2.5} /> : null}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function BrandLogo({ className = '' }: { className?: string }) {
   return <GenMarkLogo className={className ? `brand-emblem ${className}` : 'brand-emblem'} />
 }
@@ -127,7 +145,7 @@ function CustomerApp() {
   const [onboardingSelection, setOnboardingSelection] = useState<OnboardingOption[]>(['online'])
   const [audienceSelection, setAudienceSelection] = useState<AudienceOption[]>(['company'])
   const [industrySelection, setIndustrySelection] = useState<IndustryOption | null>(null)
-  const [brandKind, setBrandKind] = useState<'ci' | 'bi' | null>(null)
+  const [brandKind, setBrandKind] = useState<'ci' | 'bi' | null>(() => getModeFromUrl() === 'company-details' ? 'ci' : null)
   const [choiceBackMode, setChoiceBackMode] = useState<'home' | 'onboarding' | 'industry'>('home')
   const [industryBackMode, setIndustryBackMode] = useState<'home' | 'onboarding'>('home')
   const [additionalRequest, setAdditionalRequest] = useState('')
@@ -802,16 +820,7 @@ function CustomerApp() {
       <main className="brand-details-screen">
         <ScreenBackButton label="CI·BI 선택 화면으로 돌아가기" onClick={() => setMode('choice')} />
         <section className="brand-details-content" aria-labelledby="brand-details-title">
-          <div className="brand-details-progress" aria-label="브랜드 생성 4단계 중 2단계">
-            <span className="brand-details-step-badge">2 / 4</span>
-            <div className="brand-details-progress-track" aria-hidden="true">
-              <span className="brand-details-progress-line" />
-              <span className="brand-details-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-              <span className="brand-details-progress-node active" />
-              <span className="brand-details-progress-node" />
-              <span className="brand-details-progress-node" />
-            </div>
-          </div>
+          <BrandFlowProgress step={1} />
 
           <header className="brand-details-heading">
             <h1 id="brand-details-title">어떤 화장품 브랜드를 만들고 있나요?</h1>
@@ -884,19 +893,10 @@ function CustomerApp() {
       <main className="brand-details-screen company-details-screen">
       <ScreenBackButton
         label="이전 화면으로 돌아가기"
-        onClick={() => { setOnboardingStep(2); setMode('onboarding') }}
+        onClick={() => setMode('choice')}
       />
       <section className="brand-details-content" aria-labelledby="company-details-title">
-        <div className="brand-details-progress" aria-label="기업 로고 생성 4단계 중 2단계">
-          <span className="brand-details-step-badge">2 / 4</span>
-          <div className="brand-details-progress-track" aria-hidden="true">
-            <span className="brand-details-progress-line" />
-            <span className="brand-details-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-            <span className="brand-details-progress-node active" />
-            <span className="brand-details-progress-node" />
-            <span className="brand-details-progress-node" />
-          </div>
-        </div>
+        <BrandFlowProgress step={1} />
 
         <header className="brand-details-heading">
           <h1 id="company-details-title">어떤 기업을 만들고 있나요?</h1>
@@ -944,18 +944,9 @@ function CustomerApp() {
 
   const renderToneSelectionScreen = () => (
     <main className="tone-selection-screen">
-      <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => setMode(brandKind === 'ci' ? 'choice' : 'brand-details')} />
+      <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => setMode(brandKind === 'ci' ? 'company-details' : 'brand-details')} />
       <section className="tone-selection-content" aria-labelledby="tone-selection-title">
-        <div className="tone-progress" aria-label="브랜드 생성 4단계 중 3단계">
-          <span className="tone-step-badge">3 / 4</span>
-          <div className="tone-progress-track" aria-hidden="true">
-            <span className="tone-progress-line" />
-            <span className="tone-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-            <span className="tone-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-            <span className="tone-progress-node active" />
-            <span className="tone-progress-node" />
-          </div>
-        </div>
+        <BrandFlowProgress step={2} />
 
         <header className="tone-selection-heading">
           <h1 id="tone-selection-title">톤앤매너와<br />색상을 골라주세요</h1>
@@ -1054,16 +1045,7 @@ function CustomerApp() {
     <main className="logo-style-screen">
       <ScreenBackButton label="톤앤매너 선택 화면으로 돌아가기" onClick={() => setMode('tone')} />
       <section className="logo-style-content" aria-labelledby="logo-style-title">
-        <div className="logo-style-progress" aria-label="브랜드 생성 4단계 중 3단계">
-          <span className="logo-style-step-badge">3 / 4</span>
-          <div className="logo-style-progress-track" aria-hidden="true">
-            <span className="logo-style-progress-line" />
-            <span className="logo-style-progress-node complete">1</span>
-            <span className="logo-style-progress-node complete">2</span>
-            <span className="logo-style-progress-node active">3</span>
-            <span className="logo-style-progress-node">4</span>
-          </div>
-        </div>
+        <BrandFlowProgress step={3} />
 
         <header className="logo-style-heading">
           <h1 id="logo-style-title">어떤 형태의 로고가<br />필요한가요?</h1>
@@ -1203,7 +1185,7 @@ function CustomerApp() {
   const renderChoiceScreen = () => {
     const chooseBrandKind = (kind: 'ci' | 'bi') => {
       setBrandKind(kind)
-      setMode(kind === 'ci' ? 'tone' : 'brand-details')
+      setMode(kind === 'ci' ? 'company-details' : 'brand-details')
     }
 
     const choiceDetails = {
@@ -1299,16 +1281,7 @@ function CustomerApp() {
       <main className="final-request-screen">
         <ScreenBackButton label="로고 스타일 선택 화면으로 돌아가기" onClick={() => setMode('style')} />
         <section className="final-request-content" aria-labelledby="final-request-title">
-          <div className="final-progress" aria-label="브랜드 생성 4단계 중 4단계">
-            <span className="final-step-badge">4 / 4</span>
-            <div className="final-progress-track" aria-hidden="true">
-              <span className="final-progress-line" />
-                <span className="final-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-                <span className="final-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-                <span className="final-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-              <span className="final-progress-node active" />
-            </div>
-          </div>
+          <BrandFlowProgress step={4} />
 
           <header className="final-request-heading">
             <h1 id="final-request-title">마지막으로 꼭 반영할 내용을 알려주세요</h1>

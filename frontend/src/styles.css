@@ -2073,6 +2073,86 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   padding: 38px 0 24px;
 }
 
+/* Shared four-step progress indicator for both CI and BI creation flows. */
+.brand-flow-progress {
+  display: grid;
+  justify-items: center;
+  gap: 26px;
+}
+
+.brand-flow-step-badge {
+  display: grid;
+  width: 140px;
+  height: 62px;
+  place-items: center;
+  border: 1px solid #ab7cf1;
+  border-radius: 22px;
+  color: #7045d3;
+  background: rgb(255 255 255 / .9);
+  box-shadow: 0 8px 20px rgb(134 87 221 / .13);
+  font-size: 31px;
+  font-weight: 700;
+  letter-spacing: -.08em;
+}
+
+.brand-flow-progress-track {
+  display: flex;
+  position: relative;
+  align-items: center;
+  justify-content: space-between;
+  width: min(100%, 670px);
+  height: 28px;
+}
+
+.brand-flow-progress-line {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  left: 10px;
+  height: 3px;
+  background: #d8d5e3;
+  transform: translateY(-50%);
+}
+
+.brand-flow-progress-line::before {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #a15cf1, #d66bd8);
+  content: '';
+  transition: width 180ms ease;
+}
+
+.brand-flow-progress.is-step-2 .brand-flow-progress-line::before { width: 33.333%; }
+.brand-flow-progress.is-step-3 .brand-flow-progress-line::before { width: 66.666%; }
+.brand-flow-progress.is-step-4 .brand-flow-progress-line::before { width: 100%; }
+
+.brand-flow-progress-node {
+  display: grid;
+  position: relative;
+  z-index: 1;
+  place-items: center;
+  width: 29px;
+  height: 29px;
+  border: 2px solid #d5d2df;
+  border-radius: 50%;
+  color: #6a6e7c;
+  background: #fff;
+}
+
+.brand-flow-progress-node.complete {
+  border-color: #9d5fed;
+  color: #8d55e5;
+}
+
+.brand-flow-progress-node.active {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #fff;
+  background: linear-gradient(140deg, #bd75f0, #9c4ee2);
+  box-shadow: 0 0 0 2px #a361ed, 0 0 20px rgb(160 91 244 / .34);
+}
+
 .final-progress {
   display: flex;
   flex-direction: column;
@@ -2552,6 +2632,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
     width: 21px;
     height: 21px;
   }
+
+  .brand-flow-progress { gap: 19px; }
+  .brand-flow-step-badge { width: 106px; height: 48px; border-radius: 17px; font-size: 23px; }
+  .brand-flow-progress-track { width: calc(100% - 14px); }
+  .brand-flow-progress-node { width: 29px; height: 29px; }
+  .brand-flow-progress-node.active { width: 33px; height: 33px; }
 
   .final-request-heading {
     margin-top: 36px;
@@ -6928,5 +7014,143 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
     transition-property: transform, box-shadow !important;
     transition-duration: 160ms !important;
     transition-timing-function: ease !important;
+  }
+}
+
+/* Keep tone and logo-style steps in the same visual language as company-details. */
+.tone-selection-screen,
+.logo-style-screen {
+  color: #30374b;
+  background: #fff;
+}
+
+.tone-selection-content,
+.logo-style-content {
+  width: min(calc(100% - 48px), 820px);
+  padding-top: 34px;
+}
+
+.tone-selection-heading,
+.logo-style-heading {
+  margin: 44px auto 0;
+  text-align: center;
+}
+
+.tone-selection-heading h1,
+.logo-style-heading h1 {
+  color: #6a3fe5;
+  background: linear-gradient(100deg, #5c3ce2 0%, #9d55dd 54%, #ed609a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: clamp(29px, 3.4vw, 40px);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -.105em;
+}
+
+.tone-selection-heading p,
+.logo-style-heading p {
+  margin-top: 17px;
+  color: #535c74;
+  font-size: clamp(16px, 1.75vw, 21px);
+  line-height: 1.5;
+}
+
+.tone-options,
+.logo-style-options {
+  gap: 13px;
+}
+
+.tone-option,
+.logo-style-option {
+  border: 1.5px solid transparent;
+  border-radius: 15px;
+  background: linear-gradient(#fff, #fff) padding-box, linear-gradient(110deg, #b095ff, #e38be9) border-box;
+  box-shadow: 0 9px 22px rgb(121 86 201 / .08);
+}
+
+.tone-option:hover,
+.logo-style-option:hover {
+  border-color: transparent;
+  box-shadow: 0 12px 26px rgb(121 86 201 / .13);
+}
+
+.tone-option.selected,
+.logo-style-option.selected {
+  border-color: transparent;
+  background: linear-gradient(105deg, #fff, #fbf3ff) padding-box, linear-gradient(105deg, #9868ea, #e96abf) border-box;
+  box-shadow: 0 12px 27px rgb(131 89 224 / .14), inset 0 1px 0 rgb(255 255 255 / .98);
+}
+
+.tone-option-copy strong,
+.logo-style-copy > strong {
+  color: #30374b;
+}
+
+.tone-option-copy small,
+.logo-style-copy > span:not(.logo-style-fit),
+.logo-style-fit {
+  color: #535c74;
+}
+
+.tone-color-card,
+.tone-mode-toggle {
+  border: 1.5px solid transparent;
+  background: linear-gradient(#fff, #fff) padding-box, linear-gradient(110deg, #b095ff, #e38be9) border-box;
+  box-shadow: 0 9px 22px rgb(121 86 201 / .08);
+}
+
+.tone-color-card h2 {
+  color: #7040e2;
+}
+
+.tone-color-card p {
+  color: #535c74;
+}
+
+.tone-next,
+.logo-style-next {
+  min-height: 66px;
+  margin-top: 20px;
+  border-radius: 13px;
+  background: linear-gradient(100deg, #b5a0ff, #dc80e9 54%, #ff98c9);
+  box-shadow: 0 12px 28px rgb(204 122 227 / .25), inset 0 1px 0 rgb(255 255 255 / .58);
+  font-size: 20px;
+}
+
+@media (max-width: 720px) {
+  .tone-selection-content,
+  .logo-style-content {
+    width: calc(100% - 48px);
+    padding-top: 23px;
+  }
+
+  .tone-selection-heading,
+  .logo-style-heading {
+    margin-top: 36px;
+  }
+
+  .tone-selection-heading h1,
+  .logo-style-heading h1 {
+    font-size: clamp(26px, 7.6vw, 32px);
+  }
+
+  .tone-selection-heading p,
+  .logo-style-heading p {
+    font-size: 14px;
+  }
+
+  .tone-option,
+  .logo-style-option {
+    border-radius: 13px;
+  }
+
+  .tone-next,
+  .logo-style-next {
+    min-height: 54px;
+    margin-top: 17px;
+    border-radius: 12px;
+    font-size: 19px;
   }
 }
