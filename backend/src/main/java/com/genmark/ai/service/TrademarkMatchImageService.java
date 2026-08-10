@@ -23,13 +23,13 @@ import java.nio.file.StandardOpenOption;
 @Service
 @Transactional(readOnly = true)
 public class TrademarkMatchImageService {
-    private final ProjectService projectService;
+    private final ProjectLookupService projectLookup;
     private final TrademarkAnalysisRepository analysisRepository;
     private final TrademarkMatchRepository matchRepository;
     private final Path imageRoot;
     private final long maxImageBytes;
 
-    public TrademarkMatchImageService(ProjectService projectService,
+    public TrademarkMatchImageService(ProjectLookupService projectLookup,
                                       TrademarkAnalysisRepository analysisRepository,
                                       TrademarkMatchRepository matchRepository,
                                       @Value("${app.trademark-image-root}") String imageRoot,
@@ -37,7 +37,7 @@ public class TrademarkMatchImageService {
         if (maxImageBytes <= 0 || maxImageBytes > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("app.trademark-image-max-bytes must be between 1 and 2147483647");
         }
-        this.projectService = projectService;
+        this.projectLookup = projectLookup;
         this.analysisRepository = analysisRepository;
         this.matchRepository = matchRepository;
         this.imageRoot = Path.of(imageRoot).toAbsolutePath().normalize();
@@ -45,8 +45,9 @@ public class TrademarkMatchImageService {
     }
 
     public ImageContent load(String projectId, String analysisId, int rank, Long memberId) {
-        projectService.requireOwned(projectId, memberId);
-        TrademarkAnalysis analysis = analysisRepository.findByPublicIdAndProjectMemberId(analysisId, memberId)
+        projectLookup.requireOwned(projectId, memberId);
+        TrademarkAnalysis analysis = analysisRepository.findByPublicIdAndCandidateGenerationCiProjectMemberId(analysisId, memberId)
+                .or(() -> analysisRepository.findByPublicIdAndCandidateGenerationBiProjectMemberId(analysisId, memberId))
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
         if (!analysis.getProject().getPublicId().equals(projectId)) {
             throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);

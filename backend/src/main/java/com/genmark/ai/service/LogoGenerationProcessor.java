@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.genmark.ai.client.LogoAiClient;
 import com.genmark.ai.entity.LogoCandidate;
 import com.genmark.ai.entity.LogoGeneration;
-import com.genmark.ai.entity.Project;
+import com.genmark.ai.entity.ProjectStatus;
 import com.genmark.ai.repository.LogoCandidateRepository;
 import com.genmark.ai.repository.LogoGenerationRepository;
 import com.genmark.ai.web.exception.ApiException;
@@ -53,11 +53,11 @@ public class LogoGenerationProcessor {
                         .width(image.width()).height(image.height()).build());
             }
             generation.setStatus(LogoGeneration.Status.SUCCEEDED);
-            generation.getProject().setStatus(Project.Status.RESULT_READY);
+            generation.getProject().setStatus(ProjectStatus.RESULT_READY);
             generation.setCompletedAt(LocalDateTime.now());
         } catch (Exception ex) {
             generation.setStatus(LogoGeneration.Status.FAILED);
-            generation.getProject().setStatus(Project.Status.BRIEF_READY);
+            generation.getProject().setStatus(ProjectStatus.BRIEF_READY);
             generation.setErrorCode(ex instanceof ApiException api ? api.getErrorCode().name() : ErrorCode.AI_UNAVAILABLE.name());
             generation.setErrorMessage(safeMessage(ex));
             generation.setCompletedAt(LocalDateTime.now());

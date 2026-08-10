@@ -15,32 +15,52 @@ CREATE TABLE IF NOT EXISTS members (
     CONSTRAINT uq_member_provider_provider_id UNIQUE (provider, provider_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS projects (
+CREATE TABLE IF NOT EXISTS ci_project (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     public_id VARCHAR(36) NOT NULL UNIQUE,
     member_id BIGINT NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
-    title VARCHAR(100) NULL,
-    description TEXT NULL,
-    brand_type VARCHAR(50) NULL,
-    industry VARCHAR(100) NULL,
-    brand_name VARCHAR(150) NULL,
+    current_step TINYINT NOT NULL DEFAULT 1,
+    industry VARCHAR(100) NOT NULL,
     company_name VARCHAR(150) NULL,
-    company_motto VARCHAR(255) NULL,
-    brand_values_json TEXT NULL,
-    brand_values_text TEXT NULL,
-    target_age VARCHAR(50) NULL,
-    tone VARCHAR(100) NULL,
-    color_mode VARCHAR(30) NULL,
-    colors_json TEXT NULL,
-    logo_style VARCHAR(50) NULL,
-    include_brand_name BOOLEAN NOT NULL DEFAULT TRUE,
-    additional_requirements TEXT NULL,
+    core_values VARCHAR(300) NULL,
+    tone VARCHAR(100) NOT NULL DEFAULT 'friendly',
+    color_1 VARCHAR(7) NOT NULL,
+    color_2 VARCHAR(7) NOT NULL,
+    color_3 VARCHAR(7) NULL,
+    color_4 VARCHAR(7) NULL,
+    logo_style VARCHAR(50) NOT NULL DEFAULT 'combination',
+    additional_requirements VARCHAR(300) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_projects_member FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE RESTRICT,
-    INDEX idx_projects_member (member_id),
-    INDEX idx_projects_member_status (member_id, status)
+    CONSTRAINT fk_ci_project_member FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE RESTRICT,
+    INDEX idx_ci_project_member (member_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS bi_project (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    public_id VARCHAR(36) NOT NULL UNIQUE,
+    member_id BIGINT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    current_step TINYINT NOT NULL DEFAULT 1,
+    industry VARCHAR(100) NOT NULL,
+    brand_name VARCHAR(150) NULL,
+    value_category_1 VARCHAR(50) NULL,
+    value_category_2 VARCHAR(50) NULL,
+    value_category_3 VARCHAR(50) NULL,
+    brand_description VARCHAR(300) NULL,
+    target_age VARCHAR(20) NOT NULL DEFAULT '전 연령층',
+    tone VARCHAR(100) NOT NULL DEFAULT 'friendly',
+    color_1 VARCHAR(7) NOT NULL,
+    color_2 VARCHAR(7) NOT NULL,
+    color_3 VARCHAR(7) NULL,
+    color_4 VARCHAR(7) NULL,
+    logo_style VARCHAR(50) NOT NULL DEFAULT 'combination',
+    additional_requirements VARCHAR(300) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_bi_project_member FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE RESTRICT,
+    INDEX idx_bi_project_member (member_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS member_onboardings (
@@ -60,9 +80,9 @@ CREATE TABLE IF NOT EXISTS member_onboardings (
 CREATE TABLE IF NOT EXISTS logo_generations (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     public_id VARCHAR(36) NOT NULL UNIQUE,
-    project_id BIGINT NOT NULL,
+    ci_project_id BIGINT NULL,
+    bi_project_id BIGINT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'QUEUED',
-    candidate_count INT NOT NULL DEFAULT 4,
     model_name VARCHAR(100) NULL,
     request_snapshot_json TEXT NOT NULL,
     idempotency_key VARCHAR(100) NOT NULL,
@@ -72,8 +92,14 @@ CREATE TABLE IF NOT EXISTS logo_generations (
     completed_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_generation_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    CONSTRAINT uq_logo_generation_idempotency UNIQUE (project_id, idempotency_key)
+    CONSTRAINT fk_generation_ci_project FOREIGN KEY (ci_project_id) REFERENCES ci_project(id) ON DELETE CASCADE,
+    CONSTRAINT fk_generation_bi_project FOREIGN KEY (bi_project_id) REFERENCES bi_project(id) ON DELETE CASCADE,
+    CONSTRAINT chk_generation_project_exclusive CHECK (
+        (ci_project_id IS NOT NULL AND bi_project_id IS NULL) OR
+        (ci_project_id IS NULL AND bi_project_id IS NOT NULL)
+    ),
+    CONSTRAINT uq_ci_generation_idempotency UNIQUE (ci_project_id, idempotency_key),
+    CONSTRAINT uq_bi_generation_idempotency UNIQUE (bi_project_id, idempotency_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS logo_candidates (
@@ -96,7 +122,6 @@ CREATE TABLE IF NOT EXISTS logo_candidates (
 CREATE TABLE IF NOT EXISTS trademark_analyses (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     public_id VARCHAR(36) NOT NULL UNIQUE,
-    project_id BIGINT NOT NULL,
     candidate_id BIGINT NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'QUEUED',
     max_similarity INT NULL,
@@ -108,7 +133,6 @@ CREATE TABLE IF NOT EXISTS trademark_analyses (
     completed_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_analysis_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     CONSTRAINT fk_analysis_candidate FOREIGN KEY (candidate_id) REFERENCES logo_candidates(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -125,23 +149,3 @@ CREATE TABLE IF NOT EXISTS trademark_matches (
     CONSTRAINT uq_match_rank UNIQUE (analysis_id, match_rank)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Legacy tables remain only because the old Thymeleaf controllers/entities still exist.
-CREATE TABLE IF NOT EXISTS generated_logos (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    project_id BIGINT NOT NULL,
-    prompt TEXT NOT NULL,
-    image_url VARCHAR(255) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'COMPLETED',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_logo_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS similarity_results (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    logo_id BIGINT NOT NULL,
-    matched_trademark_id VARCHAR(100) NOT NULL,
-    matched_trademark_name VARCHAR(100),
-    similarity_score FLOAT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_similarity_logo FOREIGN KEY (logo_id) REFERENCES generated_logos(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

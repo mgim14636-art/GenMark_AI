@@ -1,6 +1,8 @@
 package com.genmark.ai.service;
 
-import com.genmark.ai.entity.Project;
+import com.genmark.ai.entity.CiProject;
+import com.genmark.ai.entity.LogoCandidate;
+import com.genmark.ai.entity.LogoGeneration;
 import com.genmark.ai.entity.TrademarkAnalysis;
 import com.genmark.ai.entity.TrademarkMatch;
 import com.genmark.ai.repository.TrademarkAnalysisRepository;
@@ -16,15 +18,18 @@ import static org.mockito.Mockito.*;
 class TrademarkMatchResponseTest {
     @Test
     void matchResponseIncludesAuthenticatedImageUrl() {
-        ProjectService projectService = mock(ProjectService.class);
+        ProjectLookupService projectLookup = mock(ProjectLookupService.class);
         TrademarkAnalysisRepository analysisRepository = mock(TrademarkAnalysisRepository.class);
         TrademarkMatchRepository matchRepository = mock(TrademarkMatchRepository.class);
-        TrademarkAnalysisService service = new TrademarkAnalysisService(projectService, null, null,
+        TrademarkAnalysisService service = new TrademarkAnalysisService(projectLookup, null, null, null,
                 analysisRepository, matchRepository, null);
-        Project project = Project.builder().publicId("project-1").build();
-        TrademarkAnalysis analysis = TrademarkAnalysis.builder().id(11L).publicId("analysis-1").project(project).build();
+        CiProject project = CiProject.builder().publicId("project-1").build();
+        LogoGeneration generation = LogoGeneration.builder().ciProject(project).build();
+        LogoCandidate candidate = LogoCandidate.builder().generation(generation).build();
+        TrademarkAnalysis analysis = TrademarkAnalysis.builder().id(11L).publicId("analysis-1").candidate(candidate).build();
         TrademarkMatch match = TrademarkMatch.builder().analysis(analysis).rank(3).imagePath("raw/sample.jpg").build();
-        when(analysisRepository.findByPublicIdAndProjectMemberId("analysis-1", 7L)).thenReturn(Optional.of(analysis));
+        when(analysisRepository.findByPublicIdAndCandidateGenerationCiProjectMemberId("analysis-1", 7L))
+                .thenReturn(Optional.of(analysis));
         when(matchRepository.findByAnalysisIdOrderByRank(11L)).thenReturn(List.of(match));
 
         var response = service.matches("project-1", "analysis-1", 7L).get(0);

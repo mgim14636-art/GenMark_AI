@@ -6,7 +6,7 @@ import com.genmark.ai.repository.MemberOnboardingRepository;
 import com.genmark.ai.repository.MemberRepository;
 import com.genmark.ai.web.dto.onboarding.OnboardingResponse;
 import com.genmark.ai.web.dto.onboarding.OnboardingUpsertRequest;
-import com.genmark.ai.web.dto.project.ProjectUpsertRequest;
+import com.genmark.ai.web.dto.project.CiProjectUpsertRequest;
 import com.genmark.ai.web.exception.ApiException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,11 +27,12 @@ import static org.mockito.Mockito.*;
 class OnboardingServiceTest {
     @Mock MemberOnboardingRepository onboardingRepository;
     @Mock MemberRepository memberRepository;
-    @Mock ProjectService projectService;
+    @Mock CiProjectService ciProjectService;
+    @Mock BiProjectService biProjectService;
     OnboardingService service;
 
     @BeforeEach void setUp() {
-        service = new OnboardingService(onboardingRepository, memberRepository, projectService);
+        service = new OnboardingService(onboardingRepository, memberRepository, ciProjectService, biProjectService);
     }
 
     @Test
@@ -42,11 +43,12 @@ class OnboardingServiceTest {
         when(onboardingRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         OnboardingResponse response = service.complete(1L, new OnboardingUpsertRequest(
-                List.of("PERSONAL"), "20s", MemberOnboarding.DetailsDecision.SKIPPED, null));
+                List.of("PERSONAL"), "20s", MemberOnboarding.DetailsDecision.SKIPPED, null, null));
 
         assertThat(response.completed()).isTrue();
         assertThat(response.usage()).containsExactly("PERSONAL");
-        verify(projectService, never()).createInitial(any(), any());
+        verify(ciProjectService, never()).createInitial(any(), any());
+        verify(biProjectService, never()).createInitial(any(), any());
     }
 
     @Test
@@ -57,7 +59,7 @@ class OnboardingServiceTest {
         when(onboardingRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         OnboardingResponse response = service.complete(1L, new OnboardingUpsertRequest(
-                List.of("online", "social", "offline"), "20s", MemberOnboarding.DetailsDecision.SKIPPED, null));
+                List.of("online", "social", "offline"), "20s", MemberOnboarding.DetailsDecision.SKIPPED, null, null));
 
         assertThat(response.usage()).containsExactly("online", "social", "offline");
     }
@@ -66,7 +68,7 @@ class OnboardingServiceTest {
     void rejectsMoreThanThreeUsageValues() {
         when(onboardingRepository.findById(1L)).thenReturn(Optional.empty());
         OnboardingUpsertRequest request = new OnboardingUpsertRequest(
-                List.of("online", "social", "offline", "extra"), "20s", MemberOnboarding.DetailsDecision.SKIPPED, null);
+                List.of("online", "social", "offline", "extra"), "20s", MemberOnboarding.DetailsDecision.SKIPPED, null, null);
 
         assertThatThrownBy(() -> service.complete(1L, request)).isInstanceOf(ApiException.class);
     }
@@ -75,23 +77,23 @@ class OnboardingServiceTest {
     void submittedRequiresInitialProject() {
         when(onboardingRepository.findById(1L)).thenReturn(Optional.empty());
         OnboardingUpsertRequest request = new OnboardingUpsertRequest(
-                List.of("BUSINESS"), "all", MemberOnboarding.DetailsDecision.SUBMITTED, null);
+                List.of("BUSINESS"), "all", MemberOnboarding.DetailsDecision.SUBMITTED, null, null);
         assertThatThrownBy(() -> service.complete(1L, request)).isInstanceOf(ApiException.class);
     }
 
     @Test
     void submittedStillCreatesProjectEvenThoughLinkIsNoLongerStored() {
         Member member = Member.builder().id(1L).email("a@test.local").name("A").build();
-        ProjectUpsertRequest projectRequest = new ProjectUpsertRequest(
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        CiProjectUpsertRequest projectRequest = new CiProjectUpsertRequest(
+                null, null, null, null, null, null, null, null, null, null);
         when(onboardingRepository.findById(1L)).thenReturn(Optional.empty());
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
         when(onboardingRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.complete(1L, new OnboardingUpsertRequest(
-                List.of("online"), "all", MemberOnboarding.DetailsDecision.SUBMITTED, projectRequest));
+                List.of("online"), "all", MemberOnboarding.DetailsDecision.SUBMITTED, projectRequest, null));
 
-        verify(projectService).createInitial(member, projectRequest);
+        verify(ciProjectService).createInitial(member, projectRequest);
     }
 
     @Test
@@ -101,7 +103,7 @@ class OnboardingServiceTest {
         when(onboardingRepository.findById(1L)).thenReturn(Optional.of(existing));
 
         service.complete(1L, new OnboardingUpsertRequest(
-                List.of("OTHER"), "changed", MemberOnboarding.DetailsDecision.SKIPPED, null));
+                List.of("OTHER"), "changed", MemberOnboarding.DetailsDecision.SKIPPED, null, null));
 
         verify(onboardingRepository, never()).save(any());
         verify(memberRepository, never()).findById(any());

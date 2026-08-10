@@ -8,7 +8,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "logo_generations", uniqueConstraints = {
-        @UniqueConstraint(name = "uq_logo_generation_idempotency", columnNames = {"project_id", "idempotency_key"})
+        @UniqueConstraint(name = "uq_ci_generation_idempotency", columnNames = {"ci_project_id", "idempotency_key"}),
+        @UniqueConstraint(name = "uq_bi_generation_idempotency", columnNames = {"bi_project_id", "idempotency_key"})
 })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class LogoGeneration {
@@ -20,18 +21,18 @@ public class LogoGeneration {
     @Column(name = "public_id", nullable = false, unique = true, length = 36, updatable = false)
     private String publicId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "project_id", nullable = false, foreignKey = @ForeignKey(name = "fk_generation_project"))
-    private Project project;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ci_project_id", foreignKey = @ForeignKey(name = "fk_generation_ci_project"))
+    private CiProject ciProject;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "bi_project_id", foreignKey = @ForeignKey(name = "fk_generation_bi_project"))
+    private BiProject biProject;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
     @Builder.Default
     private Status status = Status.QUEUED;
-
-    @Column(name = "candidate_count", nullable = false)
-    @Builder.Default
-    private int candidateCount = 4;
 
     @Column(name = "model_name", length = 100)
     private String modelName;
@@ -65,4 +66,21 @@ public class LogoGeneration {
         createdAt = LocalDateTime.now(); updatedAt = createdAt;
     }
     @PreUpdate void onUpdate() { updatedAt = LocalDateTime.now(); }
+
+    /** Whichever of ci_project_id / bi_project_id is set (the DB CHECK guarantees exactly one is). */
+    public ProjectLike getProject() {
+        return ciProject != null ? ciProject : biProject;
+    }
+
+    public void setProject(ProjectLike project) {
+        if (project instanceof CiProject ci) {
+            this.ciProject = ci;
+            this.biProject = null;
+        } else if (project instanceof BiProject bi) {
+            this.biProject = bi;
+            this.ciProject = null;
+        } else {
+            throw new IllegalArgumentException("Unknown project type: " + project);
+        }
+    }
 }

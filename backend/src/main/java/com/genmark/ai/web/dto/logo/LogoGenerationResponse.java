@@ -8,7 +8,6 @@ public record LogoGenerationResponse(
         String id,
         String projectId,
         LogoGeneration.Status status,
-        int candidateCount,
         String modelName,
         String errorCode,
         String errorMessage,

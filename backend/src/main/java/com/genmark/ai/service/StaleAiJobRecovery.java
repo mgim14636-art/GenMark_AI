@@ -1,7 +1,7 @@
 package com.genmark.ai.service;
 
 import com.genmark.ai.entity.LogoGeneration;
-import com.genmark.ai.entity.Project;
+import com.genmark.ai.entity.ProjectStatus;
 import com.genmark.ai.entity.TrademarkAnalysis;
 import com.genmark.ai.repository.LogoGenerationRepository;
 import com.genmark.ai.repository.TrademarkAnalysisRepository;
@@ -36,14 +36,14 @@ public class StaleAiJobRecovery implements ApplicationRunner {
             job.setErrorCode("WORKER_RESTARTED");
             job.setErrorMessage("서버 재시작으로 생성 작업이 중단되었습니다. 다시 요청해 주세요.");
             job.setCompletedAt(LocalDateTime.now());
-            job.getProject().setStatus(Project.Status.BRIEF_READY);
+            job.getProject().setStatus(ProjectStatus.BRIEF_READY);
         });
         analysisRepository.findByStatusAndStartedAtBefore(TrademarkAnalysis.Status.RUNNING, threshold).forEach(job -> {
             job.setStatus(TrademarkAnalysis.Status.FAILED);
             job.setErrorCode("WORKER_RESTARTED");
             job.setErrorMessage("서버 재시작으로 분석 작업이 중단되었습니다. 다시 요청해 주세요.");
             job.setCompletedAt(LocalDateTime.now());
-            job.getProject().setStatus(Project.Status.RESULT_READY);
+            job.getProject().setStatus(ProjectStatus.RESULT_READY);
         });
     }
 }

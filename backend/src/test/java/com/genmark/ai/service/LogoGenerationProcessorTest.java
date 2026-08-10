@@ -2,8 +2,9 @@ package com.genmark.ai.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.genmark.ai.client.LogoAiClient;
+import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.LogoGeneration;
-import com.genmark.ai.entity.Project;
+import com.genmark.ai.entity.ProjectStatus;
 import com.genmark.ai.repository.LogoCandidateRepository;
 import com.genmark.ai.repository.LogoGenerationRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +31,7 @@ class LogoGenerationProcessorTest {
 
     @BeforeEach void setUp() {
         processor = new LogoGenerationProcessor(generationRepository, candidateRepository, aiClient, storage, new ObjectMapper());
-        generation = LogoGeneration.builder().id(10L).publicId("g").project(Project.builder().build())
+        generation = LogoGeneration.builder().id(10L).publicId("g").ciProject(CiProject.builder().build())
                 .status(LogoGeneration.Status.QUEUED).requestSnapshotJson("{}").build();
         when(generationRepository.findById(10L)).thenReturn(Optional.of(generation));
     }
@@ -56,7 +57,7 @@ class LogoGenerationProcessorTest {
         processor.process(10L);
 
         assertThat(generation.getStatus()).isEqualTo(LogoGeneration.Status.SUCCEEDED);
-        assertThat(generation.getProject().getStatus()).isEqualTo(Project.Status.RESULT_READY);
+        assertThat(generation.getProject().getStatus()).isEqualTo(ProjectStatus.RESULT_READY);
         verify(candidateRepository, times(4)).save(any());
     }
 }

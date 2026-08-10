@@ -1,12 +1,13 @@
 package com.genmark.ai.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.LogoCandidate;
 import com.genmark.ai.entity.LogoGeneration;
-import com.genmark.ai.entity.Project;
+import com.genmark.ai.repository.BiProjectRepository;
+import com.genmark.ai.repository.CiProjectRepository;
 import com.genmark.ai.repository.LogoCandidateRepository;
 import com.genmark.ai.repository.LogoGenerationRepository;
-import com.genmark.ai.repository.ProjectRepository;
 import com.genmark.ai.web.exception.ApiException;
 import com.genmark.ai.web.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,27 +27,27 @@ class LogoCandidateRetrievalServiceTest {
     private static final Long MEMBER_ID = 7L;
     private static final Long PROJECT_ID = 10L;
 
-    private ProjectService projectService;
+    private ProjectLookupService projectLookup;
     private LogoGenerationRepository generationRepository;
     private LogoCandidateRepository candidateRepository;
     private LogoGenerationService service;
-    private Project project;
+    private CiProject project;
 
     @BeforeEach
     void setUp() {
-        projectService = mock(ProjectService.class);
+        projectLookup = mock(ProjectLookupService.class);
         generationRepository = mock(LogoGenerationRepository.class);
         candidateRepository = mock(LogoCandidateRepository.class);
-        service = new LogoGenerationService(projectService, mock(ProjectRepository.class), generationRepository,
-                candidateRepository, mock(LogoGenerationWorker.class), new ObjectMapper());
-        project = Project.builder().id(PROJECT_ID).publicId("project-1").build();
-        when(projectService.requireOwned("project-1", MEMBER_ID)).thenReturn(project);
+        service = new LogoGenerationService(projectLookup, mock(CiProjectRepository.class), mock(BiProjectRepository.class),
+                generationRepository, candidateRepository, mock(LogoGenerationWorker.class), new ObjectMapper());
+        project = CiProject.builder().id(PROJECT_ID).publicId("project-1").build();
+        when(projectLookup.requireOwned("project-1", MEMBER_ID)).thenReturn(project);
     }
 
     @Test
     void returnsOnlyCandidatesForRequestedGenerationInCandidateOrder() {
         LogoGeneration requested = succeededGeneration(22L, "generation-2");
-        when(generationRepository.findByPublicIdAndProjectIdAndProjectMemberId(
+        when(generationRepository.findByPublicIdAndCiProjectIdAndCiProjectMemberId(
                 "generation-2", PROJECT_ID, MEMBER_ID)).thenReturn(Optional.of(requested));
         when(candidateRepository.findByGenerationIdOrderByCandidateOrder(22L))
                 .thenReturn(candidates(requested, "new"));
@@ -63,7 +64,7 @@ class LogoCandidateRetrievalServiceTest {
     @Test
     void doesNotMixCandidatesFromEarlierGenerationInSameProject() {
         LogoGeneration latest = succeededGeneration(22L, "generation-2");
-        when(generationRepository.findByPublicIdAndProjectIdAndProjectMemberId(
+        when(generationRepository.findByPublicIdAndCiProjectIdAndCiProjectMemberId(
                 "generation-2", PROJECT_ID, MEMBER_ID)).thenReturn(Optional.of(latest));
         when(candidateRepository.findByGenerationIdOrderByCandidateOrder(22L))
                 .thenReturn(candidates(latest, "latest"));
@@ -76,7 +77,7 @@ class LogoCandidateRetrievalServiceTest {
 
     @Test
     void returnsNotFoundWhenGenerationBelongsToAnotherProject() {
-        when(generationRepository.findByPublicIdAndProjectIdAndProjectMemberId(
+        when(generationRepository.findByPublicIdAndCiProjectIdAndCiProjectMemberId(
                 "generation-other-project", PROJECT_ID, MEMBER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.candidates("project-1", "generation-other-project", MEMBER_ID))
@@ -86,7 +87,7 @@ class LogoCandidateRetrievalServiceTest {
 
     @Test
     void returnsNotFoundWhenGenerationBelongsToAnotherMember() {
-        when(generationRepository.findByPublicIdAndProjectIdAndProjectMemberId(
+        when(generationRepository.findByPublicIdAndCiProjectIdAndCiProjectMemberId(
                 "generation-other-member", PROJECT_ID, MEMBER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.candidates("project-1", "generation-other-member", MEMBER_ID))
@@ -97,7 +98,7 @@ class LogoCandidateRetrievalServiceTest {
     @Test
     void rejectsIncompleteCandidateSetForSucceededGeneration() {
         LogoGeneration generation = succeededGeneration(22L, "generation-2");
-        when(generationRepository.findByPublicIdAndProjectIdAndProjectMemberId(
+        when(generationRepository.findByPublicIdAndCiProjectIdAndCiProjectMemberId(
                 "generation-2", PROJECT_ID, MEMBER_ID)).thenReturn(Optional.of(generation));
         when(candidateRepository.findByGenerationIdOrderByCandidateOrder(22L))
                 .thenReturn(candidates(generation, "incomplete").subList(0, 3));
@@ -111,9 +112,8 @@ class LogoCandidateRetrievalServiceTest {
         return LogoGeneration.builder()
                 .id(id)
                 .publicId(publicId)
-                .project(project)
+                .ciProject(project)
                 .status(LogoGeneration.Status.SUCCEEDED)
-                .candidateCount(4)
                 .completedAt(LocalDateTime.now())
                 .build();
     }

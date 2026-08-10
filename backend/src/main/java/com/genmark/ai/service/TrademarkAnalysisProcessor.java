@@ -1,7 +1,7 @@
 package com.genmark.ai.service;
 
 import com.genmark.ai.client.TrademarkAiClient;
-import com.genmark.ai.entity.Project;
+import com.genmark.ai.entity.ProjectStatus;
 import com.genmark.ai.entity.TrademarkAnalysis;
 import com.genmark.ai.entity.TrademarkMatch;
 import com.genmark.ai.repository.TrademarkAnalysisRepository;
@@ -44,11 +44,11 @@ public class TrademarkAnalysisProcessor {
                         .similarity(match.similarity()).imagePath(match.imagePath()).build());
             }
             analysis.setStatus(TrademarkAnalysis.Status.SUCCEEDED);
-            analysis.getProject().setStatus(Project.Status.COMPLETED);
+            analysis.getProject().setStatus(ProjectStatus.COMPLETED);
             analysis.setCompletedAt(LocalDateTime.now());
         } catch (Exception ex) {
             analysis.setStatus(TrademarkAnalysis.Status.FAILED);
-            analysis.getProject().setStatus(Project.Status.RESULT_READY);
+            analysis.getProject().setStatus(ProjectStatus.RESULT_READY);
             analysis.setErrorCode(ex instanceof ApiException api ? api.getErrorCode().name() : ErrorCode.AI_UNAVAILABLE.name());
             analysis.setErrorMessage(safeMessage(ex));
             analysis.setCompletedAt(LocalDateTime.now());

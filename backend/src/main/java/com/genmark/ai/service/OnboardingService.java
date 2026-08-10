@@ -23,7 +23,8 @@ import java.util.stream.Stream;
 public class OnboardingService {
     private final MemberOnboardingRepository onboardingRepository;
     private final MemberRepository memberRepository;
-    private final ProjectService projectService;
+    private final CiProjectService ciProjectService;
+    private final BiProjectService biProjectService;
 
     public boolean isCompleted(Long memberId) {
         return onboardingRepository.existsByMemberIdAndCompletedAtIsNotNull(memberId);
@@ -39,14 +40,18 @@ public class OnboardingService {
         MemberOnboarding existing = onboardingRepository.findById(memberId).orElse(null);
         if (existing != null && existing.getCompletedAt() != null) return toResponse(existing);
 
-        if (request.detailsDecision() == MemberOnboarding.DetailsDecision.SUBMITTED
-                && request.initialProject() == null) {
+        boolean hasCi = request.initialCiProject() != null;
+        boolean hasBi = request.initialBiProject() != null;
+        if (request.detailsDecision() == MemberOnboarding.DetailsDecision.SUBMITTED && !hasCi && !hasBi) {
             throw new ApiException(ErrorCode.ONBOARDING_DETAILS_REQUIRED);
         }
-        if (request.detailsDecision() == MemberOnboarding.DetailsDecision.SKIPPED
-                && request.initialProject() != null) {
+        if (request.detailsDecision() == MemberOnboarding.DetailsDecision.SUBMITTED && hasCi && hasBi) {
             throw new ApiException(ErrorCode.VALIDATION_ERROR,
-                    "상세정보를 건너뛸 때는 initialProject를 보내지 마세요.");
+                    "initialCiProject와 initialBiProject 중 하나만 보내세요.");
+        }
+        if (request.detailsDecision() == MemberOnboarding.DetailsDecision.SKIPPED && (hasCi || hasBi)) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR,
+                    "상세정보를 건너뛸 때는 initialCiProject/initialBiProject를 보내지 마세요.");
         }
         if (request.usage().size() > 3) {
             throw new ApiException(ErrorCode.VALIDATION_ERROR, "usage는 최대 3개까지 선택할 수 있습니다.");
@@ -54,8 +59,10 @@ public class OnboardingService {
 
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new ApiException(ErrorCode.AUTH_REQUIRED));
-        if (request.detailsDecision() == MemberOnboarding.DetailsDecision.SUBMITTED) {
-            projectService.createInitial(member, request.initialProject());
+        if (hasCi) {
+            ciProjectService.createInitial(member, request.initialCiProject());
+        } else if (hasBi) {
+            biProjectService.createInitial(member, request.initialBiProject());
         }
 
         List<String> usage = request.usage();

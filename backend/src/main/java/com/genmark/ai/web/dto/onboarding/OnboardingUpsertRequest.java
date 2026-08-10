@@ -1,7 +1,8 @@
 package com.genmark.ai.web.dto.onboarding;
 
 import com.genmark.ai.entity.MemberOnboarding;
-import com.genmark.ai.web.dto.project.ProjectUpsertRequest;
+import com.genmark.ai.web.dto.project.BiProjectUpsertRequest;
+import com.genmark.ai.web.dto.project.CiProjectUpsertRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotBlank;
@@ -14,5 +15,6 @@ public record OnboardingUpsertRequest(
         @NotEmpty List<@NotBlank @Size(max = 100) String> usage,
         @NotBlank @Size(max = 100) String audience,
         @NotNull MemberOnboarding.DetailsDecision detailsDecision,
-        @Valid ProjectUpsertRequest initialProject
+        @Valid CiProjectUpsertRequest initialCiProject,
+        @Valid BiProjectUpsertRequest initialBiProject
 ) {}

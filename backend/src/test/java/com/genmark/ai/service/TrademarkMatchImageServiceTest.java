@@ -1,6 +1,8 @@
 package com.genmark.ai.service;
 
-import com.genmark.ai.entity.Project;
+import com.genmark.ai.entity.CiProject;
+import com.genmark.ai.entity.LogoCandidate;
+import com.genmark.ai.entity.LogoGeneration;
 import com.genmark.ai.entity.TrademarkAnalysis;
 import com.genmark.ai.entity.TrademarkMatch;
 import com.genmark.ai.repository.TrademarkAnalysisRepository;
@@ -25,14 +27,14 @@ class TrademarkMatchImageServiceTest {
 
     @TempDir Path imageRoot;
 
-    private final ProjectService projectService = mock(ProjectService.class);
+    private final ProjectLookupService projectLookup = mock(ProjectLookupService.class);
     private final TrademarkAnalysisRepository analysisRepository = mock(TrademarkAnalysisRepository.class);
     private final TrademarkMatchRepository matchRepository = mock(TrademarkMatchRepository.class);
     private TrademarkMatchImageService service;
 
     @BeforeEach
     void setUp() {
-        service = new TrademarkMatchImageService(projectService, analysisRepository, matchRepository,
+        service = new TrademarkMatchImageService(projectLookup, analysisRepository, matchRepository,
                 imageRoot.toString(), MAX_IMAGE_BYTES);
     }
 
@@ -42,15 +44,15 @@ class TrademarkMatchImageServiceTest {
         Path image = imageRoot.resolve("raw/sample.png");
         Files.createDirectories(image.getParent());
         Files.write(image, png);
-        stubOwnedMatch("raw/sample.png");
+        stubOwnedMatch("project-1", "raw/sample.png");
 
         TrademarkMatchImageService.ImageContent result = service.load("project-1", "analysis-1", 2, 7L);
 
         assertThat(result.bytes()).isEqualTo(png);
         assertThat(result.contentType()).isEqualTo(MediaType.IMAGE_PNG);
         assertThat(result.filename()).isEqualTo("sample.png");
-        verify(projectService).requireOwned("project-1", 7L);
-        verify(analysisRepository).findByPublicIdAndProjectMemberId("analysis-1", 7L);
+        verify(projectLookup).requireOwned("project-1", 7L);
+        verify(analysisRepository).findByPublicIdAndCandidateGenerationCiProjectMemberId("analysis-1", 7L);
         verify(matchRepository).findByAnalysisIdAndRank(11L, 2);
     }
 
@@ -60,7 +62,7 @@ class TrademarkMatchImageServiceTest {
         Path image = imageRoot.resolve("raw/sample.bin");
         Files.createDirectories(image.getParent());
         Files.write(image, jpeg);
-        stubOwnedMatch("raw/sample.bin");
+        stubOwnedMatch("project-1", "raw/sample.bin");
 
         TrademarkMatchImageService.ImageContent result = service.load("project-1", "analysis-1", 2, 7L);
 
@@ -74,8 +76,8 @@ class TrademarkMatchImageServiceTest {
         Path image = imageRoot.resolve("raw/oversized.png");
         Files.createDirectories(image.getParent());
         Files.write(image, oversized);
-        stubOwnedMatch("raw/oversized.png");
-        service = new TrademarkMatchImageService(projectService, analysisRepository, matchRepository,
+        stubOwnedMatch("project-1", "raw/oversized.png");
+        service = new TrademarkMatchImageService(projectLookup, analysisRepository, matchRepository,
                 imageRoot.toString(), 8);
 
         assertNotFound(() -> service.load("project-1", "analysis-1", 2, 7L));
@@ -86,7 +88,7 @@ class TrademarkMatchImageServiceTest {
         Path image = imageRoot.resolve("raw/not-image.png");
         Files.createDirectories(image.getParent());
         Files.write(image, new byte[] {0x01, 0x02, 0x03, 0x04});
-        stubOwnedMatch("raw/not-image.png");
+        stubOwnedMatch("project-1", "raw/not-image.png");
 
         assertNotFound(() -> service.load("project-1", "analysis-1", 2, 7L));
     }
@@ -102,16 +104,16 @@ class TrademarkMatchImageServiceTest {
         } catch (UnsupportedOperationException | java.io.IOException | SecurityException exception) {
             org.junit.jupiter.api.Assumptions.abort("Symbolic links are unavailable: " + exception.getMessage());
         }
-        stubOwnedMatch("raw/link.png");
+        stubOwnedMatch("project-1", "raw/link.png");
 
         assertNotFound(() -> service.load("project-1", "analysis-1", 2, 7L));
     }
 
     @Test
     void rejectsAnalysisFromAnotherProjectBeforeMatchLookup() {
-        Project project = Project.builder().publicId("project-2").build();
-        TrademarkAnalysis analysis = TrademarkAnalysis.builder().id(11L).publicId("analysis-1").project(project).build();
-        when(analysisRepository.findByPublicIdAndProjectMemberId("analysis-1", 7L)).thenReturn(Optional.of(analysis));
+        TrademarkAnalysis analysis = analysisFor("project-2");
+        when(analysisRepository.findByPublicIdAndCandidateGenerationCiProjectMemberId("analysis-1", 7L))
+                .thenReturn(Optional.of(analysis));
 
         assertNotFound(() -> service.load("project-1", "analysis-1", 2, 7L));
 
@@ -120,9 +122,9 @@ class TrademarkMatchImageServiceTest {
 
     @Test
     void rejectsRankThatDoesNotBelongToAnalysis() {
-        Project project = Project.builder().publicId("project-1").build();
-        TrademarkAnalysis analysis = TrademarkAnalysis.builder().id(11L).publicId("analysis-1").project(project).build();
-        when(analysisRepository.findByPublicIdAndProjectMemberId("analysis-1", 7L)).thenReturn(Optional.of(analysis));
+        TrademarkAnalysis analysis = analysisFor("project-1");
+        when(analysisRepository.findByPublicIdAndCandidateGenerationCiProjectMemberId("analysis-1", 7L))
+                .thenReturn(Optional.of(analysis));
         when(matchRepository.findByAnalysisIdAndRank(11L, 99)).thenReturn(Optional.empty());
 
         assertNotFound(() -> service.load("project-1", "analysis-1", 99, 7L));
@@ -130,21 +132,28 @@ class TrademarkMatchImageServiceTest {
 
     @Test
     void returnsNotFoundForMissingImageFile() {
-        stubOwnedMatch("raw/missing.jpg");
+        stubOwnedMatch("project-1", "raw/missing.jpg");
         assertNotFound(() -> service.load("project-1", "analysis-1", 2, 7L));
     }
 
     @Test
     void rejectsPathTraversalOutsideConfiguredRoot() {
-        stubOwnedMatch("../outside.png");
+        stubOwnedMatch("project-1", "../outside.png");
         assertNotFound(() -> service.load("project-1", "analysis-1", 2, 7L));
     }
 
-    private void stubOwnedMatch(String imagePath) {
-        Project project = Project.builder().publicId("project-1").build();
-        TrademarkAnalysis analysis = TrademarkAnalysis.builder().id(11L).publicId("analysis-1").project(project).build();
+    private TrademarkAnalysis analysisFor(String projectPublicId) {
+        CiProject project = CiProject.builder().publicId(projectPublicId).build();
+        LogoGeneration generation = LogoGeneration.builder().ciProject(project).build();
+        LogoCandidate candidate = LogoCandidate.builder().generation(generation).build();
+        return TrademarkAnalysis.builder().id(11L).publicId("analysis-1").candidate(candidate).build();
+    }
+
+    private void stubOwnedMatch(String projectPublicId, String imagePath) {
+        TrademarkAnalysis analysis = analysisFor(projectPublicId);
         TrademarkMatch match = TrademarkMatch.builder().analysis(analysis).rank(2).imagePath(imagePath).build();
-        when(analysisRepository.findByPublicIdAndProjectMemberId("analysis-1", 7L)).thenReturn(Optional.of(analysis));
+        when(analysisRepository.findByPublicIdAndCandidateGenerationCiProjectMemberId("analysis-1", 7L))
+                .thenReturn(Optional.of(analysis));
         when(matchRepository.findByAnalysisIdAndRank(11L, 2)).thenReturn(Optional.of(match));
     }
 
