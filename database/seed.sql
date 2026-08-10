@@ -2,10 +2,12 @@
 
 USE `genmark_db`;
 
--- Sample Member (Password: password123 encoded with BCrypt)
-INSERT INTO `members` (`id`, `email`, `password`, `name`, `role`) VALUES
-(1, 'admin@genmark.ai', '$2a$10$E2b7bC3K3O6C6F7G8H9I0.J1K2L3M4N5O6P7Q8R9S0T1U2V3W4X5Y', 'Admin User', 'ROLE_ADMIN'),
-(2, 'user@genmark.ai', '$2a$10$E2b7bC3K3O6C6F7G8H9I0.J1K2L3M4N5O6P7Q8R9S0T1U2V3W4X5Y', 'Test User', 'ROLE_USER')
+-- Sample Member
+-- password / role 컬럼은 V8 마이그레이션에서 제거됐다. 로그인은 소셜 로그인만 지원하므로
+-- 이 시드 회원으로는 실제 로그인이 불가능하다 (프로젝트 등 하위 데이터의 FK 용도).
+INSERT INTO `members` (`id`, `email`, `name`) VALUES
+(1, 'admin@genmark.ai', 'Admin User'),
+(2, 'user@genmark.ai', 'Test User')
 ON DUPLICATE KEY UPDATE `id`=`id`;
 
 -- Sample Project
