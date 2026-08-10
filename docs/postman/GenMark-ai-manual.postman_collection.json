@@ -40,7 +40,7 @@
     },
     {
       "name": "3. List candidates and select first id",
-      "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/projects/{{projectId}}/logo-candidates"},
+      "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/projects/{{projectId}}/logo-generations/{{generationId}}/logo-candidates"},
       "event": [{"listen": "test", "script": {"exec": [
         "pm.test('candidate list 200', () => pm.response.to.have.status(200));",
         "var candidates = pm.response.json().data;",
@@ -77,7 +77,23 @@
       "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/projects/{{projectId}}/trademark-analyses/{{analysisId}}/matches"},
       "event": [{"listen": "test", "script": {"exec": [
         "pm.test('matches 200', () => pm.response.to.have.status(200));",
-        "pm.test('three matches after success', () => pm.expect(pm.response.json().data.length).to.eql(3));"
+        "var matches = pm.response.json().data;",
+        "pm.test('three matches after success', () => pm.expect(matches.length).to.eql(3));",
+        "pm.test('each match has imageUrl', () => matches.forEach(match => pm.expect(match.imageUrl).to.be.a('string').and.not.empty));",
+        "if (matches.length > 0) pm.environment.set('matchRank', matches[0].rank);"
+      ]}}]
+    },
+    {
+      "name": "8. Get real trademark image",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Accept", "value": "image/*"}],
+        "url": "{{baseUrl}}/api/v1/projects/{{projectId}}/trademark-analyses/{{analysisId}}/matches/{{matchRank}}/image"
+      },
+      "event": [{"listen": "test", "script": {"exec": [
+        "pm.test('trademark image 200', () => pm.response.to.have.status(200));",
+        "pm.test('image content type', () => pm.expect(pm.response.headers.get('Content-Type')).to.match(/^image\\/(jpeg|png)/));",
+        "pm.test('image has bytes', () => pm.expect(pm.response.responseSize).to.be.above(0));"
       ]}}]
     }
   ]

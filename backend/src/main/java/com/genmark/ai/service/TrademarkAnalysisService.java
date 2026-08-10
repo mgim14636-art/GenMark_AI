@@ -59,7 +59,7 @@ public class TrademarkAnalysisService {
         TrademarkAnalysis analysis = requireOwned(analysisId, memberId);
         if (!analysis.getProject().getPublicId().equals(projectId)) throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
         return matchRepository.findByAnalysisIdOrderByRank(analysis.getId()).stream()
-                .map(this::toResponse).toList();
+                .map(match -> toResponse(match, projectId, analysisId)).toList();
     }
 
     private TrademarkAnalysis requireOwned(String analysisId, Long memberId) {
@@ -86,9 +86,11 @@ public class TrademarkAnalysisService {
                 a.getCompletedAt(), a.getCreatedAt());
     }
 
-    private TrademarkMatchResponse toResponse(TrademarkMatch m) {
+    private TrademarkMatchResponse toResponse(TrademarkMatch m, String projectId, String analysisId) {
+        String imageUrl = "/api/v1/projects/%s/trademark-analyses/%s/matches/%d/image"
+                .formatted(projectId, analysisId, m.getRank());
         return new TrademarkMatchResponse(m.getRank(), m.getApplicationNumber(), m.getName(), m.getCategory(),
-                m.getSimilarity(), m.getImagePath());
+                m.getSimilarity(), m.getImagePath(), imageUrl);
     }
 
     private void runAfterCommit(Runnable task) {

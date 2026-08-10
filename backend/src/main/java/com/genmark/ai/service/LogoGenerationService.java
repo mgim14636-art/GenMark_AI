@@ -59,18 +59,26 @@ public class LogoGenerationService {
     }
 
     public LogoGenerationResponse get(String projectId, String generationId, Long memberId) {
-        projectService.requireOwned(projectId, memberId);
-        LogoGeneration generation = generationRepository.findByPublicIdAndProjectMemberId(generationId, memberId)
-                .filter(g -> g.getProject().getPublicId().equals(projectId))
-                .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
-        return toResponse(generation);
+        Project project = projectService.requireOwned(projectId, memberId);
+        return toResponse(requireOwnedGeneration(project, generationId, memberId));
     }
 
+    /**
+     * Legacy project-scoped endpoint. Keep it safe for older clients by returning only the
+     * latest successful generation instead of mixing candidates from every generation.
+     */
     public List<LogoCandidateResponse> candidates(String projectId, Long memberId) {
         Project project = projectService.requireOwned(projectId, memberId);
-        return candidateRepository
-                .findByGenerationProjectIdAndGenerationProjectMemberIdOrderByCandidateOrder(project.getId(), memberId)
-                .stream().map(this::toResponse).toList();
+        LogoGeneration generation = generationRepository
+                .findFirstByProjectIdAndStatusOrderByCompletedAtDesc(project.getId(), LogoGeneration.Status.SUCCEEDED)
+                .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
+        return candidatesFor(generation);
+    }
+
+    public List<LogoCandidateResponse> candidates(String projectId, String generationId, Long memberId) {
+        Project project = projectService.requireOwned(projectId, memberId);
+        LogoGeneration generation = requireOwnedGeneration(project, generationId, memberId);
+        return candidatesFor(generation);
     }
 
     @Transactional
@@ -107,6 +115,24 @@ public class LogoGenerationService {
     private String writeJson(Object value) {
         try { return objectMapper.writeValueAsString(value); }
         catch (JsonProcessingException e) { throw new ApiException(ErrorCode.INTERNAL_ERROR); }
+    }
+
+    private LogoGeneration requireOwnedGeneration(Project project, String generationId, Long memberId) {
+        return generationRepository
+                .findByPublicIdAndProjectIdAndProjectMemberId(generationId, project.getId(), memberId)
+                .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    private List<LogoCandidateResponse> candidatesFor(LogoGeneration generation) {
+        if (generation.getStatus() != LogoGeneration.Status.SUCCEEDED) {
+            throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "완료된 생성 작업의 후보만 조회할 수 있습니다.");
+        }
+        List<LogoCandidate> candidates = candidateRepository
+                .findByGenerationIdOrderByCandidateOrder(generation.getId());
+        if (generation.getCandidateCount() != 4 || candidates.size() != 4) {
+            throw new ApiException(ErrorCode.AI_INCOMPLETE_RESULT);
+        }
+        return candidates.stream().map(this::toResponse).toList();
     }
 
     private void runAfterCommit(Runnable task) {
