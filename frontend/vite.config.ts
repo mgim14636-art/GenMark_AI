@@ -12,5 +12,13 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.BACKEND_PORT': JSON.stringify(env.BACKEND_PORT ?? ''),
     },
     plugins: [react()],
+    server: {
+      proxy: {
+        '/api': {
+          target: `http://localhost:${env.BACKEND_PORT || '8081'}`,
+          changeOrigin: true,
+        },
+      },
+    },
   }
 })
