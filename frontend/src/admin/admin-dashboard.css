@@ -39,7 +39,7 @@
 
 .admin-brand strong { font-weight: 800; }
 .admin-brand em { color: var(--admin-pink); font-style: normal; }
-.admin-brand-mark { width: 24px; height: 30px; object-fit: contain; }
+.admin-brand-mark { display: grid; place-items: center; color: #a46bea; }
 
 .admin-service-search {
   display: block;
@@ -126,6 +126,9 @@
 
 .admin-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 19px; margin-bottom: 22px; }
 .admin-generation-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.admin-generation-single-kpi-grid { grid-template-columns: minmax(0, 1fr); }
+.admin-download-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.admin-signup-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .admin-kpi-card { display: flex; align-items: center; gap: 13px; min-height: 122px; padding: 20px 18px; border: 1px solid var(--admin-border); border-radius: 17px; background: #fff; box-shadow: 0 8px 24px rgb(71 57 116 / .04); }
 .admin-kpi-icon { display: grid; width: 43px; height: 43px; flex: 0 0 43px; place-items: center; border-radius: 13px; }
 .admin-kpi-icon.purple { color: #7956e8; background: #eee9ff; }
@@ -149,6 +152,26 @@
 .admin-mini-line-axis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); width: 100%; color: #8b93a5; font-size: 9px; text-align: center; }
 .admin-mini-line-axis span { font-size: 9px; }
 .admin-mini-line-chart span, .admin-overview-chart-caption { color: #8b93a5; font-size: 11px; }
+.admin-chart-tooltip { transform-box: fill-box; transform-origin: center; transform: scale(1.22); }
+.admin-chart-tooltip text { pointer-events: none; }
+.admin-chart-tooltip text:first-of-type { font-size: 13px; }
+.admin-chart-tooltip text:last-of-type { font-size: 12px; }
+.admin-mini-dual-bars { display: flex; align-items: flex-end; justify-content: space-between; gap: 7px; height: 136px; margin-top: 18px; padding: 0 8px; border-bottom: 1px solid #eef0f5; background: repeating-linear-gradient(to bottom, transparent 0 31px, #f1f0f7 31px 32px); }
+.admin-mini-dual-group { display: flex; align-items: center; flex: 1; flex-direction: column; justify-content: flex-end; gap: 7px; min-width: 0; height: 100%; }
+.admin-mini-dual-group > div { display: flex; align-items: flex-end; justify-content: center; gap: 3px; width: 100%; height: calc(100% - 18px); }
+.admin-mini-dual-group i { display: block; width: min(14px, 42%); min-height: 10px; border-radius: 5px 5px 0 0; }
+.admin-mini-dual-group i[title] { position: relative; cursor: help; outline: none; }
+.admin-mini-dual-group i[title]::after { position: absolute; bottom: calc(100% + 8px); left: 50%; z-index: 3; padding: 6px 8px; border-radius: 7px; color: #fff; background: #202945; content: attr(title); font-size: 10px; font-style: normal; font-weight: 700; line-height: 1; opacity: 0; pointer-events: none; transform: translate(-50%, 3px); transition: opacity .16s ease, transform .16s ease; white-space: nowrap; }
+.admin-mini-dual-group i[title]:hover::after, .admin-mini-dual-group i[title]:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
+.admin-mini-dual-group i[title]:focus-visible { box-shadow: 0 0 0 3px rgb(141 112 237 / .22); }
+.admin-mini-dual-group i.ci { background: linear-gradient(180deg, #f2b274, #ed9d5c); }
+.admin-mini-dual-group i.bi { background: linear-gradient(180deg, #a487f3, #8d70ed); }
+.admin-mini-dual-group > span { overflow: hidden; width: 100%; color: #8b93a5; font-size: 9px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.admin-mini-dual-legend { display: flex; align-items: center; gap: 15px; margin-top: 9px; color: #7d8498; font-size: 10px; }
+.admin-mini-dual-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.admin-mini-dual-legend i { width: 8px; height: 8px; border-radius: 50%; }
+.admin-mini-dual-legend i.ci { background: #ed9d5c; }
+.admin-mini-dual-legend i.bi { background: #8d70ed; }
 .admin-mini-bars { display: flex; align-items: flex-end; gap: 8px; height: 133px; margin-top: 22px; padding: 0 8px; border-bottom: 1px solid #eef0f5; background: repeating-linear-gradient(to bottom, transparent 0 31px, #f1f0f7 31px 32px); }
 .admin-mini-bars i { display: block; width: 100%; min-width: 8px; border-radius: 7px 7px 0 0; background: linear-gradient(180deg, #9d8af5, #5d74db); }
 .admin-mini-bars-axis { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); width: 100%; margin-top: 7px; color: #8b93a5; font-size: 8px; text-align: center; }
