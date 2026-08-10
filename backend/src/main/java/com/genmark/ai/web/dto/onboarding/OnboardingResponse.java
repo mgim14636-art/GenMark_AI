@@ -10,11 +10,10 @@ public record OnboardingResponse(
         List<String> usage,
         String audience,
         MemberOnboarding.DetailsDecision detailsDecision,
-        String initialProjectId,
         LocalDateTime completedAt,
         int schemaVersion
 ) {
     public static OnboardingResponse incomplete() {
-        return new OnboardingResponse(false, List.of(), null, null, null, null, 1);
+        return new OnboardingResponse(false, List.of(), null, null, null, 1);
     }
 }

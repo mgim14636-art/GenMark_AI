@@ -39,16 +39,36 @@ class OnboardingServiceTest {
         Member member = Member.builder().id(1L).email("a@test.local").name("A").build();
         when(onboardingRepository.findById(1L)).thenReturn(Optional.empty());
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
-        when(projectService.writeList(List.of("PERSONAL"))).thenReturn("[\"PERSONAL\"]");
-        when(projectService.readList(any())).thenReturn(List.of("PERSONAL"));
         when(onboardingRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         OnboardingResponse response = service.complete(1L, new OnboardingUpsertRequest(
                 List.of("PERSONAL"), "20s", MemberOnboarding.DetailsDecision.SKIPPED, null));
 
         assertThat(response.completed()).isTrue();
-        assertThat(response.initialProjectId()).isNull();
+        assertThat(response.usage()).containsExactly("PERSONAL");
         verify(projectService, never()).createInitial(any(), any());
+    }
+
+    @Test
+    void multipleUsageValuesFillOptionalColumns() {
+        Member member = Member.builder().id(1L).email("a@test.local").name("A").build();
+        when(onboardingRepository.findById(1L)).thenReturn(Optional.empty());
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+        when(onboardingRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OnboardingResponse response = service.complete(1L, new OnboardingUpsertRequest(
+                List.of("online", "social", "offline"), "20s", MemberOnboarding.DetailsDecision.SKIPPED, null));
+
+        assertThat(response.usage()).containsExactly("online", "social", "offline");
+    }
+
+    @Test
+    void rejectsMoreThanThreeUsageValues() {
+        when(onboardingRepository.findById(1L)).thenReturn(Optional.empty());
+        OnboardingUpsertRequest request = new OnboardingUpsertRequest(
+                List.of("online", "social", "offline", "extra"), "20s", MemberOnboarding.DetailsDecision.SKIPPED, null);
+
+        assertThatThrownBy(() -> service.complete(1L, request)).isInstanceOf(ApiException.class);
     }
 
     @Test
@@ -60,11 +80,25 @@ class OnboardingServiceTest {
     }
 
     @Test
+    void submittedStillCreatesProjectEvenThoughLinkIsNoLongerStored() {
+        Member member = Member.builder().id(1L).email("a@test.local").name("A").build();
+        ProjectUpsertRequest projectRequest = new ProjectUpsertRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        when(onboardingRepository.findById(1L)).thenReturn(Optional.empty());
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+        when(onboardingRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.complete(1L, new OnboardingUpsertRequest(
+                List.of("online"), "all", MemberOnboarding.DetailsDecision.SUBMITTED, projectRequest));
+
+        verify(projectService).createInitial(member, projectRequest);
+    }
+
+    @Test
     void completedRequestIsIdempotent() {
-        MemberOnboarding existing = MemberOnboarding.builder().memberId(1L).usageJson("[]").audience("all")
+        MemberOnboarding existing = MemberOnboarding.builder().memberId(1L).usage1("online").audience("all")
                 .detailsDecision(MemberOnboarding.DetailsDecision.SKIPPED).completedAt(LocalDateTime.now()).build();
         when(onboardingRepository.findById(1L)).thenReturn(Optional.of(existing));
-        when(projectService.readList("[]")).thenReturn(List.of());
 
         service.complete(1L, new OnboardingUpsertRequest(
                 List.of("OTHER"), "changed", MemberOnboarding.DetailsDecision.SKIPPED, null));
