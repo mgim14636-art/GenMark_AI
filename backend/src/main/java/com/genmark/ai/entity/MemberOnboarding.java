@@ -25,8 +25,14 @@ public class MemberOnboarding {
     @JoinColumn(name = "member_id", foreignKey = @ForeignKey(name = "fk_onboarding_member"))
     private Member member;
 
-    @Column(name = "usage_json", nullable = false, columnDefinition = "TEXT")
-    private String usageJson;
+    @Column(name = "usage_1", nullable = false, length = 100)
+    private String usage1;
+
+    @Column(name = "usage_2", length = 100)
+    private String usage2;
+
+    @Column(name = "usage_3", length = 100)
+    private String usage3;
 
     @Column(nullable = false, length = 100)
     private String audience;
@@ -34,10 +40,6 @@ public class MemberOnboarding {
     @Enumerated(EnumType.STRING)
     @Column(name = "details_decision", nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
     private DetailsDecision detailsDecision;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "initial_project_id", foreignKey = @ForeignKey(name = "fk_onboarding_project"))
-    private Project initialProject;
 
     @Column(name = "completed_at", nullable = false)
     private LocalDateTime completedAt;

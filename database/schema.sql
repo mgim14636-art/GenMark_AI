@@ -45,16 +45,16 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS member_onboardings (
     member_id BIGINT PRIMARY KEY,
-    usage_json TEXT NOT NULL,
+    usage_1 VARCHAR(100) NOT NULL,
+    usage_2 VARCHAR(100) NULL,
+    usage_3 VARCHAR(100) NULL,
     audience VARCHAR(100) NOT NULL,
     details_decision VARCHAR(20) NOT NULL,
-    initial_project_id BIGINT NULL,
     completed_at DATETIME NOT NULL,
     schema_version INT NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_onboarding_member FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
-    CONSTRAINT fk_onboarding_project FOREIGN KEY (initial_project_id) REFERENCES projects(id) ON DELETE SET NULL
+    CONSTRAINT fk_onboarding_member FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS logo_generations (
