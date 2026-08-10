@@ -8,7 +8,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface LogoGenerationRepository extends JpaRepository<LogoGeneration, Long> {
-    Optional<LogoGeneration> findByPublicIdAndProjectMemberId(String publicId, Long memberId);
+    Optional<LogoGeneration> findByPublicIdAndProjectIdAndProjectMemberId(String publicId, Long projectId, Long memberId);
     Optional<LogoGeneration> findByProjectIdAndIdempotencyKey(Long projectId, String idempotencyKey);
+    Optional<LogoGeneration> findFirstByProjectIdAndStatusOrderByCompletedAtDesc(Long projectId, LogoGeneration.Status status);
     List<LogoGeneration> findByStatusAndStartedAtBefore(LogoGeneration.Status status, LocalDateTime threshold);
 }

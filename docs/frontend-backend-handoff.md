@@ -267,7 +267,7 @@ Idempotency-Key: 프론트가 생성한 UUID
 
 ### 후보
 
-- `GET /api/v1/projects/{projectId}/logo-candidates`
+- `GET /api/v1/projects/{projectId}/logo-generations/{generationId}/logo-candidates`
 - 성공 작업은 후보가 정확히 4개다.
 - `POST /api/v1/projects/{projectId}/logo-candidates/{candidateId}/select`
 
@@ -298,6 +298,9 @@ Idempotency-Key: 프론트가 생성한 UUID
 - `POST /api/v1/projects/{projectId}/trademark-analyses` → `202`
 - `GET /api/v1/projects/{projectId}/trademark-analyses/{analysisId}` → 상태 polling
 - `GET /api/v1/projects/{projectId}/trademark-analyses/{analysisId}/matches` → 성공 후 3개 결과
+- `GET /api/v1/projects/{projectId}/trademark-analyses/{analysisId}/matches/{rank}/image` → 실제 상표 이미지 binary
+
+`matches`의 각 항목에는 인증 이미지 endpoint인 `imageUrl`이 포함된다. `imagePath`는 서버 내부 경로이므로 프론트에서 사용하지 않는다. 이미지 endpoint도 JWT 인증이 필요하므로 `<img src>`로 직접 호출하지 말고 Bearer token을 포함한 `fetch` → `Blob` → `URL.createObjectURL` 순서로 표시한다. 상세 구현은 `docs/frontend-trademark-image-api-handoff.md`를 따른다.
 
 분석 상태:
 
@@ -323,7 +326,7 @@ risk:
 | 온보딩 완료 | `PUT /me/onboarding` | 성공 후 다음 화면 이동 |
 | 프로젝트 각 단계 다음 | `PATCH` 또는 단계별 `PUT` | 응답으로 로컬 상태 동기화 |
 | 생성 버튼 | `POST .../logo-generations` | `generationId` 저장, polling 시작 |
-| 생성 완료 | `GET .../logo-candidates` | 4개 검증 |
+| 생성 완료 | `GET .../logo-generations/{generationId}/logo-candidates` | 해당 생성 작업의 후보 4개 검증 |
 | 후보 선택 | `POST .../select` | 선택 상태 갱신 |
 | 분석 버튼 | `POST .../trademark-analyses` | `analysisId` 저장, polling 시작 |
 | 분석 완료 | `GET analysis` + `GET matches` | 요약·3개 matches·면책문 표시 |
@@ -334,11 +337,12 @@ risk:
 - `docs/postman/GenMark-core.postman_collection.json`
 - `docs/postman/GenMark-core.postman_environment.json`
 - `docs/postman/GenMark-ai-manual.postman_collection.json`
+- `docs/frontend-trademark-image-api-handoff.md`
 
 ## 11. 알려진 제한
 
 - 프론트는 현재 온보딩/프로젝트/생성/분석 API에 연결돼 있지 않다.
-- 후보 이미지 조회 전용 API가 아직 없다.
+- 상표 이미지 API는 Docker에서 `./ai-server/data/trademarks`를 Backend에 read-only로 mount해야 한다.
 - similarity 서버에 FAISS index와 상표 metadata가 없으면 분석 결과가 정상 생성되지 않는다.
 - 실제 로고 생성은 NVIDIA 외부 API 비용과 지연이 발생한다.
 - 운영 전 DB TLS 또는 암호화 터널 적용이 필요하다.

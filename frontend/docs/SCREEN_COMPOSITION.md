@@ -418,7 +418,7 @@ Hero(`hero`)를 제외한 화면은 앱 화면으로 취급한다.
 
 | 상호작용/요소 | ↑/↓ 데이터 |
 | --- | --- |
-| 후보 목록 | ↓ `GET /projects/{id}/logo-candidates` → 최대 4개 후보 |
+| 후보 목록 | ↓ `GET /projects/{id}/logo-generations/{generationId}/logo-candidates` → 해당 생성 작업의 후보 4개 |
 | 후보 이동 | 현재 `resultCandidate` LOCAL. 이미 받은 후보 배열 안에서 이동 |
 | 후보 선택 | ↑ `POST /projects/{id}/logo-candidates/{candidateId}/select` |
 | 좋아요/저장 | ↑ `POST /projects/{id}/logo-candidates/{candidateId}/save` `{ saved: boolean }` |

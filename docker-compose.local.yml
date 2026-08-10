@@ -18,12 +18,15 @@ services:
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
       AUTH_FAKE_PROVIDER_ENABLED: "true"
       CORS_ALLOWED_ORIGINS: http://localhost,http://localhost:5173
+      TRADEMARK_IMAGE_ROOT: /app/trademark-data
+      TRADEMARK_IMAGE_MAX_BYTES: ${TRADEMARK_IMAGE_MAX_BYTES:-5242880}
       TZ: Asia/Seoul
     ports:
       - "${BACKEND_PORT:-8081}:8081"
       - "18080:8081"
     volumes:
       - backend_uploads:/app/uploads
+      - ./ai-server/data/trademarks:/app/trademark-data:ro
     networks: [genmark-local-net]
 
   ai-server:
@@ -48,7 +51,7 @@ services:
     ports:
       - "${AI_SERVER_PORT:-8000}:8000"
     volumes:
-      - ./ai-server/data:/app/data
+      - ./ai-server/data:/app/data:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
