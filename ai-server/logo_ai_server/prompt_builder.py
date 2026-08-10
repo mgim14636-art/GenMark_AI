@@ -90,6 +90,50 @@ MOTIF_MAP = {
     ],
 }
 
+# 설문 화면(FR-06)의 "모티프 카테고리" 칩 — 사용자가 이걸 고르면 업종 고정 목록
+# (MOTIF_MAP) 대신 이 목록에서 모티프를 고른다. 예전엔 이 필드가 코드에서 아예 읽히지
+# 않아서 "동물/생명체"·"기하학적 도형"을 골라도 항상 잎사귀·물방울 같은 보태니컬
+# 모티프만 나오는 문제가 있었다(실측 확인됨).
+MOTIF_CATEGORY_MAP = {
+    "동물/생명체": [
+        "a stylized butterfly silhouette",
+        "an abstract bird in flight",
+        "a graceful swan curve",
+        "a leaping fox silhouette",
+        "a phoenix-like wing shape",
+        "a coiled serpent curve",
+    ],
+    "기하학적 도형": [
+        "an angular faceted polygon shape",
+        "an abstract hexagonal emblem",
+        "interlocking geometric rings",
+        "a sharp triangular prism shape",
+        "an abstract cube facet shape",
+        "a bold zigzag emblem",
+    ],
+    "원형/깔끔함": [
+        "a perfect circular badge shape",
+        "a clean minimal ring/halo shape",
+        "a smooth orbital circle",
+        "a simple circular seal shape",
+    ],
+    "보석/빛": [
+        "an abstract gem facet shape",
+        "a radiant glow/sunburst shape",
+        "a faceted crystal shape",
+        "a sparkling star burst shape",
+    ],
+}
+
+# 설문 화면의 "구체성" 칩 — 모티프를 얼마나 사실적으로 그릴지 지시한다. 이 지시가
+# 없으면 모델이 임의로 구체성 수준을 정해서, "완전 추상"을 골라도 사실적인 코스메틱
+# 병 그림이 나오는 등 의도와 다른 결과가 나올 수 있다(실측 확인됨).
+CONCRETENESS_MAP = {
+    "완전 추상": "purely abstract and non-representational, not a literal recognizable object",
+    "적당히 단순화": "simplified into clean geometric shapes, while still recognizable as its subject",
+    "사실적": "clearly recognizable and representational, close to the real subject",
+}
+
 # 가치 키워드별로 잘 어울리는 모티프를 우선 후보로 끌어올린다 — "프리미엄"을 고르면
 # 보석/글로우 계열이, "자연주의"를 고르면 식물 계열이 우선 반영되는 식으로, 선택한
 # 가치와 무관하게 아무 모티프나 고정 순환하지 않도록 한다.
@@ -164,20 +208,42 @@ def _resolve_values(survey: dict) -> str:
     return ""
 
 
-def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
-    """모티프를 브랜드명·선택한 가치 키워드에 따라 유동적으로 고른다.
+def _raw_motif_categories(survey: dict) -> list:
+    """설문 화면(FR-06)의 '모티프 카테고리' 칩 원본 값 목록(복수 선택 가능)."""
+    raw = survey.get("motif_category")
+    if isinstance(raw, str):
+        raw = [raw]
+    return list(raw or [])
 
-    업종 고정 목록을 그냥 순환하는 대신, 선택한 가치 키워드(VALUE_MOTIF_BIAS)에 해당하는
-    모티프를 후보 앞쪽으로 끌어올려 우선 반영하고, 브랜드명 문자열을 섞은 값으로 골라서
-    같은 업종·같은 톤이라도 브랜드명이 다르면 다른 모티프 조합이 나오게 한다.
+
+def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
+    """모티프를 고른다.
+
+    motif_category(사용자가 직접 고른 모티프 카테고리 칩, 예: "동물/생명체",
+    "기하학적 도형")가 있으면 MOTIF_CATEGORY_MAP에서 그 카테고리에 해당하는 후보만
+    쓴다 — 업종 고정 목록(MOTIF_MAP)은 사용자가 카테고리를 아예 지정하지 않았을 때만
+    쓰는 기본값이다. 이전에는 motif_category를 아예 읽지 않아서 "동물/생명체"를
+    골라도 항상 업종 고정 보태니컬 모티프(잎사귀·물방울 등)만 나왔다(실측 확인됨).
+
+    motif_category가 없으면 기존처럼 업종 고정 목록에서, 선택한 가치 키워드
+    (VALUE_MOTIF_BIAS)에 해당하는 모티프를 우선 후보로 끌어올려 고른다.
     """
-    pool = MOTIF_MAP.get(industry_key, MOTIF_MAP["기타"])
-    biased = []
-    for key in _raw_value_keys(survey):
-        for motif in VALUE_MOTIF_BIAS.get(key, []):
-            if motif in pool and motif not in biased:
-                biased.append(motif)
-    candidates = biased + [m for m in pool if m not in biased] if biased else pool
+    category_pool = []
+    for cat in _raw_motif_categories(survey):
+        for motif in MOTIF_CATEGORY_MAP.get(cat, []):
+            if motif not in category_pool:
+                category_pool.append(motif)
+
+    if category_pool:
+        candidates = category_pool
+    else:
+        pool = MOTIF_MAP.get(industry_key, MOTIF_MAP["기타"])
+        biased = []
+        for key in _raw_value_keys(survey):
+            for motif in VALUE_MOTIF_BIAS.get(key, []):
+                if motif in pool and motif not in biased:
+                    biased.append(motif)
+        candidates = biased + [m for m in pool if m not in biased] if biased else pool
 
     brand_name = (survey.get("brand_name") or "").strip().lower()
     offset = sum(ord(c) for c in brand_name) if brand_name else 0
@@ -185,14 +251,24 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
 
 
 def _resolve_colors(survey: dict, tone: str) -> str:
-    """색상: AI 추천(톤 기반 자동 매핑) 또는 사용자 직접 지정."""
+    """색상: AI 추천(톤 기반 자동 매핑) 또는 사용자 직접 지정.
+
+    지정한 색이 2개 이상일 때 그냥 콤마로 나열하면("black, gold") 모델이 한쪽 색만
+    반영하고 나머지는 무시하는 경우가 많았다(실측 확인됨 — manual로 black/gold를
+    지정해도 결과가 전부 무채색 단색으로만 나옴). "and"로 명시적으로 묶어 두 색이
+    함께 쓰여야 하는 조합임을 분명히 한다.
+    """
     color_mode = survey.get("color_mode", "ai")
     if color_mode == "manual":
         manual_colors = survey.get("color_manual") or survey.get("colors")
         if isinstance(manual_colors, str):
             manual_colors = [manual_colors]
         if manual_colors:
-            return ", ".join(manual_colors)
+            if len(manual_colors) == 1:
+                return manual_colors[0]
+            if len(manual_colors) == 2:
+                return f"{manual_colors[0]} and {manual_colors[1]}"
+            return ", ".join(manual_colors[:-1]) + f", and {manual_colors[-1]}"
     return TONE_COLOR_MAP.get(tone, "pastel muted tones")
 
 
@@ -266,25 +342,38 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     value_kw = _resolve_values(survey)
     age_kw = TARGET_AGE_MODIFIER.get(survey.get("target_age", ""), "")
     motif_kw = _resolve_motif(industry_key, survey, variant_index)
+    concreteness_kw = CONCRETENESS_MAP.get(survey.get("concreteness", ""), "")
     style_sentence = STYLE_MAP.get(style_key, STYLE_MAP["심볼"])
 
     extra = (survey.get("additional_requirements") or "").strip()
     extra = " ".join(extra.split())[:200]  # 개행 제거 및 과도한 길이 방지
 
-    # core: 반드시 포함돼야 하는 핵심 지시(업종/스타일/색상/모티프+형태 품질/텍스트 배제
-    # 규칙)를 완전한 문장으로 서술한다. 모티프(가장 중요한 정보)를 맨 앞에 배치해
-    # 모델이 우선적으로 주목하게 하고, "선이 끊긴다"·"도형이 너무 작다" 문제를 해결했던
-    # 지시(fills most of the canvas, unbroken outline)도 core 안에 자연스러운 문장으로
-    # 녹여 예산 초과로도 잘리지 않게 한다.
+    # core: 반드시 포함돼야 하는 핵심 지시(업종/스타일/색상/모티프+구체성+형태 품질/텍스트
+    # 배제 규칙, 그리고 사용자가 직접 적은 추가 요구사항)를 완전한 문장으로 서술한다.
+    # 모티프(가장 중요한 정보)를 맨 앞에 배치해 모델이 우선적으로 주목하게 하고, "선이
+    # 끊긴다"·"도형이 너무 작다" 문제를 해결했던 지시(fills most of the canvas, unbroken
+    # outline)도 core 안에 자연스러운 문장으로 녹여 예산 초과로도 잘리지 않게 한다.
+    #
+    # additional_requirements(사용자가 직접 적은 자유 서술)는 예전엔 optional_parts
+    # 맨 뒤에 있어서 예산(NVIDIA_PROMPT_MAX_LEN)이 부족하면 조용히 잘려나갔다(실측
+    # 확인됨 — "역동적이고 강렬한 느낌으로" 같은 명시적 지시가 반영 안 되는 문제). 사용자가
+    # 직접 쓴 유일한 지시라 core로 승격해 항상 포함되게 한다.
+    #
+    # 색상(color_kw)은 문장 맨 앞으로 옮겼다 — 원래 "no gradients/shadows" 지시와
+    # 같은 문장 뒤쪽에 있었는데, 그러면 특히 2가지 색(예: black+gold)을 지정해도
+    # 모델이 한쪽 색만 반영하고 무채색 단색으로만 나오는 경우가 많았다(실측 확인됨).
+    # 문장 앞쪽 정보일수록 few-step 모델이 더 강하게 반영하는 경향이 있어, 업종
+    # 바로 다음(가장 이른 위치)으로 옮겨 우선순위를 높였다.
     core = (
-        f"A minimalist flat vector logo icon for {industry}, drawn as one bold, large, "
-        f"solid-filled silhouette in {motif_kw}, with a thick, clean, fully unbroken outline "
-        f"that fills most of the canvas. {style_sentence} "
-        f"The design has {tone_kw or 'a clean, balanced'} character. "
-        f"It uses solid flat colors in a {color_kw} palette, rendered as simple two-dimensional "
-        f"shapes with no gradients, no shadows, and no photographic or 3D rendering. "
-        f"The icon is centered on a plain white background, with no readable letters or words "
-        f"anywhere in the image, finished and complete rather than a rough sketch."
+        f"A minimalist flat vector logo icon for {industry} in a {color_kw} color palette, "
+        f"drawn as one bold, large, solid-filled silhouette in {motif_kw}, with a thick, "
+        f"clean, unbroken outline that fills the canvas. {style_sentence} "
+        + (f"The shape is {concreteness_kw}. " if concreteness_kw else "")
+        + f"The design has {tone_kw or 'a clean, balanced'} character, "
+        f"flat 2D, with no gradients, shadows, or 3D rendering. "
+        f"Centered on a plain white background, with no readable letters or words, "
+        f"finished and complete rather than a sketch."
+        + (f" {extra}" if extra else "")
     )
 
     # 부가 설명은 예산이 남는 만큼만 순서대로 붙인다. value_kw(사용자가 직접 고른 기업
@@ -294,6 +383,5 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
         value_kw,
         f"Its target audience has {age_kw}." if age_kw else "",
         f"The overall style references a {aesthetic_kw}." if aesthetic_kw else "",
-        extra,
     ]
     return _fit_to_budget(core, optional_parts)

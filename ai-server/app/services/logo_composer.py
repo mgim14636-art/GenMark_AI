@@ -1,12 +1,10 @@
-
-
 import os
 import random
 from typing import Optional
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-from prompt_builder import _normalize_survey, _normalize_tone
+from app.services.prompt_service import _normalize_survey, _normalize_tone
 
 # LOGO_FONT_PATH 환경변수가 없을 때 순서대로 시도할 폰트 후보(굵기별).
 # 배포 컨테이너(Linux)와 로컬 개발(Windows) 양쪽을 커버하기 위해 여러 경로를 둔다.
@@ -22,7 +20,12 @@ from prompt_builder import _normalize_survey, _normalize_tone
 # Pretendard/NanumGothic/맑은고딕은 셋 다 "두꺼운 고딕" 계열이라 실제로 다른 파일이
 # 골라져도 육안으로는 거의 구분이 안 되는 문제가 있었다(실측 확인됨). 전부 OFL(SIL
 # Open Font License) — 상업적 이용 가능. 라이선스 원문은 fonts/licenses/LICENSE-*.txt 참고.
-_FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+#
+# logo_ai_server(Flask 프로토타입)에서는 이 파일과 fonts/가 같은 디렉터리에 있었지만,
+# FastAPI 쪽에서는 fonts/를 app/ 바로 밑(app/fonts)에 두므로 한 단계 상위로 올라간다.
+_FONT_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fonts")
+)
 _FONT_CANDIDATES = {
     "bold": [
         os.path.join(_FONT_DIR, "modern_sans", "bold", "Pretendard-Bold.ttf"),
@@ -48,7 +51,7 @@ _FONT_CANDIDATES = {
 # 위 기본 풀은 전부 고딕 계열이라 실제로 다른 파일이 골라져도 육안 차이가 거의 없다
 # (실측 확인됨). 그렇다고 스타일이 뚜렷한 폰트(명조/손글씨/라운드 디스플레이)를 전부
 # 톤 구분 없이 섞으면 프리미엄 스킨케어 로고에 손글씨체가 나오는 등 톤과 안 맞는
-# 조합이 나온다(마찬가지로 실측 확인됨). 그래서 prompt_builder.TONE_MAP의 5개 톤
+# 조합이 나온다(마찬가지로 실측 확인됨). 그래서 prompt_service.TONE_MAP의 5개 톤
 # 키마다 그 톤의 분위기와 실제로 어울리는 폰트만 골라 추가한다 — 톤을 하나도 못 가진
 # 후보(빈 리스트)가 없도록 5개 전부 최소 1종 이상 채운다.
 #   - 친근하고 다정한 : 손글씨(Gaegu)·라운드체(Jua) — 다정하고 편안한 인상
@@ -465,12 +468,12 @@ def _wants_text_overlay(survey: dict, style_key: str, brand_name: str) -> bool:
 def compose_final_logo(symbol: Image.Image, survey: dict) -> Image.Image:
     """FLUX가 생성한 심볼과 설문 응답을 받아 최종 로고 1장을 만든다.
 
-    app.py의 단일 진입점 — 텍스트 합성 여부 판단부터 배경 정리, compose_logo
-    호출까지 이 함수 하나로 처리한다.
+    라우트(app/api/routes/generation.py)의 단일 진입점 — 텍스트 합성 여부 판단부터
+    배경 정리, compose_logo 호출까지 이 함수 하나로 처리한다.
 
     survey는 CI/BI 어느 화면의 원본 필드명(company_name 등)으로 와도 되고 이미
-    정규화된 형태(brand_name)로 와도 된다 — prompt_builder._normalize_survey를
-    그대로 재사용해 이 함수 안에서 한 번 더 정규화하므로, 호출부(app.py)가
+    정규화된 형태(brand_name)로 와도 된다 — prompt_service._normalize_survey를
+    그대로 재사용해 이 함수 안에서 한 번 더 정규화하므로, 호출부가
     build_prompt_from_survey에 넘긴 것과 같은 survey를 그대로 넘기기만 하면
     brand_name 필드명 차이로 텍스트 합성이 조용히 스킵되는 문제가 생기지 않는다.
     """

@@ -6,7 +6,6 @@ from app.services.similarity_service import SimilarityService
 
 router = APIRouter()
 
-
 @router.post("/search", response_model=SimilarityResponse)
 def search(req: SimilarityRequest):
     try:
