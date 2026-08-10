@@ -17,6 +17,7 @@ import io
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -76,6 +77,20 @@ BANNED = (
     "침해", "위반", "등록 가능", "등록가능", "거절", "무효", "소송", "분쟁",
     "법적", "위법", "권리", "저촉", "출원하면", "등록될",
 )
+
+
+# 429를 받으면 잠시 호출을 멈춘다. 무료 등급에서 남은 요청까지 태우지 않기 위함이다.
+QUOTA_COOLDOWN = 60.0
+_quota_blocked_until = 0.0
+
+
+def _quota_blocked() -> bool:
+    return time.monotonic() < _quota_blocked_until
+
+
+def _block_quota() -> None:
+    global _quota_blocked_until
+    _quota_blocked_until = time.monotonic() + QUOTA_COOLDOWN
 
 
 def is_enabled() -> bool:
@@ -183,35 +198,79 @@ def generate_notes(
         logger.warning("Note image prep failed: %s", type(e).__name__)
         return blank
 
-    try:
-        res = requests.post(
-            GEMINI_URL.format(model=_model()),
-            params={"key": _api_key()},
-            json={
-                "contents": [{"parts": parts}],
-                "generationConfig": {
-                    "temperature": 0.3,
-                    # Gemini 2.5/3 Flash 계열은 thinking이 기본 활성이고 그 토큰이
-                    # maxOutputTokens에서 차감된다. 예산의 대부분을 내부 추론에 쓰고
-                    # 실제 문장이 첫 줄에서 잘리는 사고가 있었다.
-                    # 짧은 설명 3개에 추론은 필요 없으므로 아예 끈다.
-                    "thinkingConfig": {"thinkingBudget": 0},
-                    # 한글은 토큰 소모가 크다. 잘린 JSON은 파싱에 실패한다.
-                    "maxOutputTokens": 800,
-                    # 스키마를 강제하면 코드펜스·머리말·객체 감싸기가 원천 차단된다.
-                    "responseMimeType": "application/json",
-                    "responseSchema": {
-                        "type": "ARRAY",
-                        "items": {"type": "STRING"},
-                    },
+    # 모델·API 버전에 따라 지원하지 않는 옵션이 있고, Google은 400에
+    # "Request contains an invalid argument."만 주고 어떤 필드인지 알려주지 않는다.
+    # 그래서 기능을 하나씩 덜어내며 재시도한다.
+    configs = [
+        {
+            "temperature": 0.3,
+            "maxOutputTokens": 800,
+            "responseMimeType": "application/json",
+            "responseSchema": {"type": "ARRAY", "items": {"type": "STRING"}},
+            # thinking 토큰이 maxOutputTokens에서 차감돼 본문이 잘리는 것을 막는다.
+            "thinkingConfig": {"thinkingBudget": 0},
+        },
+        {   # thinkingConfig 미지원 모델
+            "temperature": 0.3,
+            "maxOutputTokens": 2048,   # 추론 토큰을 못 끄면 예산을 넉넉히 준다
+            "responseMimeType": "application/json",
+            "responseSchema": {"type": "ARRAY", "items": {"type": "STRING"}},
+        },
+        {   # 구조화 출력 미지원 모델 — 파서가 코드펜스·머리말을 흡수한다
+            "temperature": 0.3,
+            "maxOutputTokens": 2048,
+        },
+    ]
+
+    text = None
+    for i, generation_config in enumerate(configs):
+        if _quota_blocked():
+            logger.warning("Gemini 할당량 초과 상태 — note 생성을 건너뜁니다")
+            return blank
+
+        try:
+            res = requests.post(
+                GEMINI_URL.format(model=_model()),
+                params={"key": _api_key()},
+                json={
+                    "contents": [{"parts": parts}],
+                    "generationConfig": generation_config,
                 },
-            },
-            timeout=_timeout(),
-        )
-        res.raise_for_status()
+                timeout=_timeout(),
+            )
+        except requests.exceptions.Timeout:
+            logger.warning("Note generation timed out (%.0fs)", _timeout())
+            return blank
+        except Exception as e:
+            logger.warning("Note request failed: %s", type(e).__name__)
+            return blank
+
+        if res.status_code == 429:
+            # 무료 등급에서 흔하다. 남은 요청까지 소모하지 않도록 잠시 차단한다.
+            _block_quota()
+            logger.warning(
+                "Gemini 할당량 초과(429). %.0f초간 note 생성을 중단합니다. %s",
+                QUOTA_COOLDOWN,
+                res.text[:200],
+            )
+            return blank
+
+        if not res.ok:
+            body = res.text[:300]
+            if res.status_code == 400 and i + 1 < len(configs):
+                dropped = set(generation_config) - set(configs[i + 1])
+                logger.warning("400 — %s 제거 후 재시도합니다", ", ".join(sorted(dropped)) or "옵션")
+                continue
+            logger.warning("Note generation failed (HTTP %s): %s", res.status_code, body)
+            return blank
+
         payload = res.json()
-        candidate = payload["candidates"][0]
-        # MAX_TOKENS면 응답이 잘린 것이다. 원인을 바로 알 수 있게 남긴다.
+        candidates = payload.get("candidates") or []
+        if not candidates:
+            logger.warning("Note blocked or empty: %s", str(payload.get("promptFeedback"))[:200])
+            return blank
+
+        candidate = candidates[0]
         finish = candidate.get("finishReason")
         if finish and finish not in ("STOP", "FINISH_REASON_STOP"):
             usage = payload.get("usageMetadata", {})
@@ -221,13 +280,15 @@ def generate_notes(
                 usage.get("thoughtsTokenCount"),
                 usage.get("candidatesTokenCount"),
             )
-        text = candidate["content"]["parts"][0]["text"]
-    except requests.exceptions.Timeout:
-        logger.warning("Note generation timed out (%.0fs)", _timeout())
-        return blank
-    except Exception as e:
-        # API 키가 로그에 실리지 않도록 예외 타입만 남긴다.
-        logger.warning("Note generation failed: %s", type(e).__name__)
+
+        try:
+            text = candidate["content"]["parts"][0]["text"]
+        except (KeyError, IndexError, TypeError):
+            logger.warning("Note response has no text part: %s", str(candidate)[:200])
+            return blank
+        break
+
+    if text is None:
         return blank
 
     raw = _parse_notes(text)
