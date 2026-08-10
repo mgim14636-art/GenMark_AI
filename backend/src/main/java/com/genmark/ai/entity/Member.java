@@ -26,18 +26,13 @@ public class Member {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    /** 소셜 로그인(provider != "local") 회원은 비밀번호가 없다. */
-    @Column(length = 255)
-    private String password;
-
     @Column(nullable = false, length = 50)
     private String name;
 
-    @Column(nullable = false, length = 20)
-    @Builder.Default
-    private String role = "ROLE_USER";
-
-    /** local(이메일/비밀번호), google, kakao, 그리고 로컬 개발용 fake. */
+    /**
+     * google, kakao, 그리고 로컬 개발용 fake. 이메일/비밀번호 가입은 폐지됐으므로
+     * 기본값 "local"은 기존 데이터 호환용으로만 남아 있고 신규 회원에는 쓰이지 않는다.
+     */
     @Column(nullable = false, length = 20)
     @Builder.Default
     private String provider = "local";

@@ -10,7 +10,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -48,12 +47,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Claims claims = jwtProvider.parseAndValidate(token);
                 Long memberId = Long.valueOf(claims.getSubject());
                 String email = claims.get("email", String.class);
-                String role = claims.get("role", String.class);
 
-                MemberPrincipal principal = new MemberPrincipal(memberId, email, role);
-                List<SimpleGrantedAuthority> authorities =
-                        role == null ? List.of() : List.of(new SimpleGrantedAuthority(role));
-                var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);
+                // 권한(role) 구분이 없는 서비스라 authorities는 항상 비어 있다.
+                // 빈 목록이어도 인증된 토큰으로 취급되므로 .authenticated() 규칙은 그대로 통과한다.
+                MemberPrincipal principal = new MemberPrincipal(memberId, email);
+                var authentication = new UsernamePasswordAuthenticationToken(principal, null, List.of());
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (ExpiredJwtException e) {
                 request.setAttribute(AUTH_ERROR_ATTRIBUTE, "TOKEN_EXPIRED");
