@@ -2,8 +2,9 @@ import { FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } 
 import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, LoaderCircle, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkle as LucideSparkle, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
+import GenMarkLogo from './components/ui/GenMarkLogo'
 import { AuthError, type AuthProvider, type AuthUser, loginWithProvider, logout, restoreSession } from './auth'
-import { onboardingApi, projectsApi, type LogoCandidate, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
+import { getLogoCandidateImageUrl, onboardingApi, projectsApi, type LogoCandidate, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
 
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
 
@@ -102,15 +103,8 @@ function ScreenBackButton({ label, onClick }: { label: string; onClick: () => vo
   )
 }
 
-function BrandLogo() {
-  return (
-    <span className="brand-emblem" aria-hidden="true">
-      <span className="leaf leaf-left" />
-      <span className="leaf leaf-center" />
-      <span className="leaf leaf-right" />
-      <span className="leaf-stem" />
-    </span>
-  )
+function BrandLogo({ className = '' }: { className?: string }) {
+  return <GenMarkLogo className={className ? `brand-emblem ${className}` : 'brand-emblem'} />
 }
 
 function CustomerApp() {
@@ -194,7 +188,7 @@ function CustomerApp() {
   const [remainingCredits, setRemainingCredits] = useState(2)
   const [creditModal, setCreditModal] = useState<'credit' | 'survey' | null>(null)
   const [choiceInfoModal, setChoiceInfoModal] = useState<'ci' | 'bi' | null>(null)
-  const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string } | null>(null)
+  const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; storageKey?: string } | null>(null)
 
   const setMode = (nextMode: ViewMode, options: { replace?: boolean } = {}) => {
     setModeState(nextMode)
@@ -237,9 +231,12 @@ function CustomerApp() {
         if (onboarding.audience === 'company' || onboarding.audience === 'owner' || onboarding.audience === 'hobby' || onboarding.audience === 'sidejob') {
           setAudienceSelection([onboarding.audience])
         }
-        if (onboarding.initialProjectId) {
-          setProjectId(onboarding.initialProjectId)
-          window.localStorage.setItem('genmark-project-id', onboarding.initialProjectId)
+        if (session.resumeProjectId) {
+          setProjectId(session.resumeProjectId)
+          window.localStorage.setItem('genmark-project-id', session.resumeProjectId)
+        } else {
+          setProjectId(null)
+          window.localStorage.removeItem('genmark-project-id')
         }
       } catch {
         if (!cancelled) setLoggedIn(false)
@@ -330,6 +327,13 @@ function CustomerApp() {
       const session = await loginWithProvider(provider)
       setAuthUser(session.user)
       setLoggedIn(true)
+      if (session.resumeProjectId) {
+        setProjectId(session.resumeProjectId)
+        window.localStorage.setItem('genmark-project-id', session.resumeProjectId)
+      } else {
+        setProjectId(null)
+        window.localStorage.removeItem('genmark-project-id')
+      }
       setOnboardingCompleted(session.user.onboardingCompleted)
       setOnboardingStep(1)
       setIndustryBackMode(session.user.onboardingCompleted ? 'home' : 'onboarding')
@@ -492,8 +496,14 @@ function CustomerApp() {
   const ensureProject = async (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review' = 'final-review') => {
     const input = buildProjectInput()
     if (projectId) {
-      await projectsApi.updateStep(projectId, step, input)
-      return projectId
+      try {
+        await projectsApi.updateStep(projectId, step, input)
+        return projectId
+      } catch (error) {
+        if (!(error instanceof AuthError) || error.status !== 404) throw error
+        setProjectId(null)
+        window.localStorage.removeItem('genmark-project-id')
+      }
     }
 
     const project = await projectsApi.create(input)
@@ -602,17 +612,17 @@ function CustomerApp() {
     }
   }
 
-  const downloadLogo = (candidate: { name: string; subtitle: string }) => {
-    const logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="#ffffff"/><circle cx="600" cy="280" r="116" fill="none" stroke="#b889ad" stroke-width="6"/><path d="M600 380c-72-28-104-83-74-142 35-68 70 4 74 55 4-51 39-123 74-55 30 59-2 114-74 142Z" fill="#d9c6e0" stroke="#8f75a8" stroke-width="4"/><text x="600" y="570" text-anchor="middle" fill="#2a2d39" font-family="Georgia, serif" font-size="92" letter-spacing="12">${candidate.name}</text><text x="600" y="635" text-anchor="middle" fill="#b388a9" font-family="Arial, sans-serif" font-size="26" letter-spacing="12">${candidate.subtitle}</text></svg>`
-    const downloadUrl = URL.createObjectURL(new Blob([logoSvg], { type: 'image/svg+xml' }))
+  const downloadLogo = (candidate: { name: string; subtitle?: string; storageKey?: string }) => {
+    if (!candidate.storageKey) return
+
+    const downloadUrl = getLogoCandidateImageUrl(candidate.storageKey)
     const link = document.createElement('a')
     link.href = downloadUrl
-    link.download = `${candidate.name.toLowerCase()}-logo.svg`
+    link.download = `${candidate.name.toLowerCase()}-logo.png`
     link.click()
-    URL.revokeObjectURL(downloadUrl)
   }
 
-  const requestLogoDownload = (candidate: { name: string; subtitle: string }) => {
+  const requestLogoDownload = (candidate: { name: string; subtitle: string; storageKey?: string }) => {
     setPendingDownload(candidate)
     setCreditModal('credit')
   }
@@ -1079,7 +1089,6 @@ function CustomerApp() {
       <img className="featured-art" src="/aurora-bubbles.png" alt="핑크와 보라색의 투명한 구체가 겹쳐진 스킨케어 이미지" />
       <div className="featured-scrim" />
       <div className="featured-lockup">
-        <BrandLogo />
         <h1 id="featured-title">LUMIÈRE</h1>
         <p className="featured-subtitle">RADIANT SKINCARE</p>
         <span className="featured-rule" />
@@ -1104,7 +1113,7 @@ function CustomerApp() {
   const renderHeroScreen = () => (
     <main className="hero-screen">
       <header className="hero-screen-header">
-        <div className="hero-screen-brand"><span className="hero-screen-mark" aria-hidden="true">✦</span><span>GenMark AI</span></div>
+        <div className="hero-screen-brand"><BrandLogo className="hero-screen-mark" /><span>GenMark AI</span></div>
         <button type="button" className="hero-screen-login" onClick={() => { setLoginDestination('home'); setLoginReturnMode('hero'); setMode('login') }}>로그인</button>
       </header>
       <section className="hero-screen-panel" aria-labelledby="hero-screen-title">
@@ -1130,7 +1139,7 @@ function CustomerApp() {
       <AnimatedGallery>
         <header className="gallery-hero-header">
           <div className="gallery-hero-brand">
-            <span className="gallery-hero-mark" aria-hidden="true"><LucideSparkle size={15} strokeWidth={2.2} /></span>
+            <BrandLogo className="gallery-hero-mark" />
             <span>GenMark AI</span>
           </div>
           <button type="button" className="gallery-hero-login" onClick={() => { setLoginDestination('home'); setLoginReturnMode('hero'); setMode('login') }}>로그인</button>
@@ -1418,7 +1427,7 @@ function CustomerApp() {
       <main className="trademark-loading-screen" aria-labelledby="trademark-loading-title">
         <section className="trademark-loading-content">
           <div className="trademark-brand-lockup" aria-label="GenMark AI">
-            <span className="trademark-brand-mark" aria-hidden="true"><Sparkles size={30} strokeWidth={1.6} /></span>
+            <BrandLogo className="trademark-brand-mark" />
             <span>GenMark AI</span>
           </div>
 
@@ -1479,7 +1488,7 @@ function CustomerApp() {
       <main className="trademark-selection-screen" aria-labelledby="trademark-selection-title">
         <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => setMode(trademarkEntry === 'generation' ? 'final' : 'result')} />
         <header className="trademark-selection-header">
-          <div className="trademark-selection-brand"><Sparkles className="trademark-selection-brand-mark" aria-hidden="true" size={24} strokeWidth={1.6} /><span>GenMark AI</span></div>
+          <div className="trademark-selection-brand"><BrandLogo className="trademark-selection-brand-mark" /><span>GenMark AI</span></div>
           <button className="trademark-help" type="button" aria-label="상표 분석 도움말"><CircleHelp aria-hidden="true" size={23} strokeWidth={1.8} /></button>
         </header>
 
@@ -1543,7 +1552,7 @@ function CustomerApp() {
       <main className="trademark-result-screen" aria-labelledby="trademark-result-title">
         <header className="trademark-result-header">
           <button className="trademark-result-back" type="button" aria-label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-          <div className="trademark-result-brand"><Sparkles aria-hidden="true" size={26} strokeWidth={1.6} /><strong>GenMark AI</strong></div>
+          <div className="trademark-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
           <button className="trademark-result-help" type="button" aria-label="상표 분석 도움말"><CircleHelp aria-hidden="true" size={24} strokeWidth={1.8} /></button>
         </header>
 
@@ -1630,7 +1639,7 @@ function CustomerApp() {
     return (
       <main className="logo-result-screen" aria-labelledby="logo-result-title">
         <header className="logo-result-header">
-          <div className="logo-result-brand"><Sparkles aria-hidden="true" size={26} strokeWidth={1.8} /><strong>GenMark AI</strong></div>
+          <div className="logo-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
           <button className="logo-result-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={23} strokeWidth={1.8} /></button>
         </header>
 
@@ -1645,8 +1654,12 @@ function CustomerApp() {
               <Heart size={22} strokeWidth={1.9} fill={resultLiked ? 'currentColor' : 'none'} />
             </button>
             <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => { const next = (resultCandidate + candidates.length - 1) % candidates.length; void selectLogoCandidate(candidates[next], next) }}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>
-            <div className={`logo-candidate-art ${candidate.style}`}>
-              <div className="candidate-emblem" aria-hidden="true"><span /><i /><b /></div>
+            <div className="logo-candidate-art">
+              <img
+                className="logo-candidate-image"
+                src={getLogoCandidateImageUrl(candidate.storageKey)}
+                alt={`${candidate.name} AI 생성 로고`}
+              />
               <strong>{candidate.name}</strong>
               <small>{candidate.subtitle}</small>
             </div>
@@ -1700,7 +1713,7 @@ function CustomerApp() {
       <main className="logo-editor-screen" aria-labelledby="logo-editor-title">
         <header className="logo-editor-header">
           <button className="logo-editor-back" type="button" aria-label="결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-          <div className="logo-editor-brand"><Sparkles aria-hidden="true" size={22} strokeWidth={1.6} /><strong>GenMark AI</strong></div>
+          <div className="logo-editor-brand"><BrandLogo /><strong>GenMark AI</strong></div>
           <button className="logo-editor-save" type="button" onClick={() => void saveEditorChanges()}>{editorSaved ? '저장됨' : '저장'}<ChevronDown aria-hidden="true" size={16} strokeWidth={1.8} /></button>
           <button className="logo-editor-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         </header>
@@ -1785,7 +1798,7 @@ function CustomerApp() {
       <main className="mypage-screen" aria-labelledby="mypage-title">
         <header className="workspace-header">
           <button className="workspace-back" type="button" aria-label="홈으로 돌아가기" onClick={() => setMode('home')}><ChevronLeft aria-hidden="true" size={23} strokeWidth={1.8} /></button>
-          <div className="workspace-brand"><Sparkles aria-hidden="true" size={24} strokeWidth={1.7} /><strong>GenMark AI</strong></div>
+          <div className="workspace-brand"><BrandLogo /><strong>GenMark AI</strong></div>
           <button className="workspace-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         </header>
 
@@ -1838,7 +1851,7 @@ function CustomerApp() {
       <main className="survey-screen" aria-labelledby="survey-title">
         <header className="workspace-header">
           <button className="workspace-back" type="button" aria-label="마이페이지로 돌아가기" onClick={() => setMode('mypage')}><ChevronLeft aria-hidden="true" size={23} strokeWidth={1.8} /></button>
-          <div className="workspace-brand"><Sparkles aria-hidden="true" size={24} strokeWidth={1.7} /><strong>GenMark AI</strong></div>
+          <div className="workspace-brand"><BrandLogo /><strong>GenMark AI</strong></div>
           <span className="survey-step">만족도 평가</span>
         </header>
 

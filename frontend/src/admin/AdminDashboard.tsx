@@ -22,6 +22,7 @@ import {
   UserRound,
   UsersRound,
 } from 'lucide-react'
+import GenMarkLogo from '../components/ui/GenMarkLogo'
 import './admin-dashboard.css'
 
 type DashboardSection = 'overview' | 'generation' | 'download' | 'signup' | 'requests' | 'members' | 'credits'
@@ -293,7 +294,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     return (
       <main className="admin-dashboard-screen">
         <aside className="admin-sidebar" aria-label="관리자 메뉴">
-          <div className="admin-brand"><span className="admin-brand-mark"><Sparkles size={25} strokeWidth={1.8} /></span><strong>GenMark <em>AI</em></strong></div>
+          <div className="admin-brand"><GenMarkLogo className="admin-brand-mark" /><strong>GenMark <em>AI</em></strong></div>
           <nav className="admin-menu">
             <button className={`admin-menu-item ${dashboardSection === 'overview' ? 'active' : ''}`} type="button" onClick={() => setDashboardSection('overview')}><House size={19} strokeWidth={1.8} /><span>대시보드</span></button>
             <div className="admin-menu-group"><button className={`admin-menu-item ${dashboardSection === 'members' ? 'active' : ''}`} type="button" aria-expanded={isMemberMenuOpen} onClick={() => setIsMemberMenuOpen((open) => !open)}><UsersRound size={19} strokeWidth={1.8} /><span>회원관리</span><ChevronDown className={isMemberMenuOpen ? 'menu-chevron-open' : ''} size={15} /></button>{isMemberMenuOpen && <div className="admin-submenu active-submenu"><button className={dashboardSection === 'members' ? 'active' : ''} type="button" onClick={() => setDashboardSection('members')}>회원목록</button><span>관리자</span></div>}</div>
