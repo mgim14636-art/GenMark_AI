@@ -18,4 +18,14 @@ public interface LogoGenerationRepository extends JpaRepository<LogoGeneration, 
     Optional<LogoGeneration> findFirstByBiProjectIdAndStatusOrderByCompletedAtDesc(Long biProjectId, LogoGeneration.Status status);
 
     List<LogoGeneration> findByStatusAndStartedAtBefore(LogoGeneration.Status status, LocalDateTime threshold);
+
+    /**
+     * 관리자 통계용 생성 건수. 로고 4개 한 묶음이 1건이므로 generation 행을 세면 그대로 건수가 된다.
+     * 실패한 작업은 제외해야 하므로 status 조건을 함께 받는다.
+     */
+    long countByCiProjectMemberIdAndStatus(Long memberId, LogoGeneration.Status status);
+
+    long countByBiProjectMemberIdAndStatus(Long memberId, LogoGeneration.Status status);
+
+    long countByStatus(LogoGeneration.Status status);
 }

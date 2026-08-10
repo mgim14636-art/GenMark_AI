@@ -11,6 +11,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Base64;
 
 @Component
@@ -45,6 +46,47 @@ public class LogoFileStorage {
             return Files.readAllBytes(file);
         } catch (IOException e) {
             throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
+    /**
+     * 사용자가 다운로드한 로고를 보관 영역(downloads/)으로 복사한다.
+     *
+     * <p>원본(logos/)은 생성 결과 전체를 담고 있어 언젠가 정리 대상이 될 수 있다. 다운로드한
+     * 로고는 관리자 통계에서 계속 보여줘야 하므로 별도 경로에 사본을 둔다.
+     *
+     * @return 보관본의 storageKey
+     */
+    public String archiveForDownload(Long memberId, String candidatePublicId, String sourceStorageKey) {
+        try {
+            Path source = root.resolve(sourceStorageKey).normalize();
+            if (!source.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+
+            Path directory = root.resolve("downloads").resolve(String.valueOf(memberId)).normalize();
+            if (!directory.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+            Files.createDirectories(directory);
+
+            Path target = directory.resolve(candidatePublicId + ".png");
+            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+            return root.relativize(target).toString().replace('\\', '/');
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
+    /**
+     * 보관본 파일을 지운다. 보관 한도(CI 20 / BI 20)를 넘겨 오래된 기록을 정리할 때 쓴다.
+     *
+     * <p>파일이 이미 없어도 예외를 던지지 않는다. 목표는 "없는 상태"이므로 이미 없으면 성공이다.
+     */
+    public void deleteQuietly(String storageKey) {
+        if (storageKey == null || storageKey.isBlank()) return;
+        try {
+            Path file = root.resolve(storageKey).normalize();
+            if (!file.startsWith(root)) return;
+            Files.deleteIfExists(file);
+        } catch (IOException e) {
+            // 파일 삭제 실패가 DB 정리까지 막으면 안 된다. 다음 정리 때 다시 시도된다.
         }
     }
 

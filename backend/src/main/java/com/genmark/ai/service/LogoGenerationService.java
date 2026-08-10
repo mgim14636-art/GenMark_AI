@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -55,10 +56,25 @@ public class LogoGenerationService {
         }
 
         Map<String, Object> survey = project.toSurvey();
+
+        // 재생성(F12-2): 직전 성공 생성이 있으면 그 후보 4개를 "이런 건 피해달라"로 함께 넘긴다.
+        // 그래야 비슷하게 생긴 로고가 또 나오지 않는다.
+        LogoGeneration previous = (isCi
+                ? generationRepository.findFirstByCiProjectIdAndStatusOrderByCompletedAtDesc(
+                        project.getId(), LogoGeneration.Status.SUCCEEDED)
+                : generationRepository.findFirstByBiProjectIdAndStatusOrderByCompletedAtDesc(
+                        project.getId(), LogoGeneration.Status.SUCCEEDED))
+                .orElse(null);
+        if (previous != null) {
+            survey.put("avoid_logos", avoidPayload(previous));
+        }
+
         LogoGeneration generation = LogoGeneration.builder()
                 .status(LogoGeneration.Status.QUEUED)
                 .modelName("black-forest-labs/flux.2-klein-4b").requestSnapshotJson(writeJson(survey))
-                .idempotencyKey(idempotencyKey).build();
+                .idempotencyKey(idempotencyKey)
+                .parentGeneration(previous)
+                .build();
         generation.setProject(project);
         generationRepository.save(generation);
         project.setStatus(ProjectStatus.GENERATING);
@@ -114,6 +130,25 @@ public class LogoGenerationService {
         return toResponse(selected);
     }
 
+    /**
+     * 재생성 시 AI에게 넘길 "피해야 할 로고" 정보 (F12-2).
+     *
+     * <p>이전 생성의 후보 4개를 storageKey와 AI 부가정보(aiMetadataJson)로 전달한다.
+     * 실제로 어떤 형식을 쓸지는 AI 서버와 합의가 필요하다. 이미지 자체를 넘길지, 프롬프트
+     * 텍스트로 넘길지에 따라 이 부분이 바뀔 수 있다.
+     */
+    private List<Map<String, Object>> avoidPayload(LogoGeneration previous) {
+        return candidateRepository.findByGenerationIdOrderByCandidateOrder(previous.getId()).stream()
+                .map(c -> {
+                    Map<String, Object> item = new LinkedHashMap<String, Object>();
+                    item.put("candidate_id", c.getPublicId());
+                    item.put("storage_key", c.getStorageKey());
+                    if (c.getAiMetadataJson() != null) item.put("ai_metadata", c.getAiMetadataJson());
+                    return item;
+                })
+                .toList();
+    }
+
     private String writeJson(Object value) {
         try { return objectMapper.writeValueAsString(value); }
         catch (JsonProcessingException e) { throw new ApiException(ErrorCode.INTERNAL_ERROR); }
@@ -161,6 +196,6 @@ public class LogoGenerationService {
 
     private LogoCandidateResponse toResponse(LogoCandidate c) {
         return new LogoCandidateResponse(c.getPublicId(), c.getCandidateOrder(), c.getStorageKey(), c.getMimeType(),
-                c.getWidth(), c.getHeight(), c.isSelected(), c.isSaved(), c.getCreatedAt());
+                c.getWidth(), c.getHeight(), c.isSelected(), c.getPinnedAt(), c.getCreatedAt());
     }
 }

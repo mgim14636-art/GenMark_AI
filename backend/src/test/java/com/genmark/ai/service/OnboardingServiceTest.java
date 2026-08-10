@@ -6,7 +6,6 @@ import com.genmark.ai.repository.MemberOnboardingRepository;
 import com.genmark.ai.repository.MemberRepository;
 import com.genmark.ai.web.dto.onboarding.OnboardingResponse;
 import com.genmark.ai.web.dto.onboarding.OnboardingUpsertRequest;
-import com.genmark.ai.web.dto.project.CiProjectUpsertRequest;
 import com.genmark.ai.web.exception.ApiException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,32 +22,36 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+/**
+ * 온보딩은 "회원당 1회, 용도 최대 3개"가 전부다.
+ *
+ * <p>예전에는 온보딩에서 초기 CI/BI 프로젝트까지 함께 만들 수 있었고(detailsDecision),
+ * 그 분기를 검증하는 테스트가 있었다. 지금은 프로젝트를 온보딩 이후 별도 화면에서 만들도록
+ * 흐름이 바뀌어 해당 기능과 테스트를 제거했다.
+ */
 @ExtendWith(MockitoExtension.class)
 class OnboardingServiceTest {
     @Mock MemberOnboardingRepository onboardingRepository;
     @Mock MemberRepository memberRepository;
-    @Mock CiProjectService ciProjectService;
-    @Mock BiProjectService biProjectService;
     OnboardingService service;
 
     @BeforeEach void setUp() {
-        service = new OnboardingService(onboardingRepository, memberRepository, ciProjectService, biProjectService);
+        service = new OnboardingService(onboardingRepository, memberRepository);
     }
 
     @Test
-    void skippedCompletesWithoutProject() {
+    void completesWithUsageAndAudience() {
         Member member = Member.builder().id(1L).email("a@test.local").name("A").build();
         when(onboardingRepository.findById(1L)).thenReturn(Optional.empty());
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
         when(onboardingRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        OnboardingResponse response = service.complete(1L, new OnboardingUpsertRequest(
-                List.of("PERSONAL"), "20s", MemberOnboarding.DetailsDecision.SKIPPED, null, null));
+        OnboardingResponse response = service.complete(1L,
+                new OnboardingUpsertRequest(List.of("PERSONAL"), "20s"));
 
         assertThat(response.completed()).isTrue();
         assertThat(response.usage()).containsExactly("PERSONAL");
-        verify(ciProjectService, never()).createInitial(any(), any());
-        verify(biProjectService, never()).createInitial(any(), any());
+        assertThat(response.audience()).isEqualTo("20s");
     }
 
     @Test
@@ -58,8 +61,8 @@ class OnboardingServiceTest {
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
         when(onboardingRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        OnboardingResponse response = service.complete(1L, new OnboardingUpsertRequest(
-                List.of("online", "social", "offline"), "20s", MemberOnboarding.DetailsDecision.SKIPPED, null, null));
+        OnboardingResponse response = service.complete(1L,
+                new OnboardingUpsertRequest(List.of("online", "social", "offline"), "20s"));
 
         assertThat(response.usage()).containsExactly("online", "social", "offline");
     }
@@ -67,43 +70,19 @@ class OnboardingServiceTest {
     @Test
     void rejectsMoreThanThreeUsageValues() {
         when(onboardingRepository.findById(1L)).thenReturn(Optional.empty());
-        OnboardingUpsertRequest request = new OnboardingUpsertRequest(
-                List.of("online", "social", "offline", "extra"), "20s", MemberOnboarding.DetailsDecision.SKIPPED, null, null);
+        OnboardingUpsertRequest request =
+                new OnboardingUpsertRequest(List.of("online", "social", "offline", "extra"), "20s");
 
         assertThatThrownBy(() -> service.complete(1L, request)).isInstanceOf(ApiException.class);
-    }
-
-    @Test
-    void submittedRequiresInitialProject() {
-        when(onboardingRepository.findById(1L)).thenReturn(Optional.empty());
-        OnboardingUpsertRequest request = new OnboardingUpsertRequest(
-                List.of("BUSINESS"), "all", MemberOnboarding.DetailsDecision.SUBMITTED, null, null);
-        assertThatThrownBy(() -> service.complete(1L, request)).isInstanceOf(ApiException.class);
-    }
-
-    @Test
-    void submittedStillCreatesProjectEvenThoughLinkIsNoLongerStored() {
-        Member member = Member.builder().id(1L).email("a@test.local").name("A").build();
-        CiProjectUpsertRequest projectRequest = new CiProjectUpsertRequest(
-                null, null, null, null, null, null, null, null, null, null);
-        when(onboardingRepository.findById(1L)).thenReturn(Optional.empty());
-        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
-        when(onboardingRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-
-        service.complete(1L, new OnboardingUpsertRequest(
-                List.of("online"), "all", MemberOnboarding.DetailsDecision.SUBMITTED, projectRequest, null));
-
-        verify(ciProjectService).createInitial(member, projectRequest);
     }
 
     @Test
     void completedRequestIsIdempotent() {
         MemberOnboarding existing = MemberOnboarding.builder().memberId(1L).usage1("online").audience("all")
-                .detailsDecision(MemberOnboarding.DetailsDecision.SKIPPED).completedAt(LocalDateTime.now()).build();
+                .completedAt(LocalDateTime.now()).build();
         when(onboardingRepository.findById(1L)).thenReturn(Optional.of(existing));
 
-        service.complete(1L, new OnboardingUpsertRequest(
-                List.of("OTHER"), "changed", MemberOnboarding.DetailsDecision.SKIPPED, null, null));
+        service.complete(1L, new OnboardingUpsertRequest(List.of("OTHER"), "changed"));
 
         verify(onboardingRepository, never()).save(any());
         verify(memberRepository, never()).findById(any());

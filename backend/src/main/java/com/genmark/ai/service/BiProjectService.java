@@ -62,13 +62,6 @@ public class BiProjectService {
     }
 
     @Transactional
-    public BiProject createInitial(Member member, BiProjectUpsertRequest request) {
-        BiProject project = BiProject.builder().member(member).build();
-        apply(project, request);
-        project.setStatus(ProjectStatus.BRIEF_READY);
-        project.setCurrentStep(5);
-        return biProjectRepository.save(project);
-    }
 
     public BiProjectResponse toResponse(BiProject p) {
         List<String> valueCategories = Stream.of(p.getValueCategory1(), p.getValueCategory2(), p.getValueCategory3())

@@ -4,6 +4,7 @@ import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.Member;
 import com.genmark.ai.entity.ProjectStatus;
 import com.genmark.ai.repository.CiProjectRepository;
+import com.genmark.ai.web.dto.project.CiLatestProfileResponse;
 import com.genmark.ai.web.dto.project.CiProjectResponse;
 import com.genmark.ai.web.dto.project.CiProjectUpsertRequest;
 import com.genmark.ai.web.exception.ApiException;
@@ -41,6 +42,21 @@ public class CiProjectService {
         return toResponse(requireOwned(publicId, memberId));
     }
 
+    /**
+     * 두 번째 CI부터 회사명·핵심가치를 자동으로 채워주기 위한 조회 (F7-1).
+     *
+     * <p>새 컬럼 없이 "가장 최근 CI 한 건"을 읽는 것만으로 해결된다. BI는 이 규칙이 없어
+     * 대응하는 메서드를 두지 않는다.
+     *
+     * <p>회사명이 비어 있는 CI(작성 중 이탈 등)는 자동 채움 대상이 아니므로 건너뛴다.
+     */
+    public CiLatestProfileResponse latestProfile(Long memberId) {
+        return ciProjectRepository.findFirstByMemberIdOrderByCreatedAtDesc(memberId)
+                .filter(p -> p.getCompanyName() != null && !p.getCompanyName().isBlank())
+                .map(p -> new CiLatestProfileResponse(true, p.getCompanyName(), p.getCoreValues()))
+                .orElseGet(CiLatestProfileResponse::empty);
+    }
+
     @Transactional
     public CiProjectResponse update(String publicId, Long memberId, CiProjectUpsertRequest request) {
         CiProject project = requireOwned(publicId, memberId);
@@ -56,15 +72,6 @@ public class CiProjectService {
         apply(project, request);
         if (stepNumber > project.getCurrentStep()) project.setCurrentStep(stepNumber);
         return toResponse(project);
-    }
-
-    @Transactional
-    public CiProject createInitial(Member member, CiProjectUpsertRequest request) {
-        CiProject project = CiProject.builder().member(member).build();
-        apply(project, request);
-        project.setStatus(ProjectStatus.BRIEF_READY);
-        project.setCurrentStep(4);
-        return ciProjectRepository.save(project);
     }
 
     public CiProjectResponse toResponse(CiProject p) {

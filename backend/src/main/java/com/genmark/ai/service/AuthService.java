@@ -2,6 +2,7 @@ package com.genmark.ai.service;
 
 import com.genmark.ai.entity.BiProject;
 import com.genmark.ai.entity.CiProject;
+import com.genmark.ai.entity.CreditHistory;
 import com.genmark.ai.entity.Member;
 import com.genmark.ai.entity.ProjectStatus;
 import com.genmark.ai.oauth.OAuthUserInfo;
@@ -34,6 +35,7 @@ public class AuthService {
     private final MemberOnboardingRepository onboardingRepository;
     private final CiProjectRepository ciProjectRepository;
     private final BiProjectRepository biProjectRepository;
+    private final CreditService creditService;
     private final long refreshTokenExpirationDays;
 
     public AuthService(
@@ -43,6 +45,7 @@ public class AuthService {
             MemberOnboardingRepository onboardingRepository,
             CiProjectRepository ciProjectRepository,
             BiProjectRepository biProjectRepository,
+            CreditService creditService,
             @Value("${jwt.refresh-token-expiration-days:14}") long refreshTokenExpirationDays
     ) {
         this.memberRepository = memberRepository;
@@ -51,6 +54,7 @@ public class AuthService {
         this.onboardingRepository = onboardingRepository;
         this.ciProjectRepository = ciProjectRepository;
         this.biProjectRepository = biProjectRepository;
+        this.creditService = creditService;
         this.refreshTokenExpirationDays = refreshTokenExpirationDays;
     }
 
@@ -143,8 +147,15 @@ public class AuthService {
                 .name(name)
                 .provider(provider)
                 .providerId(info.providerId())
+                // 잔액 0으로 만든 뒤 아래에서 정식으로 지급한다. 처음부터 2를 넣어버리면
+                // credit_histories에 기록이 남지 않아 "이력 합계 = 잔액"이 깨진다.
+                .creditBalance(0)
                 .build();
-        return memberRepository.save(member);
+        memberRepository.save(member);
+
+        // 가입 축하 크레딧 2개. 잔액과 이력이 함께 남는다.
+        creditService.grant(member.getId(), CreditService.SIGNUP_GRANT, CreditHistory.Reason.SIGNUP);
+        return member;
     }
 
     /**

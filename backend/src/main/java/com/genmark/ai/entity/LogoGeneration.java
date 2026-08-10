@@ -43,6 +43,16 @@ public class LogoGeneration {
     @Column(name = "idempotency_key", nullable = false, length = 100)
     private String idempotencyKey;
 
+    /**
+     * 재생성일 경우 직전 생성 건. 최초 생성이면 null.
+     *
+     * <p>재생성은 이전 로고 4개를 AI에게 "이런 건 피해달라"(부정 프롬프트)로 넘겨야 하므로
+     * 어떤 생성의 재시도인지 알아야 한다. 이 연결로 이전 후보들을 찾아간다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_generation_id", foreignKey = @ForeignKey(name = "fk_generation_parent"))
+    private LogoGeneration parentGeneration;
+
     @Column(name = "error_code", length = 50)
     private String errorCode;
 

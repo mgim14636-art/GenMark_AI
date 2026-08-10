@@ -27,11 +27,13 @@ class AuthServiceTest {
     @Mock MemberOnboardingRepository onboardingRepository;
     @Mock CiProjectRepository ciProjectRepository;
     @Mock BiProjectRepository biProjectRepository;
+    /** 신규 가입 시 크레딧 2개를 지급하는 데 쓰인다 (잔액 + 이력을 함께 남긴다). */
+    @Mock CreditService creditService;
     AuthService service;
 
     @BeforeEach void setUp() {
         service = new AuthService(memberRepository, oAuthVerifierResolver, jwtProvider, onboardingRepository,
-                ciProjectRepository, biProjectRepository, 14);
+                ciProjectRepository, biProjectRepository, creditService, 14);
     }
 
     @Test
