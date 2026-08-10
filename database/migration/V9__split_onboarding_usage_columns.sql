@@ -17,6 +17,19 @@
 
 SET @db := DATABASE();
 
+-- MariaDB 10.5에서는 CHECK 제약이 있는 테이블의 컬럼을 변경할 때
+-- "Unknown column ... in CHECK"가 발생할 수 있어 변환 동안만 제약을 내린다.
+SET @sql := (
+  SELECT IF(
+    (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+      WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'member_onboardings'
+        AND CONSTRAINT_NAME = 'chk_onboarding_decision' AND CONSTRAINT_TYPE = 'CHECK') = 1,
+    'ALTER TABLE `member_onboardings` DROP CONSTRAINT `chk_onboarding_decision`',
+    'SELECT 1'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 -- 1) usage_1 컬럼 추가 (없을 때만)
 SET @sql := (
   SELECT IF(
@@ -82,6 +95,18 @@ SET @sql := (
     (SELECT COUNT(*) FROM information_schema.COLUMNS
       WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'member_onboardings' AND COLUMN_NAME = 'usage_json') = 1,
     'ALTER TABLE `member_onboardings` DROP COLUMN `usage_json`',
+    'SELECT 1'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 변환 중 임시로 제거한 CHECK 제약 복원 (없을 때만)
+SET @sql := (
+  SELECT IF(
+    (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+      WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'member_onboardings'
+        AND CONSTRAINT_NAME = 'chk_onboarding_decision' AND CONSTRAINT_TYPE = 'CHECK') = 0,
+    'ALTER TABLE `member_onboardings` ADD CONSTRAINT `chk_onboarding_decision` CHECK (`details_decision` IN (''SUBMITTED'', ''SKIPPED''))',
     'SELECT 1'
   )
 );
