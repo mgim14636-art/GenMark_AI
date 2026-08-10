@@ -9,6 +9,9 @@
 ## 0. 3분 요약
 
 ```powershell
+# 0) 데이터 2개 파일 다운로드 (아래 §1 드라이브 링크)
+#    https://drive.google.com/drive/folders/1d3CgUBZeFeAjC6yLvkk_C0bZy_SFMJIG?usp=sharing
+
 # 1) 인덱스 번들 + KIPRIS 원본으로 데이터 복원
 python ai-server/scripts/restore_data.py `
   --index-zip  <다운로드>/genmark-index-2026-08-10-v1.zip `
@@ -32,7 +35,9 @@ curl http://localhost:8000/health
 | `genmark-index-2026-08-10-v1.zip` | 21.4MB | `embeddings.npy`, `ids.csv`, `data_manifest.json`, `trademarks.csv` | O |
 | `KI202608051108150001.zip` | 453MB | KIPRIS 벌크 원본 (TXT 9개 + 이미지 8,517장) | O |
 
-**업로드 위치:** `<팀 공유 드라이브 URL 기입>`
+**다운로드:** https://drive.google.com/drive/folders/1d3CgUBZeFeAjC6yLvkk_C0bZy_SFMJIG?usp=sharing
+
+폴더 안에 `README.txt`(설치 방법·체크섬)가 함께 들어 있습니다.
 
 > 인덱스 번들만으로도 검색 API는 동작하지만, 시작 검증이 `image_path` 실존을 확인하므로
 > KIPRIS 원본 없이 띄우려면 `STRICT_IMAGE_CHECK=false` 를 설정해야 합니다.
