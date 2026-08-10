@@ -55,7 +55,13 @@ services:
     environment:
       FASTAPI_ENV: production
       HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN}
-      FAISS_INDEX_PATH: /app/data/faiss/trademark.index
+      EMBEDDINGS_PATH: /app/data/faiss/embeddings.npy
+      IDS_PATH: /app/data/faiss/ids.csv
+      DATA_MANIFEST_PATH: /app/data/faiss/data_manifest.json
+      TRADEMARK_METADATA_PATH: /app/data/trademarks/meta/trademarks.csv
+      TRADEMARK_DATA_ROOT: /app/data/trademarks
+      DINO_MODEL_ID: facebook/dinov2-base
+      DINO_MODEL_REVISION: ${DINO_MODEL_REVISION:-f9e44c814b77203eaa57a6bdbbd535f21ede1415}
       TZ: Asia/Seoul
     networks:
       - genmark-dev-net

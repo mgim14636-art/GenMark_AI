@@ -2,6 +2,8 @@ from typing import Any, Dict
 
 import pandas as pd
 
+from app.core.exceptions import SimilarityDataNotReady
+from app.core.logging import logger
 from app.services.dino_service import DinoService
 from app.services.faiss_service import FaissService
 
@@ -26,13 +28,28 @@ def _name(meta: dict) -> str:
 
 
 def _category(meta: dict) -> str:
-    cls = str(meta.get("류", "")).split("|")[0]
-    label = "화장품" if cls == "03" else f"{cls}류"
-    return f"{label} · {meta.get('상표구분코드명', '')}"
+    """백엔드 계약: 빈 문자열 금지. '03류 · 도형복합' 형태."""
+    cls = str(meta.get("류", "") or "").split("|")[0].strip()
+    kind = str(meta.get("상표구분코드명", "") or "").strip()
+    parts = []
+    if cls:
+        parts.append(f"{cls}류")
+    if kind:
+        parts.append(kind)
+    return " · ".join(parts) if parts else "분류 미상"
 
 
 def _to_score(z: float) -> int:
-    return int(min(100, max(0, z * Z_SLOPE + Z_INTERCEPT)))
+    """z → 0~100 정수.
+
+    truncation 대신 반올림을 쓴다. int()로 잘라내면 앵커가 어긋나
+    중앙값(z=2.72)이 29점이 되어 SAFE/MODERATE 경계 설계가 깨진다.
+    NaN은 0으로, ±Inf는 clamp로 흡수한다.
+    """
+    v = z * Z_SLOPE + Z_INTERCEPT
+    if v != v:  # NaN
+        return 0
+    return int(round(min(100.0, max(0.0, v))))
 
 
 def _risk_level(score: int) -> str:
@@ -49,19 +66,34 @@ class SimilarityService:
         vector = DinoService.extract_features(image_src)
         raw = FaissService.search_similar(vector, top_k=top_k)
 
-        matches = []
-        for i, r in enumerate(raw, 1):
+        if not raw:
+            raise SimilarityDataNotReady()
+
+        rows = []
+        for r in raw:
             meta = r["meta"]
-            matches.append({
-                "rank": i,
-                "applicationNumber": meta.get("출원번호", ""),
+            app_no = str(meta.get("출원번호", "") or "").strip()
+            image_path = str(meta.get("이미지경로", "") or "").strip().replace("\\", "/")
+            if not app_no or not image_path:
+                # 메타데이터가 깨진 행은 계약(빈 문자열 금지)을 만족할 수 없으므로 제외
+                logger.warning("Skipping match with incomplete metadata: index=%s", r.get("index"))
+                continue
+            rows.append({
+                "applicationNumber": app_no,
                 "name": _name(meta),
                 "category": _category(meta),
                 "similarity": _to_score(r["z"]),
-                "imagePath": meta.get("이미지경로", ""),
+                "imagePath": image_path,
             })
 
-        max_sim = matches[0]["similarity"] if matches else 0
+        if not rows:
+            raise SimilarityDataNotReady("Matched trademark metadata is incomplete.")
+
+        # 계약: similarity 내림차순 정렬 + rank 1부터 순차 증가
+        rows.sort(key=lambda m: m["similarity"], reverse=True)
+        matches = [{"rank": i, **m} for i, m in enumerate(rows, 1)]
+
+        max_sim = matches[0]["similarity"]
         return {
             "maxSimilarity": max_sim,
             "riskLevel": _risk_level(max_sim),
