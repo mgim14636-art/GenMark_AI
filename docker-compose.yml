@@ -10,7 +10,6 @@ services:
       SPRING_DATASOURCE_URL: "jdbc:mariadb://${DB_HOST}:${DB_PORT}/${DB_NAME}?useUnicode=true&characterEncoding=utf8&sslMode=${DB_SSL_MODE:-verify-full}"
       SPRING_DATASOURCE_USERNAME: ${DB_APP_USER}
       SPRING_DATASOURCE_PASSWORD: ${DB_APP_PASSWORD}
-      LOGO_AI_SERVER_URL: http://logo-ai-server:5000
       AI_SERVER_URL: http://ai-server:8000
       JWT_SECRET: ${JWT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
@@ -27,32 +26,31 @@ services:
   ai-server:
     build:
       context: .
-      dockerfile: infra/docker/Dockerfile.ai-similarity
+      dockerfile: infra/docker/Dockerfile.ai-server
     container_name: genmark-ai-server
     restart: unless-stopped
     environment:
       FASTAPI_ENV: ${FASTAPI_ENV:-development}
       HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN:-}
-      FAISS_INDEX_PATH: /app/data/faiss/trademark.index
-      METADATA_STORE_PATH: /app/data/faiss/metadata.json
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY}
+      KIPRIS_API_KEY: ${KIPRIS_API_KEY:-}
+      EMBEDDINGS_PATH: /app/data/faiss/embeddings.npy
+      IDS_PATH: /app/data/faiss/ids.csv
+      DATA_MANIFEST_PATH: /app/data/faiss/data_manifest.json
+      TRADEMARK_METADATA_PATH: /app/data/trademarks/meta/trademarks.csv
+      TRADEMARK_DATA_ROOT: /app/data/trademarks
+      DINO_MODEL_ID: facebook/dinov2-base
+      DINO_MODEL_REVISION: ${DINO_MODEL_REVISION:-f9e44c814b77203eaa57a6bdbbd535f21ede1415}
       TZ: Asia/Seoul
     ports:
       - "${AI_SERVER_PORT:-8000}:8000"
     volumes:
       - ./ai-server/data:/app/data
-    networks: [genmark-net]
-
-  logo-ai-server:
-    build:
-      context: ./ai-server
-      dockerfile: ../infra/docker/Dockerfile.logo-ai
-    container_name: genmark-logo-ai-server
-    restart: unless-stopped
-    environment:
-      NVIDIA_API_KEY: ${NVIDIA_API_KEY}
-      TZ: Asia/Seoul
-    ports:
-      - "${LOGO_AI_SERVER_PORT:-5000}:5000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks: [genmark-net]
 
   nginx:

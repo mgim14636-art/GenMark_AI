@@ -49,7 +49,7 @@ public class LogoGenerationService {
         Map<String, Object> survey = toSurvey(project);
         LogoGeneration generation = LogoGeneration.builder()
                 .project(project).status(LogoGeneration.Status.QUEUED).candidateCount(4)
-                .modelName("logo-ai-server").requestSnapshotJson(writeJson(survey))
+                .modelName("black-forest-labs/flux.2-klein-4b").requestSnapshotJson(writeJson(survey))
                 .idempotencyKey(idempotencyKey).build();
         generationRepository.save(generation);
         project.setStatus(Project.Status.GENERATING);
@@ -91,13 +91,16 @@ public class LogoGenerationService {
 
     public Map<String, Object> toSurvey(Project p) {
         Map<String, Object> survey = new LinkedHashMap<>();
-        survey.put("brand_name", p.getBrandName()); survey.put("industry", p.getIndustry());
+        survey.put("ci_bi", p.getBrandType());
+        survey.put("brand_name", p.getBrandName()); survey.put("company_name", p.getCompanyName());
+        survey.put("industry", p.getIndustry());
         survey.put("brand_values", projectService.readList(p.getBrandValuesJson()));
         survey.put("brand_values_text", p.getBrandValuesText()); survey.put("target_age", p.getTargetAge());
         survey.put("tone", p.getTone()); survey.put("color_mode", p.getColorMode());
         survey.put("color_manual", projectService.readList(p.getColorsJson())); survey.put("style", p.getLogoStyle());
         survey.put("include_brand_name_in_logo", p.isIncludeBrandName());
         survey.put("additional_requirements", p.getAdditionalRequirements());
+        survey.put("num_variants", 4);
         return survey;
     }
 

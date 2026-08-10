@@ -7,7 +7,6 @@ export type OnboardingResponse = {
   usage: string[]
   audience: string | null
   detailsDecision: OnboardingDetailsDecision | null
-  initialProjectId: string | null
   completedAt: string | null
   schemaVersion: number
 }
@@ -92,6 +91,15 @@ export type TrademarkMatch = {
   category: string
   similarity: number
   imagePath: string | null
+}
+
+export const getLogoCandidateImageUrl = (storageKey: string) => {
+  const normalizedKey = storageKey.replace(/^\/+/, '')
+  const publicPath = normalizedKey.startsWith('uploads/')
+    ? normalizedKey
+    : `uploads/${normalizedKey}`
+
+  return `/${publicPath}`
 }
 
 const delay = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))

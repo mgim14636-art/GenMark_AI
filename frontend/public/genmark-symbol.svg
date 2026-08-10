@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="324" height="384" viewBox="0 0 324 384">
+  <defs>
+    <linearGradient id="navyGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111B78"/>
+      <stop offset="100%" stop-color="#07145E"/>
+    </linearGradient>
+    <linearGradient id="cyanGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2DD4D1"/>
+      <stop offset="100%" stop-color="#19C2C7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Navy upper shield / M frame -->
+  <path
+    d="M160 38
+       L30 107
+       L30 258
+       Q30 281 49 292
+       L70 304
+       L70 118
+       L160 175
+       L248 118
+       L248 187
+       L288 188
+       L288 107
+       Z"
+    fill="url(#navyGrad)"/>
+
+  <!-- Cyan lower M / shield body -->
+  <path
+    d="M99 191
+       L160 230
+       L219 191
+       L219 219
+       L288 219
+       L288 259
+       Q288 279 270 291
+       L160 362
+       L70 304
+       L70 260
+       L160 317
+       L248 260
+       L219 260
+       L160 297
+       L99 259
+       Z"
+    fill="url(#cyanGrad)"/>
+
+  <!-- White separating chevron -->
+  <path
+    d="M70 260 L160 317 L248 260"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="9"
+    stroke-linejoin="miter"
+    stroke-linecap="butt"/>
+</svg>

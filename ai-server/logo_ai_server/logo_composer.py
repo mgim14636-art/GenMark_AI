@@ -6,7 +6,7 @@ from typing import Optional
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-from prompt_builder import _normalize_survey
+from prompt_builder import _normalize_survey, _normalize_tone
 
 # LOGO_FONT_PATH 환경변수가 없을 때 순서대로 시도할 폰트 후보(굵기별).
 # 배포 컨테이너(Linux)와 로컬 개발(Windows) 양쪽을 커버하기 위해 여러 경로를 둔다.
@@ -18,28 +18,67 @@ from prompt_builder import _normalize_survey
 # 선택되는지는 _pick_random_font_path가 이 중 실제로 존재하는 파일들 중에서 무작위로
 # 고른다. LOGO_FONT_PATH 환경변수가 설정돼 있으면 그게 최우선으로 고정 사용된다
 # (무작위 선택보다 우선 — 배포 환경에서 특정 폰트로 강제 고정하고 싶을 때 쓴다).
+#
+# Pretendard/NanumGothic/맑은고딕은 셋 다 "두꺼운 고딕" 계열이라 실제로 다른 파일이
+# 골라져도 육안으로는 거의 구분이 안 되는 문제가 있었다(실측 확인됨). 전부 OFL(SIL
+# Open Font License) — 상업적 이용 가능. 라이선스 원문은 fonts/licenses/LICENSE-*.txt 참고.
 _FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 _FONT_CANDIDATES = {
     "bold": [
-        os.path.join(_FONT_DIR, "Pretendard-Bold.ttf"),
+        os.path.join(_FONT_DIR, "modern_sans", "bold", "Pretendard-Bold.ttf"),
         os.path.join(_FONT_DIR, "NotoSansKR-Bold.otf"),
-        os.path.join(_FONT_DIR, "NanumGothicBold.ttf"),
+        os.path.join(_FONT_DIR, "modern_sans", "bold", "NanumGothicBold.ttf"),
         "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansKR-Bold.otf",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
         "C:/Windows/Fonts/malgunbd.ttf",
-        "C:/Windows/Fonts/malgun.ttf",
         "/System/Library/Fonts/AppleSDGothicNeo.ttc",
     ],
     "regular": [
-        os.path.join(_FONT_DIR, "Pretendard-Regular.ttf"),
+        os.path.join(_FONT_DIR, "modern_sans", "regular", "Pretendard-Regular.ttf"),
         os.path.join(_FONT_DIR, "NotoSansKR-Regular.otf"),
-        os.path.join(_FONT_DIR, "NanumGothicBold.ttf"),
+        os.path.join(_FONT_DIR, "modern_sans", "bold", "NanumGothicBold.ttf"),
         "/usr/share/fonts/truetype/noto/NotoSansKR-Regular.otf",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "C:/Windows/Fonts/malgun.ttf",
         "/System/Library/Fonts/AppleSDGothicNeo.ttc",
     ],
+}
+
+# 위 기본 풀은 전부 고딕 계열이라 실제로 다른 파일이 골라져도 육안 차이가 거의 없다
+# (실측 확인됨). 그렇다고 스타일이 뚜렷한 폰트(명조/손글씨/라운드 디스플레이)를 전부
+# 톤 구분 없이 섞으면 프리미엄 스킨케어 로고에 손글씨체가 나오는 등 톤과 안 맞는
+# 조합이 나온다(마찬가지로 실측 확인됨). 그래서 prompt_builder.TONE_MAP의 5개 톤
+# 키마다 그 톤의 분위기와 실제로 어울리는 폰트만 골라 추가한다 — 톤을 하나도 못 가진
+# 후보(빈 리스트)가 없도록 5개 전부 최소 1종 이상 채운다.
+#   - 친근하고 다정한 : 손글씨(Gaegu)·라운드체(Jua) — 다정하고 편안한 인상
+#   - 전문적이고 신뢰감 있는 : 명조/세리프(NanumMyeongjo) — 격식 있고 신뢰감 있는 인상
+#   - 감성적이고 따뜻한 : 명조 + 손글씨 — TONE_MAP 원문의 "organic hand-drawn curves"와
+#     맞물리는 조합(세리프의 서정성 + 손글씨의 온기)
+#   - 유니크하고 트렌디한 : 라운드체 + 손글씨 — 관습적이지 않은 개성 있는 인상
+#   - 미니얼하고 직관적인 : 명조 — 장식 없는 세리프는 미니멀 취지를 해치지 않으면서도
+#     고딕 일변도에서 벗어나게 해줌 (손글씨/라운드체는 "심플한 여백" 취지와 어긋나 제외)
+TONE_FONT_BIAS = {
+    "친근하고 다정한": {
+        "bold": [os.path.join(_FONT_DIR, "Gaegu-Bold.ttf"), os.path.join(_FONT_DIR, "Jua-Regular.ttf")],
+        "regular": [os.path.join(_FONT_DIR, "Jua-Regular.ttf")],
+    },
+    "전문적이고 신뢰감 있는": {
+        "bold": [os.path.join(_FONT_DIR, "elegant_serif", "bold", "NanumMyeongjo-Bold.ttf")],
+        "regular": [os.path.join(_FONT_DIR, "elegant_serif", "regular", "NanumMyeongjo-Regular.ttf")],
+    },
+    "감성적이고 따뜻한": {
+        "bold": [os.path.join(_FONT_DIR, "elegant_serif", "bold", "NanumMyeongjo-Bold.ttf"), os.path.join(_FONT_DIR, "Gaegu-Bold.ttf")],
+        "regular": [os.path.join(_FONT_DIR, "elegant_serif", "regular", "NanumMyeongjo-Regular.ttf")],
+    },
+    "유니크하고 트렌디한": {
+        "bold": [os.path.join(_FONT_DIR, "Jua-Regular.ttf"), os.path.join(_FONT_DIR, "Gaegu-Bold.ttf")],
+        "regular": [os.path.join(_FONT_DIR, "Jua-Regular.ttf")],
+    },
+    "미니얼하고 직관적인": {
+        "bold": [os.path.join(_FONT_DIR, "elegant_serif", "bold", "NanumMyeongjo-Bold.ttf")],
+        "regular": [os.path.join(_FONT_DIR, "elegant_serif", "regular", "NanumMyeongjo-Regular.ttf")],
+    },
 }
 
 # (굵기, 자간(em 단위)) 조합 후보 — 시안마다 이 중 하나를 무작위로 골라 텍스트
@@ -58,20 +97,29 @@ class FontNotFoundError(RuntimeError):
     """한글 렌더링 가능한 폰트를 찾지 못했을 때."""
 
 
-def _existing_font_candidates(weight: str) -> list:
-    """해당 굵기 후보 목록 중 실제로 디스크에 존재하는 파일 경로만 걸러서 반환한다."""
-    candidates = _FONT_CANDIDATES.get(weight, _FONT_CANDIDATES["bold"])
+def _existing_font_candidates(weight: str, tone: str = "") -> list:
+    """해당 굵기 후보 목록 중 실제로 디스크에 존재하는 파일 경로만 걸러서 반환한다.
+
+    tone이 TONE_FONT_BIAS에 있으면 그 톤과 어울리는 폰트를 후보 앞쪽에 추가로
+    섞는다 — 5개 톤 전부 기본 고딕 풀 + 최소 1종의 스타일 폰트를 갖도록 채워져
+    있어(TONE_FONT_BIAS 정의부 참고), 특정 톤(예전의 "친근/트렌디"만)만 다양하고
+    나머지 톤은 밋밋한 고딕만 나오는 일이 없다. 동시에 톤과 안 맞는 조합(프리미엄
+    로고에 손글씨체 등)은 여전히 섞이지 않는다.
+    """
+    candidates = list(_FONT_CANDIDATES.get(weight, _FONT_CANDIDATES["bold"]))
+    bias = TONE_FONT_BIAS.get(_normalize_tone(tone), {})
+    candidates = bias.get(weight, []) + candidates
     return [p for p in candidates if p and os.path.isfile(p)]
 
 
-def _pick_random_font_path(weight: str) -> Optional[str]:
-    """해당 굵기에서 실제로 존재하는 폰트 파일들 중 하나를 무작위로 고른다.
+def _pick_random_font_path(weight: str, tone: str = "") -> Optional[str]:
+    """해당 굵기(및 톤)에서 실제로 존재하는 폰트 파일들 중 하나를 무작위로 고른다.
 
     존재하는 후보가 하나도 없으면 None을 반환하고, 이 경우 _resolve_font가
     ImageFont.load_default()로 최종 폴백한다. LOGO_FONT_PATH 환경변수가 설정돼
     있으면 이 함수를 아예 거치지 않고 그쪽이 우선 사용된다(호출부에서 처리).
     """
-    candidates = _existing_font_candidates(weight)
+    candidates = _existing_font_candidates(weight, tone)
     if not candidates:
         return None
     return random.choice(candidates)
@@ -99,11 +147,13 @@ def _resolve_font(
     return ImageFont.load_default()
 
 
-def _resolve_font_path_for_call(font_path: Optional[str], weight: str) -> Optional[str]:
+def _resolve_font_path_for_call(
+    font_path: Optional[str], weight: str, tone: str = ""
+) -> Optional[str]:
     """이번 로고 한 장을 그리는 동안 고정해서 쓸 폰트 경로를 정한다.
 
     우선순위: (1) 호출부가 직접 넘긴 font_path, (2) LOGO_FONT_PATH 환경변수(배포
-    환경에서 특정 폰트로 고정하고 싶을 때), (3) 존재하는 후보 중 무작위 선택.
+    환경에서 특정 폰트로 고정하고 싶을 때), (3) 톤에 맞는 후보 중 무작위 선택.
     여기서 정한 경로를 폰트 크기를 조정하는 동안(이분 탐색/축소 루프) 계속 재사용해야
     폭 계산과 실제 그리기에 쓰이는 폰트가 어긋나지 않는다.
     """
@@ -112,7 +162,7 @@ def _resolve_font_path_for_call(font_path: Optional[str], weight: str) -> Option
     env_font = os.environ.get("LOGO_FONT_PATH")
     if env_font:
         return env_font
-    return _pick_random_font_path(weight)
+    return _pick_random_font_path(weight, tone)
 
 
 def _color_distance(a: tuple, b: tuple) -> float:
@@ -241,6 +291,7 @@ def compose_logo_with_text(
     text_color: Optional[str] = None,
     font_size_ratio: float = 0.17,
     gap_ratio: float = 0.35,
+    tone: str = "",
 ) -> Image.Image:
     """심볼 로고에 브랜드명 텍스트를 자연스럽게 합성한 새 이미지를 반환한다. (혼합형/심볼+텍스트용)
 
@@ -250,7 +301,9 @@ def compose_logo_with_text(
     우선 배치하고, 여백이 모자랄 때만 같은 배경색으로 캔버스를 확장한다. text_style
     (굵기, 자간)과 text_color를 지정하지 않으면 각각 무작위 조합 / 심볼·배경에서
     자동 결정된다. font_path를 지정하지 않으면 폰트 패밀리 자체도(존재하는 후보 중)
-    무작위로 고른다. brand_name이 비어 있으면 원본을 그대로 반환한다.
+    무작위로 고른다 — tone을 넘기면 그 톤과 어울리는 후보 안에서만 고른다(예:
+    "친근하고 다정한"·"유니크하고 트렌디한"일 때만 손글씨/라운드체가 섞인다).
+    brand_name이 비어 있으면 원본을 그대로 반환한다.
     """
     name = " ".join((brand_name or "").split())
     if not name:
@@ -268,7 +321,7 @@ def compose_logo_with_text(
     resolved_color = text_color or _dominant_color(flattened, bg_rgb)
     # 이 로고 한 장을 그리는 동안 폰트 경로를 한 번만 정하고 계속 재사용한다 —
     # 축소 루프 중간에 폰트가 바뀌면 폭 계산이 어긋나 텍스트가 잘리거나 넘칠 수 있다.
-    resolved_font_path = _resolve_font_path_for_call(font_path, weight)
+    resolved_font_path = _resolve_font_path_for_call(font_path, weight, tone)
 
     font_size = max(14, round(symbol_h * font_size_ratio))
     font = _resolve_font(font_size, resolved_font_path, weight)
@@ -343,6 +396,7 @@ def compose_logo(
     style: str = "혼합형",
     text_color: Optional[str] = None,
     font_path: Optional[str] = None,
+    tone: str = "",
 ) -> Image.Image:
     """심볼과 브랜드명을 합성해 최종 로고를 만든다.
 
@@ -351,6 +405,9 @@ def compose_logo(
       - 워드마크 : 브랜드명 텍스트만 (심볼 이미지는 쓰지 않음)
       - 레터마크 : 브랜드명 이니셜만 (심볼 이미지는 쓰지 않음)
       - 혼합형  : 심볼 위 + 브랜드명 아래 (compose_logo_with_text)
+
+    tone(설문의 톤)을 넘기면 폰트 후보도 그 톤에 맞춰 고른다 — 자세한 기준은
+    _existing_font_candidates 참고.
     """
     if style == "심볼":
         if symbol is None:
@@ -365,7 +422,7 @@ def compose_logo(
         text = _initials(brand_name) if style == "레터마크" else brand_name
         # 워드마크/레터마크는 항상 "bold" 굵기를 써왔으므로(_fit_font_to_width의
         # 기존 동작과 동일하게) weight="bold" 기준으로 폰트 경로를 무작위 선택한다.
-        resolved_font_path = _resolve_font_path_for_call(font_path, "bold")
+        resolved_font_path = _resolve_font_path_for_call(font_path, "bold", tone)
         font = _fit_font_to_width(draw, text, int(canvas_size * 0.7), resolved_font_path)
         tw, th = _text_size(draw, text, font)
         left, top, _, _ = draw.textbbox((0, 0), text, font=font)
@@ -380,7 +437,9 @@ def compose_logo(
     # 혼합형 (또는 그 외 스타일) — 심볼+텍스트 합성
     if symbol is None:
         raise ValueError(f"'{style}' 스타일에는 symbol 이미지가 필요합니다.")
-    return compose_logo_with_text(symbol, brand_name, font_path=font_path, text_color=text_color)
+    return compose_logo_with_text(
+        symbol, brand_name, font_path=font_path, text_color=text_color, tone=tone
+    )
 
 
 def _wants_text_overlay(survey: dict, style_key: str, brand_name: str) -> bool:
@@ -424,4 +483,5 @@ def compose_final_logo(symbol: Image.Image, survey: dict) -> Image.Image:
         return flattened.convert("RGBA")
 
     text_color = survey.get("text_color")
-    return compose_logo(symbol, brand_name, style=style_key, text_color=text_color)
+    tone = survey.get("tone", "")
+    return compose_logo(symbol, brand_name, style=style_key, text_color=text_color, tone=tone)

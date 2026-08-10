@@ -2,8 +2,9 @@ import { FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } 
 import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, LoaderCircle, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkle as LucideSparkle, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
+import GenMarkLogo from './components/ui/GenMarkLogo'
 import { AuthError, type AuthProvider, type AuthUser, loginWithProvider, logout, restoreSession } from './auth'
-import { onboardingApi, projectsApi, type LogoCandidate, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
+import { getLogoCandidateImageUrl, onboardingApi, projectsApi, type LogoCandidate, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
 
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
 
@@ -63,7 +64,7 @@ const getModeFromUrl = (): ViewMode => {
   if (requestedView === 'onboarding') return 'onboarding'
   if (requestedView === 'industry' || requestedView === 'industry-selection' || requestedView === 'domain') return 'industry'
   if (requestedView === 'brand-details' || requestedView === 'brand-info' || requestedView === 'values') return 'brand-details'
-  if (requestedView === 'company-details' || requestedView === 'ci-details' || requestedView === 'corporate-details') return 'choice'
+  if (requestedView === 'company-details' || requestedView === 'ci-details' || requestedView === 'corporate-details') return 'company-details'
   if (requestedView === 'choice' || requestedView === 'ci-bi' || requestedView === 'brand-type') return 'choice'
   if (requestedView === 'tone' || requestedView === 'tone-color' || requestedView === 'tone-and-color') return 'tone'
   if (requestedView === 'style' || requestedView === 'logo-style' || requestedView === 'logo-shape') return 'style'
@@ -102,15 +103,26 @@ function ScreenBackButton({ label, onClick }: { label: string; onClick: () => vo
   )
 }
 
-function BrandLogo() {
+type BrandFlowStep = 1 | 2 | 3 | 4
+
+function BrandFlowProgress({ step }: { step: BrandFlowStep }) {
   return (
-    <span className="brand-emblem" aria-hidden="true">
-      <span className="leaf leaf-left" />
-      <span className="leaf leaf-center" />
-      <span className="leaf leaf-right" />
-      <span className="leaf-stem" />
-    </span>
+    <div className={`brand-flow-progress is-step-${step}`} aria-label={`브랜드 생성 4단계 중 ${step}단계`}>
+      <span className="brand-flow-step-badge">{step} / 4</span>
+      <div className="brand-flow-progress-track" aria-hidden="true">
+        <span className="brand-flow-progress-line" />
+        {[1, 2, 3, 4].map((node) => (
+          <span key={node} className={`brand-flow-progress-node ${node < step ? 'complete' : node === step ? 'active' : ''}`}>
+            {node < step ? <Check size={14} strokeWidth={2.5} /> : null}
+          </span>
+        ))}
+      </div>
+    </div>
   )
+}
+
+function BrandLogo({ className = '' }: { className?: string }) {
+  return <GenMarkLogo className={className ? `brand-emblem ${className}` : 'brand-emblem'} />
 }
 
 function CustomerApp() {
@@ -118,6 +130,7 @@ function CustomerApp() {
   const [loggedIn, setLoggedIn] = useState(false)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [authLoading, setAuthLoading] = useState(false)
+  const [authRestoring, setAuthRestoring] = useState(true)
   const [authError, setAuthError] = useState('')
   const [loginDestination, setLoginDestination] = useState<LoginDestination>('home')
   const [loginReturnMode, setLoginReturnMode] = useState<LoginReturnMode>('home')
@@ -132,7 +145,7 @@ function CustomerApp() {
   const [onboardingSelection, setOnboardingSelection] = useState<OnboardingOption[]>(['online'])
   const [audienceSelection, setAudienceSelection] = useState<AudienceOption[]>(['company'])
   const [industrySelection, setIndustrySelection] = useState<IndustryOption | null>(null)
-  const [brandKind, setBrandKind] = useState<'ci' | 'bi' | null>(null)
+  const [brandKind, setBrandKind] = useState<'ci' | 'bi' | null>(() => getModeFromUrl() === 'company-details' ? 'ci' : null)
   const [choiceBackMode, setChoiceBackMode] = useState<'home' | 'onboarding' | 'industry'>('home')
   const [industryBackMode, setIndustryBackMode] = useState<'home' | 'onboarding'>('home')
   const [additionalRequest, setAdditionalRequest] = useState('')
@@ -194,7 +207,7 @@ function CustomerApp() {
   const [remainingCredits, setRemainingCredits] = useState(2)
   const [creditModal, setCreditModal] = useState<'credit' | 'survey' | null>(null)
   const [choiceInfoModal, setChoiceInfoModal] = useState<'ci' | 'bi' | null>(null)
-  const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string } | null>(null)
+  const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; storageKey?: string } | null>(null)
 
   const setMode = (nextMode: ViewMode, options: { replace?: boolean } = {}) => {
     setModeState(nextMode)
@@ -225,24 +238,49 @@ function CustomerApp() {
     void (async () => {
       try {
         const session = await restoreSession()
-        if (cancelled || !session) return
+        if (cancelled) return
+        if (!session) {
+          setAuthUser(null)
+          setLoggedIn(false)
+          return
+        }
+
         setAuthUser(session.user)
         setLoggedIn(true)
         setOnboardingCompleted(session.user.onboardingCompleted)
         if (session.user.onboardingCompleted) window.localStorage.setItem('genmark-onboarding-completed', 'true')
 
-        const onboarding = await onboardingApi.get()
-        if (cancelled) return
-        setOnboardingSelection(onboarding.usage.filter((value): value is OnboardingOption => value === 'online' || value === 'social' || value === 'offline'))
-        if (onboarding.audience === 'company' || onboarding.audience === 'owner' || onboarding.audience === 'hobby' || onboarding.audience === 'sidejob') {
-          setAudienceSelection([onboarding.audience])
+        try {
+          const onboarding = await onboardingApi.get()
+          if (cancelled) return
+          setOnboardingSelection(onboarding.usage.filter((value): value is OnboardingOption => value === 'online' || value === 'social' || value === 'offline'))
+          if (onboarding.audience === 'company' || onboarding.audience === 'owner' || onboarding.audience === 'hobby' || onboarding.audience === 'sidejob') {
+            setAudienceSelection([onboarding.audience])
+          }
+        } catch (error) {
+          // A missing or temporarily unavailable onboarding record must not log out
+          // an otherwise valid session restored from the refresh token.
+          if (error instanceof AuthError && error.status === 401) {
+            setAuthUser(null)
+            setLoggedIn(false)
+          }
         }
-        if (onboarding.initialProjectId) {
-          setProjectId(onboarding.initialProjectId)
-          window.localStorage.setItem('genmark-project-id', onboarding.initialProjectId)
+
+        if (cancelled) return
+        if (session.resumeProjectId) {
+          setProjectId(session.resumeProjectId)
+          window.localStorage.setItem('genmark-project-id', session.resumeProjectId)
+        } else {
+          setProjectId(null)
+          window.localStorage.removeItem('genmark-project-id')
         }
       } catch {
-        if (!cancelled) setLoggedIn(false)
+        if (!cancelled) {
+          setAuthUser(null)
+          setLoggedIn(false)
+        }
+      } finally {
+        if (!cancelled) setAuthRestoring(false)
       }
     })()
     return () => { cancelled = true }
@@ -330,6 +368,13 @@ function CustomerApp() {
       const session = await loginWithProvider(provider)
       setAuthUser(session.user)
       setLoggedIn(true)
+      if (session.resumeProjectId) {
+        setProjectId(session.resumeProjectId)
+        window.localStorage.setItem('genmark-project-id', session.resumeProjectId)
+      } else {
+        setProjectId(null)
+        window.localStorage.removeItem('genmark-project-id')
+      }
       setOnboardingCompleted(session.user.onboardingCompleted)
       setOnboardingStep(1)
       setIndustryBackMode(session.user.onboardingCompleted ? 'home' : 'onboarding')
@@ -492,8 +537,14 @@ function CustomerApp() {
   const ensureProject = async (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review' = 'final-review') => {
     const input = buildProjectInput()
     if (projectId) {
-      await projectsApi.updateStep(projectId, step, input)
-      return projectId
+      try {
+        await projectsApi.updateStep(projectId, step, input)
+        return projectId
+      } catch (error) {
+        if (!(error instanceof AuthError) || error.status !== 404) throw error
+        setProjectId(null)
+        window.localStorage.removeItem('genmark-project-id')
+      }
     }
 
     const project = await projectsApi.create(input)
@@ -602,17 +653,17 @@ function CustomerApp() {
     }
   }
 
-  const downloadLogo = (candidate: { name: string; subtitle: string }) => {
-    const logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="#ffffff"/><circle cx="600" cy="280" r="116" fill="none" stroke="#b889ad" stroke-width="6"/><path d="M600 380c-72-28-104-83-74-142 35-68 70 4 74 55 4-51 39-123 74-55 30 59-2 114-74 142Z" fill="#d9c6e0" stroke="#8f75a8" stroke-width="4"/><text x="600" y="570" text-anchor="middle" fill="#2a2d39" font-family="Georgia, serif" font-size="92" letter-spacing="12">${candidate.name}</text><text x="600" y="635" text-anchor="middle" fill="#b388a9" font-family="Arial, sans-serif" font-size="26" letter-spacing="12">${candidate.subtitle}</text></svg>`
-    const downloadUrl = URL.createObjectURL(new Blob([logoSvg], { type: 'image/svg+xml' }))
+  const downloadLogo = (candidate: { name: string; subtitle?: string; storageKey?: string }) => {
+    if (!candidate.storageKey) return
+
+    const downloadUrl = getLogoCandidateImageUrl(candidate.storageKey)
     const link = document.createElement('a')
     link.href = downloadUrl
-    link.download = `${candidate.name.toLowerCase()}-logo.svg`
+    link.download = `${candidate.name.toLowerCase()}-logo.png`
     link.click()
-    URL.revokeObjectURL(downloadUrl)
   }
 
-  const requestLogoDownload = (candidate: { name: string; subtitle: string }) => {
+  const requestLogoDownload = (candidate: { name: string; subtitle: string; storageKey?: string }) => {
     setPendingDownload(candidate)
     setCreditModal('credit')
   }
@@ -769,16 +820,7 @@ function CustomerApp() {
       <main className="brand-details-screen">
         <ScreenBackButton label="CI·BI 선택 화면으로 돌아가기" onClick={() => setMode('choice')} />
         <section className="brand-details-content" aria-labelledby="brand-details-title">
-          <div className="brand-details-progress" aria-label="브랜드 생성 4단계 중 2단계">
-            <span className="brand-details-step-badge">2 / 4</span>
-            <div className="brand-details-progress-track" aria-hidden="true">
-              <span className="brand-details-progress-line" />
-              <span className="brand-details-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-              <span className="brand-details-progress-node active" />
-              <span className="brand-details-progress-node" />
-              <span className="brand-details-progress-node" />
-            </div>
-          </div>
+          <BrandFlowProgress step={1} />
 
           <header className="brand-details-heading">
             <h1 id="brand-details-title">어떤 화장품 브랜드를 만들고 있나요?</h1>
@@ -851,19 +893,10 @@ function CustomerApp() {
       <main className="brand-details-screen company-details-screen">
       <ScreenBackButton
         label="이전 화면으로 돌아가기"
-        onClick={() => { setOnboardingStep(2); setMode('onboarding') }}
+        onClick={() => setMode('choice')}
       />
       <section className="brand-details-content" aria-labelledby="company-details-title">
-        <div className="brand-details-progress" aria-label="기업 로고 생성 4단계 중 2단계">
-          <span className="brand-details-step-badge">2 / 4</span>
-          <div className="brand-details-progress-track" aria-hidden="true">
-            <span className="brand-details-progress-line" />
-            <span className="brand-details-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-            <span className="brand-details-progress-node active" />
-            <span className="brand-details-progress-node" />
-            <span className="brand-details-progress-node" />
-          </div>
-        </div>
+        <BrandFlowProgress step={1} />
 
         <header className="brand-details-heading">
           <h1 id="company-details-title">어떤 기업을 만들고 있나요?</h1>
@@ -911,18 +944,9 @@ function CustomerApp() {
 
   const renderToneSelectionScreen = () => (
     <main className="tone-selection-screen">
-      <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => setMode(brandKind === 'ci' ? 'choice' : 'brand-details')} />
+      <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => setMode(brandKind === 'ci' ? 'company-details' : 'brand-details')} />
       <section className="tone-selection-content" aria-labelledby="tone-selection-title">
-        <div className="tone-progress" aria-label="브랜드 생성 4단계 중 3단계">
-          <span className="tone-step-badge">3 / 4</span>
-          <div className="tone-progress-track" aria-hidden="true">
-            <span className="tone-progress-line" />
-            <span className="tone-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-            <span className="tone-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-            <span className="tone-progress-node active" />
-            <span className="tone-progress-node" />
-          </div>
-        </div>
+        <BrandFlowProgress step={2} />
 
         <header className="tone-selection-heading">
           <h1 id="tone-selection-title">톤앤매너와<br />색상을 골라주세요</h1>
@@ -1021,16 +1045,7 @@ function CustomerApp() {
     <main className="logo-style-screen">
       <ScreenBackButton label="톤앤매너 선택 화면으로 돌아가기" onClick={() => setMode('tone')} />
       <section className="logo-style-content" aria-labelledby="logo-style-title">
-        <div className="logo-style-progress" aria-label="브랜드 생성 4단계 중 3단계">
-          <span className="logo-style-step-badge">3 / 4</span>
-          <div className="logo-style-progress-track" aria-hidden="true">
-            <span className="logo-style-progress-line" />
-            <span className="logo-style-progress-node complete">1</span>
-            <span className="logo-style-progress-node complete">2</span>
-            <span className="logo-style-progress-node active">3</span>
-            <span className="logo-style-progress-node">4</span>
-          </div>
-        </div>
+        <BrandFlowProgress step={3} />
 
         <header className="logo-style-heading">
           <h1 id="logo-style-title">어떤 형태의 로고가<br />필요한가요?</h1>
@@ -1079,7 +1094,6 @@ function CustomerApp() {
       <img className="featured-art" src="/aurora-bubbles.png" alt="핑크와 보라색의 투명한 구체가 겹쳐진 스킨케어 이미지" />
       <div className="featured-scrim" />
       <div className="featured-lockup">
-        <BrandLogo />
         <h1 id="featured-title">LUMIÈRE</h1>
         <p className="featured-subtitle">RADIANT SKINCARE</p>
         <span className="featured-rule" />
@@ -1104,7 +1118,7 @@ function CustomerApp() {
   const renderHeroScreen = () => (
     <main className="hero-screen">
       <header className="hero-screen-header">
-        <div className="hero-screen-brand"><span className="hero-screen-mark" aria-hidden="true">✦</span><span>GenMark AI</span></div>
+        <div className="hero-screen-brand"><BrandLogo className="hero-screen-mark" /><span>GenMark AI</span></div>
         <button type="button" className="hero-screen-login" onClick={() => { setLoginDestination('home'); setLoginReturnMode('hero'); setMode('login') }}>로그인</button>
       </header>
       <section className="hero-screen-panel" aria-labelledby="hero-screen-title">
@@ -1130,10 +1144,25 @@ function CustomerApp() {
       <AnimatedGallery>
         <header className="gallery-hero-header">
           <div className="gallery-hero-brand">
-            <span className="gallery-hero-mark" aria-hidden="true"><LucideSparkle size={15} strokeWidth={2.2} /></span>
+            <BrandLogo className="gallery-hero-mark" />
             <span>GenMark AI</span>
           </div>
-          <button type="button" className="gallery-hero-login" onClick={() => { setLoginDestination('home'); setLoginReturnMode('hero'); setMode('login') }}>로그인</button>
+          <button
+            type="button"
+            className="gallery-hero-login"
+            disabled={authRestoring}
+            onClick={() => {
+              if (loggedIn) {
+                void handleLogout()
+                return
+              }
+              setLoginDestination('home')
+              setLoginReturnMode('hero')
+              setMode('login')
+            }}
+          >
+            {authRestoring ? '확인 중…' : loggedIn ? '로그아웃' : '로그인'}
+          </button>
         </header>
 
         <div className="gallery-hero-copy">
@@ -1156,7 +1185,7 @@ function CustomerApp() {
   const renderChoiceScreen = () => {
     const chooseBrandKind = (kind: 'ci' | 'bi') => {
       setBrandKind(kind)
-      setMode(kind === 'ci' ? 'tone' : 'brand-details')
+      setMode(kind === 'ci' ? 'company-details' : 'brand-details')
     }
 
     const choiceDetails = {
@@ -1252,16 +1281,7 @@ function CustomerApp() {
       <main className="final-request-screen">
         <ScreenBackButton label="로고 스타일 선택 화면으로 돌아가기" onClick={() => setMode('style')} />
         <section className="final-request-content" aria-labelledby="final-request-title">
-          <div className="final-progress" aria-label="브랜드 생성 4단계 중 4단계">
-            <span className="final-step-badge">4 / 4</span>
-            <div className="final-progress-track" aria-hidden="true">
-              <span className="final-progress-line" />
-                <span className="final-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-                <span className="final-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-                <span className="final-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-              <span className="final-progress-node active" />
-            </div>
-          </div>
+          <BrandFlowProgress step={4} />
 
           <header className="final-request-heading">
             <h1 id="final-request-title">마지막으로 꼭 반영할 내용을 알려주세요</h1>
@@ -1418,7 +1438,7 @@ function CustomerApp() {
       <main className="trademark-loading-screen" aria-labelledby="trademark-loading-title">
         <section className="trademark-loading-content">
           <div className="trademark-brand-lockup" aria-label="GenMark AI">
-            <span className="trademark-brand-mark" aria-hidden="true"><Sparkles size={30} strokeWidth={1.6} /></span>
+            <BrandLogo className="trademark-brand-mark" />
             <span>GenMark AI</span>
           </div>
 
@@ -1479,7 +1499,7 @@ function CustomerApp() {
       <main className="trademark-selection-screen" aria-labelledby="trademark-selection-title">
         <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => setMode(trademarkEntry === 'generation' ? 'final' : 'result')} />
         <header className="trademark-selection-header">
-          <div className="trademark-selection-brand"><Sparkles className="trademark-selection-brand-mark" aria-hidden="true" size={24} strokeWidth={1.6} /><span>GenMark AI</span></div>
+          <div className="trademark-selection-brand"><BrandLogo className="trademark-selection-brand-mark" /><span>GenMark AI</span></div>
           <button className="trademark-help" type="button" aria-label="상표 분석 도움말"><CircleHelp aria-hidden="true" size={23} strokeWidth={1.8} /></button>
         </header>
 
@@ -1543,7 +1563,7 @@ function CustomerApp() {
       <main className="trademark-result-screen" aria-labelledby="trademark-result-title">
         <header className="trademark-result-header">
           <button className="trademark-result-back" type="button" aria-label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-          <div className="trademark-result-brand"><Sparkles aria-hidden="true" size={26} strokeWidth={1.6} /><strong>GenMark AI</strong></div>
+          <div className="trademark-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
           <button className="trademark-result-help" type="button" aria-label="상표 분석 도움말"><CircleHelp aria-hidden="true" size={24} strokeWidth={1.8} /></button>
         </header>
 
@@ -1630,7 +1650,7 @@ function CustomerApp() {
     return (
       <main className="logo-result-screen" aria-labelledby="logo-result-title">
         <header className="logo-result-header">
-          <div className="logo-result-brand"><Sparkles aria-hidden="true" size={26} strokeWidth={1.8} /><strong>GenMark AI</strong></div>
+          <div className="logo-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
           <button className="logo-result-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={23} strokeWidth={1.8} /></button>
         </header>
 
@@ -1645,8 +1665,12 @@ function CustomerApp() {
               <Heart size={22} strokeWidth={1.9} fill={resultLiked ? 'currentColor' : 'none'} />
             </button>
             <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => { const next = (resultCandidate + candidates.length - 1) % candidates.length; void selectLogoCandidate(candidates[next], next) }}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>
-            <div className={`logo-candidate-art ${candidate.style}`}>
-              <div className="candidate-emblem" aria-hidden="true"><span /><i /><b /></div>
+            <div className="logo-candidate-art">
+              <img
+                className="logo-candidate-image"
+                src={getLogoCandidateImageUrl(candidate.storageKey)}
+                alt={`${candidate.name} AI 생성 로고`}
+              />
               <strong>{candidate.name}</strong>
               <small>{candidate.subtitle}</small>
             </div>
@@ -1700,7 +1724,7 @@ function CustomerApp() {
       <main className="logo-editor-screen" aria-labelledby="logo-editor-title">
         <header className="logo-editor-header">
           <button className="logo-editor-back" type="button" aria-label="결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-          <div className="logo-editor-brand"><Sparkles aria-hidden="true" size={22} strokeWidth={1.6} /><strong>GenMark AI</strong></div>
+          <div className="logo-editor-brand"><BrandLogo /><strong>GenMark AI</strong></div>
           <button className="logo-editor-save" type="button" onClick={() => void saveEditorChanges()}>{editorSaved ? '저장됨' : '저장'}<ChevronDown aria-hidden="true" size={16} strokeWidth={1.8} /></button>
           <button className="logo-editor-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         </header>
@@ -1785,7 +1809,7 @@ function CustomerApp() {
       <main className="mypage-screen" aria-labelledby="mypage-title">
         <header className="workspace-header">
           <button className="workspace-back" type="button" aria-label="홈으로 돌아가기" onClick={() => setMode('home')}><ChevronLeft aria-hidden="true" size={23} strokeWidth={1.8} /></button>
-          <div className="workspace-brand"><Sparkles aria-hidden="true" size={24} strokeWidth={1.7} /><strong>GenMark AI</strong></div>
+          <div className="workspace-brand"><BrandLogo /><strong>GenMark AI</strong></div>
           <button className="workspace-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         </header>
 
@@ -1838,7 +1862,7 @@ function CustomerApp() {
       <main className="survey-screen" aria-labelledby="survey-title">
         <header className="workspace-header">
           <button className="workspace-back" type="button" aria-label="마이페이지로 돌아가기" onClick={() => setMode('mypage')}><ChevronLeft aria-hidden="true" size={23} strokeWidth={1.8} /></button>
-          <div className="workspace-brand"><Sparkles aria-hidden="true" size={24} strokeWidth={1.7} /><strong>GenMark AI</strong></div>
+          <div className="workspace-brand"><BrandLogo /><strong>GenMark AI</strong></div>
           <span className="survey-step">만족도 평가</span>
         </header>
 
@@ -1934,8 +1958,8 @@ function CustomerApp() {
             <BrandLogo />
             <span>GenMark AI</span>
           </a>
-          <button className="outline-login" type="button" onClick={() => loggedIn ? void handleLogout() : setMode('login')}>
-            {loggedIn ? '로그아웃' : '로그인'}
+          <button className="outline-login" type="button" disabled={authRestoring} onClick={() => loggedIn ? void handleLogout() : setMode('login')}>
+            {authRestoring ? '확인 중…' : loggedIn ? '로그아웃' : '로그인'}
           </button>
         </header>
       )}

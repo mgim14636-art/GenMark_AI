@@ -62,7 +62,8 @@ public class AuthController {
     public ResponseEntity<ApiSuccessResponse<MeResponseData>> me(@AuthenticationPrincipal MemberPrincipal principal) {
         Member member = authService.getMember(principal.id());
         UserSummaryResponse user = toUserSummary(member, false, authService.isOnboardingCompleted(member.getId()));
-        return ResponseEntity.ok(ApiSuccessResponse.of(new MeResponseData(user, null)));
+        String resumeProjectId = authService.findResumeProjectId(member.getId());
+        return ResponseEntity.ok(ApiSuccessResponse.of(new MeResponseData(user, resumeProjectId)));
     }
 
     private UserSummaryResponse toUserSummary(Member member, boolean isFirstLogin, boolean onboardingCompleted) {
