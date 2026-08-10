@@ -112,6 +112,7 @@ function CustomerApp() {
   const [loggedIn, setLoggedIn] = useState(false)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [authLoading, setAuthLoading] = useState(false)
+  const [authRestoring, setAuthRestoring] = useState(true)
   const [authError, setAuthError] = useState('')
   const [loginDestination, setLoginDestination] = useState<LoginDestination>('home')
   const [loginReturnMode, setLoginReturnMode] = useState<LoginReturnMode>('home')
@@ -219,18 +220,35 @@ function CustomerApp() {
     void (async () => {
       try {
         const session = await restoreSession()
-        if (cancelled || !session) return
+        if (cancelled) return
+        if (!session) {
+          setAuthUser(null)
+          setLoggedIn(false)
+          return
+        }
+
         setAuthUser(session.user)
         setLoggedIn(true)
         setOnboardingCompleted(session.user.onboardingCompleted)
         if (session.user.onboardingCompleted) window.localStorage.setItem('genmark-onboarding-completed', 'true')
 
-        const onboarding = await onboardingApi.get()
-        if (cancelled) return
-        setOnboardingSelection(onboarding.usage.filter((value): value is OnboardingOption => value === 'online' || value === 'social' || value === 'offline'))
-        if (onboarding.audience === 'company' || onboarding.audience === 'owner' || onboarding.audience === 'hobby' || onboarding.audience === 'sidejob') {
-          setAudienceSelection([onboarding.audience])
+        try {
+          const onboarding = await onboardingApi.get()
+          if (cancelled) return
+          setOnboardingSelection(onboarding.usage.filter((value): value is OnboardingOption => value === 'online' || value === 'social' || value === 'offline'))
+          if (onboarding.audience === 'company' || onboarding.audience === 'owner' || onboarding.audience === 'hobby' || onboarding.audience === 'sidejob') {
+            setAudienceSelection([onboarding.audience])
+          }
+        } catch (error) {
+          // A missing or temporarily unavailable onboarding record must not log out
+          // an otherwise valid session restored from the refresh token.
+          if (error instanceof AuthError && error.status === 401) {
+            setAuthUser(null)
+            setLoggedIn(false)
+          }
         }
+
+        if (cancelled) return
         if (session.resumeProjectId) {
           setProjectId(session.resumeProjectId)
           window.localStorage.setItem('genmark-project-id', session.resumeProjectId)
@@ -239,7 +257,12 @@ function CustomerApp() {
           window.localStorage.removeItem('genmark-project-id')
         }
       } catch {
-        if (!cancelled) setLoggedIn(false)
+        if (!cancelled) {
+          setAuthUser(null)
+          setLoggedIn(false)
+        }
+      } finally {
+        if (!cancelled) setAuthRestoring(false)
       }
     })()
     return () => { cancelled = true }
@@ -1142,7 +1165,22 @@ function CustomerApp() {
             <BrandLogo className="gallery-hero-mark" />
             <span>GenMark AI</span>
           </div>
-          <button type="button" className="gallery-hero-login" onClick={() => { setLoginDestination('home'); setLoginReturnMode('hero'); setMode('login') }}>로그인</button>
+          <button
+            type="button"
+            className="gallery-hero-login"
+            disabled={authRestoring}
+            onClick={() => {
+              if (loggedIn) {
+                void handleLogout()
+                return
+              }
+              setLoginDestination('home')
+              setLoginReturnMode('hero')
+              setMode('login')
+            }}
+          >
+            {authRestoring ? '확인 중…' : loggedIn ? '로그아웃' : '로그인'}
+          </button>
         </header>
 
         <div className="gallery-hero-copy">
@@ -1947,8 +1985,8 @@ function CustomerApp() {
             <BrandLogo />
             <span>GenMark AI</span>
           </a>
-          <button className="outline-login" type="button" onClick={() => loggedIn ? void handleLogout() : setMode('login')}>
-            {loggedIn ? '로그아웃' : '로그인'}
+          <button className="outline-login" type="button" disabled={authRestoring} onClick={() => loggedIn ? void handleLogout() : setMode('login')}>
+            {authRestoring ? '확인 중…' : loggedIn ? '로그아웃' : '로그인'}
           </button>
         </header>
       )}
