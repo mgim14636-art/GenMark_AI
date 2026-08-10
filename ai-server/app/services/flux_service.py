@@ -14,7 +14,12 @@ from app.services.prompt_service import build_prompt_from_survey
 load_dotenv()
 
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY")
-NVIDIA_API_URL = "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b"
+
+# 기본값은 NVIDIA Build 공식 엔드포인트.
+# 로컬 GPU에 띄운 모델을 터널(ngrok 등)로 노출해 쓰는 경우 FLUX_API_URL로 덮어쓴다.
+# 터널 주소는 매번 바뀌고 외부에 노출되면 안 되므로 코드에 하드코딩하지 않는다.
+DEFAULT_FLUX_API_URL = "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b"
+NVIDIA_API_URL = os.environ.get("FLUX_API_URL", DEFAULT_FLUX_API_URL)
 
 # NVIDIA API가 이 엔드포인트에 steps<=4를 강제한다(초과 시 422). 실측 확인됨.
 MAX_STEPS = 4

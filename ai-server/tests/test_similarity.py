@@ -57,9 +57,13 @@ def ready(monkeypatch):
 
 @pytest.fixture
 def stub_search(monkeypatch):
-    """DINOv2 + FAISS를 대체해 z값을 직접 주입한다."""
+    """DINOv2 + FAISS를 대체해 코사인 유사도를 직접 주입한다.
 
-    def _apply(zs):
+    점수는 코사인으로 계산되므로 테스트도 코사인을 넣는다.
+    (z는 하위 호환을 위해 남겨두지만 점수 산출에는 쓰이지 않는다.)
+    """
+
+    def _apply(coss):
         monkeypatch.setattr(
             "app.services.similarity_service.DinoService.extract_features",
             lambda src: [0.0] * 768,
@@ -69,13 +73,13 @@ def stub_search(monkeypatch):
             lambda vector, top_k=3: [
                 {
                     "index": i,
-                    "cos": 0.9,
-                    "z": z,
+                    "cos": cos,
+                    "z": 0.0,
                     "meta": fake_meta(
                         f"402022012640{i}", f"raw/IMG/402022012640{i}_tm000001.jpg"
                     ),
                 }
-                for i, z in enumerate(zs[:top_k])
+                for i, cos in enumerate(coss[:top_k])
             ],
         )
 
@@ -86,14 +90,16 @@ def stub_search(monkeypatch):
 # 점수 · 위험도 (§15 단위 테스트)
 # --------------------------------------------------------------------------
 def test_score_is_clamped_to_0_100():
-    assert _to_score(-99) == 0          # 음수 → 0
-    assert _to_score(0) == 0            # 13.7*0 - 7.3 = -7.3 → 0
-    assert _to_score(1e6) == 100        # 상한
-    assert 0 <= _to_score(2.72) <= 100
+    """입력은 코사인 유사도. 앵커 범위 밖은 clamp 된다."""
+    assert _to_score(-1.0) == 0         # 하한 밖
+    assert _to_score(0.50) == 0         # 첫 앵커
+    assert _to_score(1.0) == 100        # 상한
+    assert _to_score(2.0) == 100        # 이론상 불가하지만 방어
+    assert 0 <= _to_score(0.67) <= 100
 
 
 def test_score_is_int():
-    assert isinstance(_to_score(3.5), int)
+    assert isinstance(_to_score(0.85), int)
 
 
 def test_score_rejects_nan_and_inf():
@@ -132,17 +138,36 @@ def test_risk_level_boundaries(score, expected):
     assert _risk_level(score) == expected
 
 
-def test_score_formula_anchors():
-    """등록 상표 z 분포 앵커링이 유지되는지 확인 (13.7z - 7.3)"""
-    assert _to_score(2.72) == 30   # 중앙값 → SAFE/MODERATE 경계
-    assert _to_score(4.91) == 60   # 상위 5% → MODERATE/CAUTION 경계
+def test_score_cosine_anchors():
+    """실측 앵커가 유지되는지 확인 (scripts/calibrate_score.py 기준)"""
+    assert _to_score(0.80) == 30    # 생성 로고 p95 → SAFE 상한
+    assert _to_score(0.89) == 60    # 등록 상표 최근접 중앙값 → CAUTION 진입
+    assert _to_score(1.00) == 100   # 사실상 동일
+
+
+def test_score_is_monotonic_in_cosine():
+    """코사인이 커지면 점수도 반드시 커져야 한다.
+
+    z 정규화를 쓰던 시절에는 이 성질이 깨져서 동일 이미지(cos=1.0)가
+    무관한 로고보다 낮은 점수를 받는 역전이 있었다.
+    """
+    xs = [0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.89, 0.95, 1.0]
+    scores = [_to_score(x) for x in xs]
+    assert scores == sorted(scores)
+    assert scores[0] < scores[-1]
+
+
+def test_generated_logo_range_is_safe():
+    """실측된 생성 로고(심볼·혼합형) 코사인 구간은 SAFE 여야 한다."""
+    for cos in (0.52, 0.59, 0.67, 0.78):
+        assert _to_score(cos) < 30
 
 
 # --------------------------------------------------------------------------
 # 응답 계약 (§11)
 # --------------------------------------------------------------------------
 def test_search_returns_exactly_topk(ready, stub_search):
-    stub_search([5.0, 4.0, 3.0, 2.0])
+    stub_search([0.95, 0.85, 0.75, 0.65])
     res = client.post(
         "/api/v1/similarity/search",
         json={"imageBase64": png_base64(), "logoStyle": "combination", "topK": 3},
@@ -152,7 +177,7 @@ def test_search_returns_exactly_topk(ready, stub_search):
 
 
 def test_response_contract_fields(ready, stub_search):
-    stub_search([5.0, 4.0, 3.0])
+    stub_search([0.95, 0.85, 0.75])
     body = client.post(
         "/api/v1/similarity/search",
         json={"imageBase64": png_base64(), "logoStyle": "combination", "topK": 3},
@@ -174,7 +199,7 @@ def test_response_contract_fields(ready, stub_search):
 
 
 def test_matches_sorted_desc_and_max_matches_first(ready, stub_search):
-    stub_search([3.0, 5.0, 4.0])  # 일부러 뒤섞어 주입
+    stub_search([0.75, 0.95, 0.85])  # 일부러 뒤섞어 주입
     body = client.post(
         "/api/v1/similarity/search",
         json={"imageBase64": png_base64(), "topK": 3},
@@ -228,6 +253,31 @@ def test_invalid_topk_returns_422(ready):
         json={"imageBase64": png_base64(), "topK": 0},
     )
     assert res.status_code == 422
+
+
+def test_text_only_logo_style_is_rejected(ready):
+    """워드마크·레터마크는 도형이 없어 도형복합 DB로 판정할 수 없다.
+
+    실측에서 top-1 코사인 중앙값이 워드마크 0.94 / 레터마크 0.93 으로,
+    등록 상표 간 최근접 중앙값(0.89)보다 높게 나오는 오탐이 확인됐다.
+    """
+    for style in ("wordmark", "lettermark", "텍스트"):
+        res = client.post(
+            "/api/v1/similarity/search",
+            json={"imageBase64": png_base64(), "logoStyle": style, "topK": 3},
+        )
+        assert res.status_code == 422, style
+        assert res.json()["code"] == "SIMILARITY_INVALID_REQUEST"
+
+
+def test_graphic_logo_styles_are_accepted(ready, stub_search):
+    stub_search([0.9, 0.8, 0.7])
+    for style in ("combination", "symbol"):
+        res = client.post(
+            "/api/v1/similarity/search",
+            json={"imageBase64": png_base64(), "logoStyle": style, "topK": 3},
+        )
+        assert res.status_code == 200, style
 
 
 def test_snake_case_request_is_rejected(ready):

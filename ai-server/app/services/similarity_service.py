@@ -7,11 +7,19 @@ from app.core.logging import logger
 from app.services.dino_service import DinoService
 from app.services.faiss_service import FaissService
 
-# 실제 등록 상표 간 1위 z 분포에 앵커링 (200건 샘플, 중앙값 2.72 / 상위5% 4.91)
-# 이미 공존 등록된 상표 쌍의 유사 수준을 정상 범위로 보고,
-# 중앙값 → 30점(SAFE 경계), 상위 5% → 60점(CAUTION 경계)으로 선형 매핑
-Z_SLOPE = 13.7
-Z_INTERCEPT = -7.3
+# 점수는 원시 코사인 유사도를 구간별 선형으로 매핑한다.
+#
+# 이전에는 z 점수(쿼리별 평균·표준편차로 정규화)를 썼으나 실측에서 폐기했다.
+# z는 쿼리마다 기준이 달라져 쿼리 간 비교가 불가능하다. 실제로 DB 상표를 그대로
+# 넣었을 때(코사인 1.0) z가 3.49인 반면, 무관한 생성 로고가 4.14로 더 높게 나오는
+# 역전이 확인됐다. 코사인은 [-1, 1]로 이미 정규화돼 있어 그런 문제가 없다.
+#
+# 앵커 (scripts/calibrate_score.py 실측, 2026-08-10):
+#   0.80 = 생성 로고 top-1 코사인 p95   → 30점 (SAFE 상한)
+#   0.89 = 등록 상표 간 최근접 중앙값    → 60점 (CAUTION 진입)
+#          이미 공존 등록된 상표 쌍의 유사 수준이므로 여기서부터 경고한다
+#   1.00 = 사실상 동일                  → 100점
+COS_ANCHORS = ((0.50, 0.0), (0.80, 30.0), (0.89, 60.0), (1.00, 100.0))
 
 DISCLAIMER = (
     "본 분석은 로고 이미지의 시각적 유사성을 보여주는 참고 자료이며, "
@@ -39,17 +47,23 @@ def _category(meta: dict) -> str:
     return " · ".join(parts) if parts else "분류 미상"
 
 
-def _to_score(z: float) -> int:
-    """z → 0~100 정수.
+def _to_score(cos: float) -> int:
+    """코사인 유사도 → 0~100 정수.
 
-    truncation 대신 반올림을 쓴다. int()로 잘라내면 앵커가 어긋나
-    중앙값(z=2.72)이 29점이 되어 SAFE/MODERATE 경계 설계가 깨진다.
-    NaN은 0으로, ±Inf는 clamp로 흡수한다.
+    COS_ANCHORS 사이를 구간별 선형 보간한다. 단일 직선으로는
+    "무관한 로고는 낮게, 공존 등록 수준은 경고로" 두 조건을 동시에 만족시킬 수 없다.
+    NaN은 0으로, 범위 밖은 clamp로 흡수한다.
     """
-    v = z * Z_SLOPE + Z_INTERCEPT
-    if v != v:  # NaN
+    if cos != cos:  # NaN
         return 0
-    return int(round(min(100.0, max(0.0, v))))
+    lo_c, lo_s = COS_ANCHORS[0]
+    if cos <= lo_c:
+        return int(lo_s)
+    for (c0, s0), (c1, s1) in zip(COS_ANCHORS, COS_ANCHORS[1:]):
+        if cos <= c1:
+            ratio = (cos - c0) / (c1 - c0)
+            return int(round(min(100.0, max(0.0, s0 + ratio * (s1 - s0)))))
+    return 100
 
 
 def _risk_level(score: int) -> str:
@@ -82,7 +96,7 @@ class SimilarityService:
                 "applicationNumber": app_no,
                 "name": _name(meta),
                 "category": _category(meta),
-                "similarity": _to_score(r["z"]),
+                "similarity": _to_score(r["cos"]),
                 "imagePath": image_path,
             })
 
