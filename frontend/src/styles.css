@@ -4326,6 +4326,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   transform: translateY(-1px);
 }
 
+.tone-native-picker-button.active {
+  border-color: #a477eb;
+  color: #7048cb;
+  background: #faf7ff;
+}
+
 .tone-native-picker-done {
   min-height: 32px;
   border: 0;
@@ -4337,6 +4343,82 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+}
+
+.tone-advanced-picker {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d9c8f2;
+  border-radius: 14px;
+  padding: 12px;
+  background: #fff;
+  box-shadow: 0 12px 24px rgb(83 56 128 / 0.14);
+  animation: tone-picker-in 220ms cubic-bezier(.22, .7, .18, 1) both;
+}
+
+.tone-advanced-picker-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tone-advanced-picker-heading strong { color: #2d3042; font-size: 14px; }
+.tone-advanced-picker-heading button {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: #7a55d9;
+  background: #f5efff;
+  font-size: 19px;
+  line-height: 1;
+}
+
+.tone-advanced-hue {
+  position: relative;
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.tone-advanced-hue span {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgb(44 34 77 / 0.35), 0 2px 5px rgb(43 34 79 / 0.2);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.tone-advanced-rgb-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.tone-advanced-rgb-fields label { display: grid; gap: 4px; color: #7b55d8; font-size: 10px; font-weight: 700; }
+.tone-advanced-rgb-fields input { min-height: 34px; border: 1px solid #ddd3ef; border-radius: 8px; padding: 0 8px; color: #32364a; background: #fff; font: inherit; font-size: 13px; }
+.tone-advanced-rgb-fields input:focus { border-color: #9b6be8; outline: none; box-shadow: 0 0 0 3px rgb(155 107 232 / 0.13); }
+
+.tone-advanced-complete {
+  justify-self: end;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  color: #fff;
+  background: linear-gradient(100deg, #8e5ae7, #df6bb7);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .tone-native-picker-dot {

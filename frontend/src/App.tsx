@@ -123,12 +123,24 @@ const hsvToRgb = (h: number, s: number, v: number): RgbColor => {
 }
 
 const ToneColorPalette = ({ value, onChange, onComplete, ariaLabel }: { value: RgbColor; onChange: (color: RgbColor) => void; onComplete: () => void; ariaLabel: string }) => {
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const hsv = rgbToHsv(value)
   const updateFromPointer = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left))
     const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top))
     onChange(hsvToRgb((x / rect.width) * 360, 1, 1 - y / rect.height))
+  }
+
+  const updateHueFromPointer = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left))
+    onChange(hsvToRgb((x / rect.width) * 360, hsv.s || 1, hsv.v))
+  }
+
+  const updateChannel = (channel: keyof RgbColor, nextValue: string) => {
+    const numericValue = nextValue === '' ? 0 : Number(nextValue)
+    onChange({ ...value, [channel]: clampColorChannel(Number.isFinite(numericValue) ? numericValue : 0) })
   }
 
   return (
@@ -145,13 +157,33 @@ const ToneColorPalette = ({ value, onChange, onComplete, ariaLabel }: { value: R
         <span className="tone-color-palette-preview" style={{ left: `${hsv.h / 3.6}%`, top: `${(1 - hsv.v) * 100}%`, background: rgbToHex(value) }} />
       </div>
       <div className="tone-palette-actions">
-        <label className="tone-native-picker-button">
+        <button className={advancedOpen ? 'tone-native-picker-button active' : 'tone-native-picker-button'} type="button" onClick={() => setAdvancedOpen((current) => !current)}>
           <span className="tone-native-picker-dot" style={{ background: rgbToHex(value) }} aria-hidden="true" />
           <span>색상 세부 조정</span>
-          <input type="color" aria-label={`${ariaLabel} 세부 조정`} value={rgbToHex(value)} onChange={(event) => onChange(hexToRgb(event.target.value))} />
-        </label>
+        </button>
         <button className="tone-native-picker-done" type="button" onClick={onComplete}>선택 완료</button>
       </div>
+      {advancedOpen && (
+        <div className="tone-advanced-picker" role="dialog" aria-label={`${ariaLabel} 세부 조정`}>
+          <div className="tone-advanced-picker-heading"><strong>원하는 색상 선택</strong><button type="button" aria-label="세부 색상 조정 닫기" onClick={() => setAdvancedOpen(false)}>×</button></div>
+          <div
+            className="tone-advanced-hue"
+            role="slider"
+            tabIndex={0}
+            aria-label="색상 계열"
+            onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); updateHueFromPointer(event) }}
+            onPointerMove={(event) => { if (event.buttons === 1) updateHueFromPointer(event) }}
+          >
+            <span style={{ left: `${hsv.h / 3.6}%` }} />
+          </div>
+          <div className="tone-advanced-rgb-fields">
+            {(['r', 'g', 'b'] as const).map((channel) => (
+              <label key={channel}><span>{channel.toUpperCase()}</span><input type="number" min="0" max="255" value={Math.round(value[channel])} onChange={(event) => updateChannel(channel, event.target.value)} /></label>
+            ))}
+          </div>
+          <button className="tone-advanced-complete" type="button" onClick={() => setAdvancedOpen(false)}>선택 완료</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -556,16 +588,6 @@ function CustomerApp() {
     setCoreValues((current) => current.includes(value)
       ? current.filter((item) => item !== value)
       : current.length < 3 ? [...current, value] : current)
-  }
-
-  const updateManualColor = (channel: keyof RgbColor, value: string) => {
-    const nextValue = value === '' ? 0 : Number(value)
-    const update = (current: RgbColor) => ({
-      ...current,
-      [channel]: clampColorChannel(Number.isFinite(nextValue) ? nextValue : 0),
-    })
-    if (manualColorSlot === 0) setManualColor(update)
-    else setManualSecondaryColor(update)
   }
 
   const updateManualColorFromHex = (hex: string) => {
@@ -1150,21 +1172,6 @@ function CustomerApp() {
                 onComplete={() => setColorPickerOpen(false)}
                 ariaLabel="색상 팔레트"
               />
-              <div className="tone-rgb-fields" aria-label="RGB 값 입력">
-                {(['r', 'g', 'b'] as const).map((channel) => (
-                  <label key={channel}>
-                    <span>{channel.toUpperCase()}</span>
-                    <input
-                      aria-label={`${channel.toUpperCase()} 값`}
-                      type="number"
-                      min="0"
-                      max="255"
-                      value={(manualColorSlot === 0 ? manualColor : manualSecondaryColor)[channel]}
-                      onChange={(event) => updateManualColor(channel, event.target.value)}
-                    />
-                  </label>
-                ))}
-              </div>
               <div className="tone-color-picker-footer">
                 <span>두 색상 · {rgbToHex(manualColor)} / {rgbToHex(manualSecondaryColor)}</span>
               </div>
