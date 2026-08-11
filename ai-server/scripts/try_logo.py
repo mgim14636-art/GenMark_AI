@@ -11,12 +11,17 @@ OpenRouter 이미지 API가 실제로 응답하는지, 폰트 합성까지 끝�
     python scripts/try_logo.py 2 --extra "물방울과 잎사귀가 겹친 형태"
     python scripts/try_logo.py 4 --dry --v2          # 실험용 프롬프트 v2로 비교(무료)
     python scripts/try_logo.py 4 --v2                # v2로 실제 생성
+    python scripts/try_logo.py 4 --v2 --tone warm    # 다른 톤으로 v2 검증
 
 설문 값은 백엔드 CiProject.toSurvey()가 실제로 보내는 키 구성과 동일하게 맞춰 두었다.
 스크립트 전용 키(brand_name/values/color 등)를 쓰면 prompt_service가 조용히 무시해
 실제 서비스와 다른 프롬프트로 테스트하게 된다(실측 확인됨).
 
-결과는 data/outputs/logo_try_N.png 로 저장된다.
+결과 파일명에는 버전과 톤이 들어간다 — 조합을 바꿔가며 여러 번 돌려도
+앞선 결과가 덮어써지지 않게 하기 위함이다.
+    v1 : data/outputs/logo_try_<톤>_N.png
+    v2 : data/outputs/logo_v2_<톤>_N.png
+(try_similarity.py는 logo_try_*.png 를 훑으므로 v1 결과는 그대로 잡힌다.)
 """
 import os
 
@@ -172,9 +177,12 @@ def main() -> int:
         print(f"   variantIndex={v['variant_index']}  seed={v['seed']}", flush=True)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    # 톤을 파일명에 넣어 조합별 결과가 서로를 덮어쓰지 않게 한다
+    tag = "".join(c for c in str(survey.get("tone", "")) if c.isalnum()) or "default"
+    prefix = "logo_v2" if v2 else "logo_try"
     for i, symbol in enumerate(symbols, 1):
         logo = logo_composer.compose_final_logo(symbol, survey)
-        path = OUT_DIR / (f"logo_v2_{i}.png" if v2 else f"logo_try_{i}.png")
+        path = OUT_DIR / f"{prefix}_{tag}_{i}.png"
         logo.save(path)
         print(f"   저장: {path}  {logo.size}", flush=True)
 
