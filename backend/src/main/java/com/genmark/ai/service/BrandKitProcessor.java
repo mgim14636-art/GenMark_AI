@@ -67,7 +67,7 @@ public class BrandKitProcessor {
         request.put("kit_type", kit.getKitType().name());
         request.put("logo_image_base64", Base64.getEncoder().encodeToString(storage.read(candidate.getStorageKey())));
         // 배경·분위기를 잡는 데 쓰라고 프로젝트 입력값을 그대로 넘긴다.
-        // (예: 친환경 컨셉이면 로션병 배경에 풀을 넣는 식)
+        // (예: 친환경 컨셉이면 제품 썸네일 배경에 풀을 넣는 식)
         request.put("survey", project.toSurvey());
         request.put("ci_bi", project instanceof CiProject ? "CI" : "BI");
         return request;

@@ -177,7 +177,7 @@ CREATE TABLE IF NOT EXISTS brand_kits (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_kit_candidate FOREIGN KEY (candidate_id) REFERENCES logo_candidates(id) ON DELETE CASCADE,
-    CONSTRAINT chk_kit_type CHECK (kit_type IN ('BUSINESS_CARD', 'BOTTLE')),
+    CONSTRAINT chk_kit_type CHECK (kit_type IN ('BUSINESS_CARD', 'THUMBNAIL')),
     INDEX idx_kit_candidate (candidate_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

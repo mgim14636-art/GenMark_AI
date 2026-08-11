@@ -22,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -57,8 +56,9 @@ public class LogoGenerationService {
 
         Map<String, Object> survey = project.toSurvey();
 
-        // 재생성(F12-2): 직전 성공 생성이 있으면 그 후보 4개를 "이런 건 피해달라"로 함께 넘긴다.
-        // 그래야 비슷하게 생긴 로고가 또 나오지 않는다.
+        // 재생성(F12-2): 직전 성공 생성이 있으면 이번이 몇 번째 재생성인지 세어
+        // variant_offset으로 넘긴다. AI 서버가 그만큼 모티프 순환을 건너뛰어 직전
+        // 회차와 겹치지 않는 시안을 배정해준다(AI 쪽에서 부정 프롬프트 방식은 채택하지 않음).
         LogoGeneration previous = (isCi
                 ? generationRepository.findFirstByCiProjectIdAndStatusOrderByCompletedAtDesc(
                         project.getId(), LogoGeneration.Status.SUCCEEDED)
@@ -66,7 +66,7 @@ public class LogoGenerationService {
                         project.getId(), LogoGeneration.Status.SUCCEEDED))
                 .orElse(null);
         if (previous != null) {
-            survey.put("avoid_logos", avoidPayload(previous));
+            survey.put("variant_offset", regenerationOffset(previous));
         }
 
         LogoGeneration generation = LogoGeneration.builder()
@@ -130,23 +130,25 @@ public class LogoGenerationService {
         return toResponse(selected);
     }
 
+    /** 재생성 시 한 번에 만드는 시안 수. AI 서버의 모티프 순환 배정 주기와 같아야 한다. */
+    private static final int NUM_VARIANTS = 4;
+
     /**
-     * 재생성 시 AI에게 넘길 "피해야 할 로고" 정보 (F12-2).
+     * 재생성 시 AI에게 넘길 모티프 시작 위치 (F12-2).
      *
-     * <p>이전 생성의 후보 4개를 storageKey와 AI 부가정보(aiMetadataJson)로 전달한다.
-     * 실제로 어떤 형식을 쓸지는 AI 서버와 합의가 필요하다. 이미지 자체를 넘길지, 프롬프트
-     * 텍스트로 넘길지에 따라 이 부분이 바뀔 수 있다.
+     * <p>이전 생성까지 이어진 부모 체인 길이(=지금까지의 재생성 횟수) × 시안 수를 넘기면,
+     * AI 서버가 그만큼 모티프 순환을 건너뛰어 직전 회차와 다른 형태를 배정한다. 이전에는
+     * 이전 후보의 storageKey를 "피해야 할 로고"로 넘겼지만, AI 서버가 그 파일에 접근할
+     * 수 없어 실제로는 무시되던 값이라 이 방식으로 대체했다.
      */
-    private List<Map<String, Object>> avoidPayload(LogoGeneration previous) {
-        return candidateRepository.findByGenerationIdOrderByCandidateOrder(previous.getId()).stream()
-                .map(c -> {
-                    Map<String, Object> item = new LinkedHashMap<String, Object>();
-                    item.put("candidate_id", c.getPublicId());
-                    item.put("storage_key", c.getStorageKey());
-                    if (c.getAiMetadataJson() != null) item.put("ai_metadata", c.getAiMetadataJson());
-                    return item;
-                })
-                .toList();
+    private int regenerationOffset(LogoGeneration previous) {
+        int count = 0;
+        LogoGeneration cursor = previous;
+        while (cursor != null) {
+            count++;
+            cursor = cursor.getParentGeneration();
+        }
+        return count * NUM_VARIANTS;
     }
 
     private String writeJson(Object value) {

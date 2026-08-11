@@ -13,7 +13,7 @@ import java.util.Map;
 public interface BrandKitAiClient {
 
     /**
-     * @param request 로고 이미지와 킷 종류(명함/로션병), 컨셉 정보를 담은 요청
+     * @param request 로고 이미지와 킷 종류(명함/제품 썸네일), 컨셉 정보를 담은 요청
      * @return 생성된 이미지의 Base64 PNG 문자열
      */
     String generate(Map<String, Object> request);

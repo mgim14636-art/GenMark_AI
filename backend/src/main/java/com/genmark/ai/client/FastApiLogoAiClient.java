@@ -25,14 +25,22 @@ public class FastApiLogoAiClient implements LogoAiClient {
         Object rawLogos = body.get("logos");
         if (!(rawLogos instanceof List<?> list)) return new LogoAiResult(false, List.of());
 
-        List<String> logos = list.stream()
+        List<GeneratedLogo> logos = list.stream()
                 .filter(Map.class::isInstance)
                 .map(Map.class::cast)
-                .map(item -> item.get("imageBase64"))
-                .filter(String.class::isInstance)
-                .map(String.class::cast)
-                .filter(value -> !value.isBlank())
+                .map(FastApiLogoAiClient::toGeneratedLogo)
+                .filter(java.util.Objects::nonNull)
                 .toList();
         return new LogoAiResult(!logos.isEmpty(), logos);
+    }
+
+    private static GeneratedLogo toGeneratedLogo(Map<?, ?> item) {
+        Object image = item.get("imageBase64");
+        if (!(image instanceof String value) || value.isBlank()) return null;
+        return new GeneratedLogo(value, toInteger(item.get("seed")), toInteger(item.get("variantIndex")));
+    }
+
+    private static Integer toInteger(Object value) {
+        return value instanceof Number number ? number.intValue() : null;
     }
 }
