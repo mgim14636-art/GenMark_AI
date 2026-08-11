@@ -30,6 +30,19 @@ const toneOptions: Array<{ id: ToneOption; label: string; description: string; c
 ]
 
 const coreValueIds = new Set<CoreValue>(['vegan', 'crueltyFree', 'lowIrritation', 'derma', 'cleanBeauty', 'natural', 'premium', 'sustainable', 'scientific', 'reasonable', 'emotional'])
+const coreValueLabels: Record<CoreValue, string> = {
+  vegan: '비건',
+  crueltyFree: '크루얼티 프리',
+  lowIrritation: '저자극',
+  derma: '더마',
+  cleanBeauty: '클린뷰티',
+  natural: '자연주의',
+  premium: '프리미엄',
+  sustainable: '지속가능성',
+  scientific: '과학적 검증',
+  reasonable: '합리적인 가격',
+  emotional: '감성적인 경험',
+}
 
 const industryOptions: Array<{ id: IndustryOption; title: string; description: string; apiValue: string; icon: LucideIcon }> = [
   { id: 'beauty', title: '뷰티', description: '스킨케어 · 메이크업 · 향수', apiValue: 'COSMETICS', icon: Sparkles },
@@ -254,6 +267,7 @@ function CustomerApp() {
   const [industryBackMode, setIndustryBackMode] = useState<'home' | 'onboarding'>('home')
   const [additionalRequest, setAdditionalRequest] = useState('')
   const [brandName, setBrandName] = useState('')
+  const [targetAge, setTargetAge] = useState('전 연령층')
   const [companyName, setCompanyName] = useState(() => {
     try {
       return JSON.parse(window.localStorage.getItem('genmark-company-profile') ?? '{}').name ?? ''
@@ -342,7 +356,7 @@ function CustomerApp() {
     }
   }
 
-  const canAnalyzeTrademark = logoStyle === 'combination' || logoStyle === 'symbol'
+  const canAnalyzeTrademark = logoStyle === 'combination'
 
   useEffect(() => {
     const handlePopState = () => setModeState(getModeFromUrl())
@@ -534,8 +548,18 @@ function CustomerApp() {
       setCompanyMotto(project.companyMotto ?? '')
       setBrandValueDescription(project.brandValuesText ?? '')
       setCoreValues((project.brandValues ?? []).filter((value): value is CoreValue => coreValueIds.has(value as CoreValue)))
+      setCoreValueInputMode(project.brandValues?.length ? 'category' : 'direct')
+      setTargetAge(project.targetAge ?? '전 연령층')
+      setAdditionalRequest(project.additionalRequirements ?? '')
       if (project.tone && toneOptions.some((option) => option.id === project.tone)) setToneSelection(project.tone as ToneOption)
-      if (project.colors?.length) setManualColors(project.colors.slice(0, 4))
+      if (project.colors?.length) {
+        setManualColors(project.colors.slice(0, 4))
+        const matchingTone = project.colors.length >= 2
+          ? toneOptions.find((option) => option.colors[0].toLowerCase() === project.colors?.[0]?.toLowerCase() && option.colors[1].toLowerCase() === project.colors?.[1]?.toLowerCase())
+          : undefined
+        setColorSelectionMode(matchingTone ? 'tone' : 'manual')
+        if (matchingTone) setToneSelection(matchingTone.id)
+      }
       if (project.logoStyle && logoStyleOptions.some((option) => option.id === project.logoStyle)) setLogoStyle(project.logoStyle as LogoStyle)
 
       const step = typeof project.currentStep === 'number' ? project.currentStep : Number(project.currentStep)
@@ -769,6 +793,7 @@ function CustomerApp() {
       input.brandName = brandName.trim() || undefined
       input.brandValues = coreValueInputMode === 'category' ? coreValues : undefined
       input.brandValuesText = coreValueInputMode === 'direct' ? brandValueDescription.trim() || undefined : undefined
+      input.targetAge = targetAge || '전 연령층'
     }
 
     if (step === 'tone') {
@@ -1676,19 +1701,24 @@ function CustomerApp() {
   }
 
   const renderFinalRequestScreen = () => {
-    const suggestions = ['반드시 넣고 싶은 모양', '피하고 싶은 모양', '참고하고 싶은 분위기', '글씨체의 느낌', '로고를 사용할 위치']
-    const summaryRows = [
-      { key: 'name', label: '브랜드명', value: 'SERA (세라)', icon: 'name' },
-      { key: 'product', label: '제품 종류', value: '스킨케어', icon: 'product' },
-      { key: 'description', label: '브랜드 설명', value: '민감한 피부를 위한 저자극 비건 스킨케어 브랜드', icon: 'description' },
-      { key: 'audience', label: '주요 고객', value: '20-30대 민감성 피부 여성', icon: 'audience' },
-      { key: 'value', label: '핵심 가치', value: '비건, 저자극, 클린뷰티', icon: 'value' },
-      { key: 'mood', label: '원하는 분위기', value: '자연스럽고 깨끗한', icon: 'mood' },
-    ]
-
-    const addSuggestion = (suggestion: string) => {
-      setAdditionalRequest((current) => current ? `${current} ${suggestion}` : suggestion)
-    }
+    const displayValue = (value: string | undefined, fallback = '입력하지 않음') => value?.trim() || fallback
+    const selectedToneLabel = toneOptions.find((option) => option.id === toneSelection)?.label ?? toneSelection
+    const selectedLogoStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? logoStyle
+    const selectedBrandValues = coreValues.length > 0
+      ? coreValues.map((value) => coreValueLabels[value] ?? value).join(', ')
+      : displayValue(brandValueDescription)
+    const summaryRows = brandKind === 'ci'
+      ? [
+          { key: 'company-name', label: '회사명', value: displayValue(companyName), icon: 'name', editMode: 'company-details' as ViewMode },
+          { key: 'company-motto', label: '회사 모토', value: displayValue(companyMotto), icon: 'value', editMode: 'company-details' as ViewMode },
+          { key: 'mood', label: '원하는 분위기', value: selectedToneLabel, icon: 'mood', editMode: 'tone' as ViewMode },
+        ]
+      : [
+          { key: 'brand-name', label: '브랜드명', value: displayValue(brandName), icon: 'name', editMode: 'brand-details' as ViewMode },
+          { key: 'audience', label: '주요 고객', value: displayValue(targetAge), icon: 'audience', editMode: 'brand-details' as ViewMode },
+          { key: 'value', label: '핵심 가치', value: selectedBrandValues, icon: 'value', editMode: 'brand-details' as ViewMode },
+          { key: 'mood', label: '분위기', value: selectedToneLabel, icon: 'mood', editMode: 'tone' as ViewMode },
+        ]
 
     return (
       <main className="final-request-screen">
@@ -1715,20 +1745,6 @@ function CustomerApp() {
             </div>
           </section>
 
-          <section className="final-tip-card" aria-label="추가 요청사항 작성 도움말">
-          <span className="final-tip-icon" aria-hidden="true"><Info size={24} strokeWidth={1.8} /></span>
-            <div>
-              <p>다음과 같은 내용을 작성할 수 있어요.</p>
-              <div className="final-suggestion-list">
-                {suggestions.map((suggestion) => (
-                  <button key={suggestion} type="button" onClick={() => addSuggestion(suggestion)}>
-                    <Plus aria-hidden="true" size={15} strokeWidth={2} />{suggestion}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-
           <section className="final-summary-section" aria-labelledby="summary-title">
             <h2 id="summary-title">이 내용으로 로고를 만들게요</h2>
             <div className="final-summary-card">
@@ -1737,28 +1753,22 @@ function CustomerApp() {
                   <span className={`final-detail-icon icon-${row.icon}`} aria-hidden="true" />
                   <span className="final-summary-label">{row.label}</span>
                   <span className="final-summary-value">{row.value}</span>
-                  <button className="final-edit-button" type="button" onClick={() => setMode(brandKind === 'ci' ? 'company-details' : 'brand-details')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+                  <button className="final-edit-button" type="button" onClick={() => setMode(row.editMode)}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
                 </div>
               ))}
               <div className="final-summary-row">
                 <span className="final-detail-icon icon-color" aria-hidden="true" />
                 <span className="final-summary-label">선호 색상</span>
                 <span className="final-color-swatches" aria-label="선호 색상 4개">
-                  <i className="swatch-green" /><i className="swatch-yellow" /><i className="swatch-cream" /><i className="swatch-gray" />
+                  {getSelectedColors().map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
                 </span>
-                  <button className="final-edit-button" type="button" onClick={() => setMode(brandKind === 'ci' ? 'company-details' : 'brand-details')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+                  <button className="final-edit-button" type="button" onClick={() => setMode('tone')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
               <div className="final-summary-row">
                 <span className="final-detail-icon icon-logo" aria-hidden="true" />
                 <span className="final-summary-label">로고 형태</span>
-                <span className="final-summary-value">콤비네이션 (그림 + 브랜드명) <em>추천</em></span>
-                <button className="final-edit-button" type="button" onClick={() => setMode(brandKind === 'ci' ? 'company-details' : 'brand-details')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
-              </div>
-              <div className="final-summary-row final-summary-last">
-                <span className="final-detail-icon icon-question" aria-hidden="true"><CircleHelp size={22} strokeWidth={1.8} /></span>
-                <span className="final-summary-label">추가 요청사항</span>
-                <span className="final-summary-value">{additionalRequest || '별도 요청 없음'}</span>
-                <span className="final-summary-dash" aria-hidden="true">—</span>
+                <span className="final-summary-value">{selectedLogoStyle}{logoStyle === 'combination' && <em>추천</em>}</span>
+                <button className="final-edit-button" type="button" onClick={() => setMode('style')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
             </div>
           </section>

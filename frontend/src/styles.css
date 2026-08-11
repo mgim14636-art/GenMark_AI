@@ -7315,6 +7315,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 }
 
 .industry-next {
+  --industry-next-final-opacity: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -7337,9 +7338,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .industry-next:hover:not(:disabled) { transform: translateY(-2px); }
 .industry-next:active:not(:disabled) { transform: translateY(1px) scale(.99); }
 .industry-next:disabled {
+  --industry-next-final-opacity: .42;
   cursor: not-allowed;
   color: #fff;
-  opacity: .42;
   filter: saturate(.7);
 }
 
@@ -7354,8 +7355,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 }
 
 @keyframes industry-next-rise {
-  from { transform: translateY(14px); }
-  to { transform: translateY(0); }
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: var(--industry-next-final-opacity); transform: translateY(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
