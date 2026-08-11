@@ -62,11 +62,29 @@ const logoStyleOptions: Array<{ id: LogoStyle; label: string; description: strin
   { id: 'lettermark', label: '레터마크', description: '브랜드 이름의 첫 글자나 이니셜을 활용한 로고', fit: '브랜드 이름이 길거나 간결한 이미지를 원할 때 좋아요.' },
 ]
 
+const logoShapeRequirementPrefix = '로고 형태:'
+
+const extractLogoShapeRequirement = (requirements: string | null | undefined) => {
+  const match = requirements?.match(new RegExp(`(?:^|\\n)${logoShapeRequirementPrefix}\\s*([^\\n]*)`))
+  return match?.[1]?.trim() ?? ''
+}
+
+const removeLogoShapeRequirement = (requirements: string | null | undefined) => requirements
+  ?.replace(new RegExp(`(?:^|\\n)${logoShapeRequirementPrefix}\\s*[^\\n]*`), '')
+  .trim() ?? ''
+
 const galleryItems = [
   { id: 'luna', name: 'LUNA', category: '미니멀', meta: '뷰티 · 워드마크', likes: '2.8k', position: '20% 72%', tone: 'luna' },
   { id: 'beau', name: 'BEAU', category: '워드마크', meta: '스킨케어 · 워드마크', likes: '1.9k', position: '72% 46%', tone: 'beau' },
   { id: 'sora', name: 'SORA', category: '콤비네이션', meta: '클린뷰티 · 워드마크', likes: '1.6k', position: '88% 72%', tone: 'sora' },
   { id: 'mori', name: 'MORI', category: '레터마크', meta: '바디케어 · 레터마크', likes: '1.2k', position: '52% 28%', tone: 'mori' },
+]
+
+const productGalleryItems = [
+  { id: 'lumiere-product', name: 'LUMIÈRE', category: '세럼', meta: '스킨케어 · 프리미엄 패키지', likes: '2.4k', position: '20% 72%', tone: 'lumiere' },
+  { id: 'luneria-product', name: 'LUNERIA', category: '크림', meta: '클린뷰티 · 시그니처 라인', likes: '2.1k', position: '72% 46%', tone: 'luneria' },
+  { id: 'muse-product', name: 'MUSE', category: '바디케어', meta: '바디 · 감성 패키지', likes: '1.7k', position: '88% 72%', tone: 'muse' },
+  { id: 'vela-product', name: 'VELA', category: '퍼퓸', meta: '향수 · 미니멀 패키지', likes: '1.4k', position: '52% 28%', tone: 'vela' },
 ]
 
 const surveyImprovementOptions = ['로고 디자인', '글씨체', '색상 조합', '생성 속도', '수정 기능', '상표 이미지 분석', '결과 설명', '제품 썸네일', '기타']
@@ -294,7 +312,9 @@ function CustomerApp() {
   const [manualColorSlot, setManualColorSlot] = useState(0)
   const [colorSelectionMode, setColorSelectionMode] = useState<'tone' | 'manual'>('tone')
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
-  const [logoStyle, setLogoStyle] = useState<LogoStyle>('combination')
+  const [logoStyle, setLogoStyle] = useState<LogoStyle | null>('combination')
+  const [logoShapePrompt, setLogoShapePrompt] = useState('')
+  const [logoShapeAccordionOpen, setLogoShapeAccordionOpen] = useState(false)
   const [resultCandidate, setResultCandidate] = useState(0)
   const [resultLiked, setResultLiked] = useState(false)
   const [trademarkAnalysisSkipped, setTrademarkAnalysisSkipped] = useState(false)
@@ -489,6 +509,10 @@ function CustomerApp() {
   const galleryDragStartX = useRef(0)
   const galleryDragStartScrollLeft = useRef(0)
   const isDraggingGallery = useRef(false)
+  const productGalleryRef = useRef<HTMLDivElement>(null)
+  const productGalleryDragStartX = useRef(0)
+  const productGalleryDragStartScrollLeft = useRef(0)
+  const isDraggingProductGallery = useRef(false)
 
   const filteredItems = activeCategory === '전체'
     ? galleryItems
@@ -530,6 +554,38 @@ function CustomerApp() {
     track.classList.remove('is-dragging')
   }
 
+  const scrollProductGallery = (amount: number) => {
+    productGalleryRef.current?.scrollBy({ left: amount, behavior: 'smooth' })
+  }
+
+  const handleProductGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    const track = productGalleryRef.current
+    if (!track || event.button !== 0) return
+
+    isDraggingProductGallery.current = true
+    productGalleryDragStartX.current = event.clientX
+    productGalleryDragStartScrollLeft.current = track.scrollLeft
+    track.setPointerCapture(event.pointerId)
+    track.classList.add('is-dragging')
+  }
+
+  const handleProductGalleryPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const track = productGalleryRef.current
+    if (!track || !isDraggingProductGallery.current) return
+
+    event.preventDefault()
+    track.scrollLeft = productGalleryDragStartScrollLeft.current - (event.clientX - productGalleryDragStartX.current)
+  }
+
+  const handleProductGalleryPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const track = productGalleryRef.current
+    if (!track) return
+
+    isDraggingProductGallery.current = false
+    if (track.hasPointerCapture(event.pointerId)) track.releasePointerCapture(event.pointerId)
+    track.classList.remove('is-dragging')
+  }
+
   const toggleSurveyImprovement = (item: string) => {
     setSurveyImprovements((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])
   }
@@ -550,7 +606,8 @@ function CustomerApp() {
       setCoreValues((project.brandValues ?? []).filter((value): value is CoreValue => coreValueIds.has(value as CoreValue)))
       setCoreValueInputMode(project.brandValues?.length ? 'category' : 'direct')
       setTargetAge(project.targetAge ?? '전 연령층')
-      setAdditionalRequest(project.additionalRequirements ?? '')
+      setLogoShapePrompt(extractLogoShapeRequirement(project.additionalRequirements))
+      setAdditionalRequest(removeLogoShapeRequirement(project.additionalRequirements))
       if (project.tone && toneOptions.some((option) => option.id === project.tone)) setToneSelection(project.tone as ToneOption)
       if (project.colors?.length) {
         setManualColors(project.colors.slice(0, 4))
@@ -780,6 +837,14 @@ function CustomerApp() {
     return manualColors
   }
 
+  const buildAdditionalRequirements = (includeFinalRequest: boolean) => {
+    const shapeRequirement = logoShapePrompt.trim() ? `${logoShapeRequirementPrefix} ${logoShapePrompt.trim()}` : ''
+    const finalRequest = includeFinalRequest ? additionalRequest.trim() : ''
+    const availableRequestLength = Math.max(0, 300 - shapeRequirement.length - (shapeRequirement && finalRequest ? 1 : 0))
+    const combined = [shapeRequirement, finalRequest.slice(0, availableRequestLength)].filter(Boolean).join('\n')
+    return combined || undefined
+  }
+
   const buildProjectInput = (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review'): ProjectInput => {
     const input: ProjectInput = {
       brandType: brandKind === 'ci' ? 'CI' : 'BI',
@@ -802,8 +867,11 @@ function CustomerApp() {
       input.colors = getSelectedColors()
     }
 
-    if (step === 'logo-style') input.logoStyle = logoStyle
-    if (step === 'final-review') input.additionalRequirements = additionalRequest.trim() || undefined
+    if (step === 'logo-style') {
+      input.logoStyle = logoStyle ?? undefined
+      input.additionalRequirements = buildAdditionalRequirements(false)
+    }
+    if (step === 'final-review') input.additionalRequirements = buildAdditionalRequirements(true)
 
     return input
   }
@@ -842,6 +910,7 @@ function CustomerApp() {
 
   const saveProjectStep = async (step: 'brand-brief' | 'tone' | 'logo-style', nextMode: ViewMode) => {
     if (projectSaving) return
+    if (step === 'logo-style' && !logoStyle) return
     setProjectSaving(true)
     setProjectError('')
     try {
@@ -1234,6 +1303,41 @@ function CustomerApp() {
             )}
           </section>
 
+          <section className="brand-details-section target-audience-section" aria-labelledby="target-audience-title">
+            <div className="target-audience-heading">
+              <div>
+                <h2 id="target-audience-title">주요 타겟</h2>
+                <p>누구를 위한 브랜드인지 알려주세요.</p>
+              </div>
+              <span className="target-audience-caption">하나를 선택해 주세요</span>
+            </div>
+            <div className="target-audience-grid" role="group" aria-label="주요 타겟 선택">
+              {[
+                { id: '10-20대', description: '트렌드와 개성을 중시하는 고객' },
+                { id: '30-40대', description: '일상과 균형을 중시하는 고객' },
+                { id: '50-60대', description: '편안함과 신뢰를 중시하는 고객' },
+                { id: '전 연령층', description: '폭넓은 고객을 위한 브랜드' },
+              ].map((option) => {
+                const selected = targetAge === option.id
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={selected ? 'target-audience-card selected' : 'target-audience-card'}
+                    aria-pressed={selected}
+                    onClick={() => setTargetAge((current) => current === option.id ? '' : option.id)}
+                  >
+                    <span className="target-audience-card-copy">
+                      <strong>{option.id}</strong>
+                      <small>{option.description}</small>
+                    </span>
+                    <span className="target-audience-check" aria-hidden="true">{selected && <Check size={16} strokeWidth={2.5} />}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+
           <button className="brand-details-next" type="button" onClick={() => void saveProjectStep('brand-brief', 'tone')} disabled={projectSaving}>
             {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
           </button>
@@ -1491,14 +1595,20 @@ function CustomerApp() {
         <section className="logo-style-options" aria-label="로고 형태 선택">
           {logoStyleOptions.map((option) => {
             const selected = logoStyle === option.id
+            const shapeInputEnabled = option.id === 'symbol' || option.id === 'combination'
+            const shapeInputOpen = selected && shapeInputEnabled && logoShapeAccordionOpen
             return (
-              <button
-                key={option.id}
-                type="button"
-                className={selected ? 'logo-style-option selected' : 'logo-style-option'}
-                aria-pressed={selected}
-                onClick={() => setLogoStyle(option.id)}
-              >
+              <div key={option.id} className={shapeInputOpen ? 'logo-style-option-group shape-open' : 'logo-style-option-group'}>
+                <button
+                  type="button"
+                  className={selected ? 'logo-style-option selected' : 'logo-style-option'}
+                  aria-pressed={selected}
+                  onClick={() => {
+                    const nextSelected = selected ? null : option.id
+                    setLogoStyle(nextSelected)
+                    setLogoShapeAccordionOpen(Boolean(nextSelected && shapeInputEnabled))
+                  }}
+                >
                 <span className={`logo-style-preview ${option.id}`} aria-hidden="true">
                   {option.id === 'symbol' && <span className="style-symbol-mark">✦</span>}
                   {option.id === 'wordmark' && <span className="style-wordmark-text">LUNÉE</span>}
@@ -1512,12 +1622,28 @@ function CustomerApp() {
                   {option.recommended && <small className="logo-style-recommend"><Sparkle /> 처음 만드는 브랜드에 추천</small>}
                 </span>
                 <span className="logo-style-radio" aria-hidden="true">{selected && <Check size={22} strokeWidth={2.5} />}</span>
-              </button>
+                </button>
+                {shapeInputOpen && (
+                  <div className="logo-shape-accordion" role="region" aria-label="로고 형태 입력">
+                    <label htmlFor="logo-shape-prompt">원하는 로고 형태를 입력해 주세요</label>
+                    <p>예: 별 모양, 달 모양, 잎사귀 형태처럼 자유롭게 적어 주세요.</p>
+                    <textarea
+                      id="logo-shape-prompt"
+                      value={logoShapePrompt}
+                      onChange={(event) => setLogoShapePrompt(event.target.value)}
+                      placeholder="예: 달 모양, 둥근 별 모양"
+                      maxLength={100}
+                      rows={2}
+                    />
+                    <span>{logoShapePrompt.length} / 100</span>
+                  </div>
+                )}
+              </div>
             )
           })}
         </section>
 
-        <button className="logo-style-next" type="button" onClick={() => void saveProjectStep('logo-style', 'final')} disabled={projectSaving}>
+        <button className="logo-style-next" type="button" onClick={() => void saveProjectStep('logo-style', 'final')} disabled={projectSaving || !logoStyle}>
           {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
         </button>
         {projectError && <p className="project-error" role="alert">{projectError}</p>}
@@ -1703,7 +1829,7 @@ function CustomerApp() {
   const renderFinalRequestScreen = () => {
     const displayValue = (value: string | undefined, fallback = '입력하지 않음') => value?.trim() || fallback
     const selectedToneLabel = toneOptions.find((option) => option.id === toneSelection)?.label ?? toneSelection
-    const selectedLogoStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? logoStyle
+    const selectedLogoStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? '선택하지 않음'
     const selectedBrandValues = coreValues.length > 0
       ? coreValues.map((value) => coreValueLabels[value] ?? value).join(', ')
       : displayValue(brandValueDescription)
@@ -2452,6 +2578,51 @@ function CustomerApp() {
                         <span aria-hidden="true">{item.id === 'luna' ? <CircleCheck size={32} strokeWidth={1.4} /> : item.id === 'sora' ? <Droplets size={32} strokeWidth={1.4} /> : <Sparkles size={32} strokeWidth={1.4} />}</span>
                         <strong>{item.name}</strong>
                         <small>{item.category === '콤비네이션' ? 'CLEAN BEAUTY' : item.category.toUpperCase()}</small>
+                      </div>
+                      <span className="visual-tag">{item.category}</span>
+                    </div>
+                    <div className="gallery-meta">
+                      <div>
+                        <h3>{item.name}</h3>
+                        <p>{item.meta}</p>
+                      </div>
+                      <div className="like-count"><Heart aria-hidden="true" size={17} strokeWidth={1.8} fill="currentColor" />{item.likes}</div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+            <div className="gallery-dots" aria-hidden="true"><span className="active" /><span /><span /><span /><span /></div>
+          </section>
+
+          <section className="curation-section product-gallery-section" aria-labelledby="product-gallery-title">
+            <div className="section-heading">
+              <h2 id="product-gallery-title">제품 썸네일 갤러리</h2>
+              <div className="gallery-controls">
+                <button type="button" aria-label="이전 제품 보기" onClick={() => scrollProductGallery(-340)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <button type="button" aria-label="다음 제품 보기" onClick={() => scrollProductGallery(340)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+              </div>
+            </div>
+            <div
+              className="gallery-track"
+              ref={productGalleryRef}
+              onPointerDown={handleProductGalleryPointerDown}
+              onPointerMove={handleProductGalleryPointerMove}
+              onPointerUp={handleProductGalleryPointerUp}
+              onPointerCancel={handleProductGalleryPointerUp}
+            >
+              {productGalleryItems.map((item) => {
+                const liked = likedIds.includes(item.id)
+                return (
+                  <article className="gallery-card" key={item.id}>
+                    <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundPosition: item.position }}>
+                      <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
+                        <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
+                      </button>
+                      <div className="gallery-art-copy">
+                        <span aria-hidden="true"><Droplets size={32} strokeWidth={1.4} /></span>
+                        <strong>{item.name}</strong>
+                        <small>PRODUCT THUMBNAIL</small>
                       </div>
                       <span className="visual-tag">{item.category}</span>
                     </div>

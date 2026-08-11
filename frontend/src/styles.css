@@ -1469,9 +1469,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .gallery-card { flex: 0 0 calc((100% - 54px) / 4); min-width: 220px; overflow: hidden; border-radius: 20px; background: #fff; box-shadow: 0 10px 26px rgb(25 28 49 / .1); scroll-snap-align: start; }
 .gallery-visual { position: relative; aspect-ratio: 1.12 / 1; overflow: hidden; background-image: linear-gradient(135deg, rgb(38 17 105 / .45), rgb(38 18 92 / .05)), url('/aurora-bubbles.png'); background-size: cover; }
 .gallery-visual::after { display: none; }
-.gallery-visual.beau { background-image: linear-gradient(145deg, rgb(255 163 185 / .38), rgb(90 18 137 / .12)), url('/aurora-bubbles.png'); }
-.gallery-visual.sora { background-image: linear-gradient(135deg, rgb(80 22 184 / .5), rgb(21 40 116 / .18)), url('/aurora-bubbles.png'); }
-.gallery-visual.mori { background-image: linear-gradient(145deg, rgb(235 202 159 / .28), rgb(105 46 163 / .24)), url('/aurora-bubbles.png'); }
+  .gallery-visual.beau { background-image: linear-gradient(145deg, rgb(255 163 185 / .38), rgb(90 18 137 / .12)), url('/aurora-bubbles.png'); }
+  .gallery-visual.sora { background-image: linear-gradient(135deg, rgb(80 22 184 / .5), rgb(21 40 116 / .18)), url('/aurora-bubbles.png'); }
+  .gallery-visual.mori { background-image: linear-gradient(145deg, rgb(235 202 159 / .28), rgb(105 46 163 / .24)), url('/aurora-bubbles.png'); }
+  .product-gallery-section { padding-top: 42px; }
+  .product-gallery-visual.lumiere { background-image: linear-gradient(135deg, rgb(255 188 192 / .42), rgb(73 41 146 / .16)), url('/aurora-bubbles.png'); }
+  .product-gallery-visual.luneria { background-image: linear-gradient(145deg, rgb(255 221 188 / .42), rgb(182 86 174 / .2)), url('/aurora-bubbles.png'); }
+  .product-gallery-visual.muse { background-image: linear-gradient(135deg, rgb(118 198 226 / .34), rgb(76 44 154 / .3)), url('/aurora-bubbles.png'); }
+  .product-gallery-visual.vela { background-image: linear-gradient(145deg, rgb(231 194 145 / .38), rgb(40 35 101 / .24)), url('/aurora-bubbles.png'); }
 .favorite-button { position: absolute; z-index: 1; top: 12px; right: 12px; border: 0; padding: 0; color: #fff; background: transparent; font-size: 28px; line-height: 1; text-shadow: 0 2px 8px rgb(0 0 0 / .2); }
 .favorite-button.liked { color: #ff6caf; }
 .gallery-art-copy { position: absolute; z-index: 1; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; text-align: center; }
@@ -7636,4 +7641,254 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 @media (max-width: 720px) {
   .tone-custom-trigger { top: 46.5px; }
+}
+
+/* Logo shape prompt accordion for symbol and combination marks. */
+.logo-style-option-group {
+  display: grid;
+  gap: 0;
+}
+
+.logo-style-option-group.shape-open .logo-style-option {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.logo-shape-accordion {
+  display: grid;
+  gap: 7px;
+  margin-top: -1px;
+  max-height: 220px;
+  overflow: hidden;
+  border: 1.5px solid transparent;
+  border-top: 0;
+  border-radius: 0 0 15px 15px;
+  padding: 0 22px 18px;
+  background: linear-gradient(#fff, #fff) padding-box, linear-gradient(110deg, #b095ff, #e38be9) border-box;
+  box-shadow: 0 9px 22px rgb(121 86 201 / .08);
+  animation: logo-shape-accordion-reveal 220ms ease-out both;
+}
+
+.logo-shape-accordion label {
+  color: #7040e2;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -.06em;
+}
+
+.logo-shape-accordion p {
+  margin: 0;
+  color: #535c74;
+  font-size: 14px;
+  letter-spacing: -.05em;
+}
+
+.logo-shape-accordion textarea {
+  width: 100%;
+  min-height: 62px;
+  resize: vertical;
+  border: 1px solid #d8c7fa;
+  border-radius: 10px;
+  padding: 11px 13px;
+  color: #30374b;
+  background: #fff;
+  outline: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  letter-spacing: -.05em;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.logo-shape-accordion textarea:focus {
+  border-color: #9b6deb;
+  box-shadow: 0 0 0 3px rgb(155 109 235 / .14);
+}
+
+.logo-shape-accordion > span {
+  justify-self: end;
+  color: #85899a;
+  font-size: 12px;
+}
+
+@keyframes logo-shape-accordion-reveal {
+  from { max-height: 0; opacity: 0; transform: translateY(-7px); }
+  to { max-height: 220px; opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 720px) {
+  .logo-shape-accordion {
+    padding: 0 15px 14px;
+  }
+
+  .logo-shape-accordion label {
+    font-size: 14px;
+  }
+
+  .logo-shape-accordion p {
+    font-size: 12px;
+  }
+
+  .logo-shape-accordion textarea {
+    min-height: 56px;
+    font-size: 14px;
+  }
+}
+
+/* Audience category selection for the BI brand brief. */
+.target-audience-section {
+  margin-top: 36px;
+}
+
+.target-audience-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.target-audience-heading h2 {
+  margin: 0;
+  color: #7040e2;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -.08em;
+}
+
+.target-audience-heading p {
+  margin: 5px 0 0;
+  color: #535c74;
+  font-size: 14px;
+  letter-spacing: -.06em;
+}
+
+.target-audience-caption {
+  flex: 0 0 auto;
+  color: #9299aa;
+  font-size: 12px;
+  letter-spacing: -.06em;
+}
+
+.target-audience-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.target-audience-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 88px;
+  border: 1.5px solid transparent;
+  border-radius: 15px;
+  padding: 16px 18px;
+  color: #30374b;
+  background: linear-gradient(#fff, #fff) padding-box, linear-gradient(110deg, #b095ff, #e38be9) border-box;
+  box-shadow: 0 8px 18px rgb(121 86 201 / .06);
+  text-align: left;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.target-audience-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgb(121 86 201 / .12);
+}
+
+.target-audience-card.selected {
+  background: linear-gradient(105deg, #fff, #fbf3ff) padding-box, linear-gradient(105deg, #9868ea, #e96abf) border-box;
+  box-shadow: 0 10px 24px rgb(131 89 224 / .14), inset 0 1px 0 rgb(255 255 255 / .98);
+}
+
+.target-audience-card-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.target-audience-card-copy strong {
+  color: #30374b;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -.07em;
+}
+
+.target-audience-card-copy small {
+  overflow: hidden;
+  color: #69738c;
+  font-size: 12px;
+  letter-spacing: -.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-audience-check {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  place-items: center;
+  border: 1.5px solid #c5a4f5;
+  border-radius: 50%;
+  color: #fff;
+}
+
+.target-audience-card.selected .target-audience-check {
+  border-color: #9b60e9;
+  background: linear-gradient(140deg, #b477f4, #7d47dc);
+  box-shadow: 0 0 13px rgb(141 77 235 / .28);
+}
+
+@media (max-width: 720px) {
+  .target-audience-section {
+    margin-top: 27px;
+  }
+
+  .target-audience-heading {
+    align-items: flex-start;
+    margin-bottom: 13px;
+  }
+
+  .target-audience-heading h2 {
+    font-size: 16px;
+  }
+
+  .target-audience-heading p,
+  .target-audience-caption {
+    font-size: 11px;
+  }
+
+  .target-audience-heading p {
+    margin-top: 4px;
+  }
+
+  .target-audience-grid {
+    gap: 8px;
+  }
+
+  .target-audience-card {
+    min-height: 73px;
+    gap: 8px;
+    border-radius: 11px;
+    padding: 12px 11px;
+  }
+
+  .target-audience-card-copy {
+    gap: 3px;
+  }
+
+  .target-audience-card-copy strong {
+    font-size: 15px;
+  }
+
+  .target-audience-card-copy small {
+    font-size: 10px;
+  }
+
+  .target-audience-check {
+    width: 23px;
+    height: 23px;
+    flex-basis: 23px;
+  }
 }
