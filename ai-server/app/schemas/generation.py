@@ -43,18 +43,36 @@ class GenerationRequest(BaseModel):
 
     num_variants: int = Field(4, ge=1, description="생성할 로고 시안 수")
 
+    variant_offset: int = Field(
+        0,
+        ge=0,
+        le=64,
+        description=(
+            "재생성(F12-2)용 모티프 시작 위치. 최초 생성은 0, 재생성 N회차는 N*num_variants. "
+            "prompt_service가 variant_index로 모티프를 순환 배정하므로 offset을 주면 "
+            "직전 회차와 다른 형태의 시안이 나온다."
+        ),
+    )
+
     def to_survey_dict(self) -> dict:
         """prompt_service/logo_composer가 기대하는 plain dict로 변환한다.
 
-        (num_variants는 라우트에서 개수 제어용으로만 쓰고 프롬프트 조립에는
-        관여하지 않으므로 제외한다. None 필드도 제외해 "설문에 없는 항목"과
-        "빈 값"을 구분한다.)
+        (num_variants·variant_offset은 라우트에서 생성 개수와 모티프 위치를 제어하는
+        용도이고 프롬프트 문구 조립에는 관여하지 않으므로 제외한다. None 필드도
+        제외해 "설문에 없는 항목"과 "빈 값"을 구분한다.)
         """
-        return self.model_dump(exclude_none=True, exclude={"num_variants"})
+        return self.model_dump(
+            exclude_none=True, exclude={"num_variants", "variant_offset"}
+        )
 
 
 class GeneratedLogo(BaseModel):
     imageBase64: str
+
+    # 백엔드 logo_candidates.ai_metadata_json에 저장해 재생성 품질 추적에 쓰는 값들.
+    # 응답 본문에 추가만 된 것이라 기존 소비자는 영향받지 않는다.
+    seed: Optional[int] = None
+    variantIndex: Optional[int] = None
 
 
 class GenerationResponse(BaseModel):

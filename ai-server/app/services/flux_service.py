@@ -1,6 +1,5 @@
 import base64
 import os
-import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
@@ -73,12 +72,40 @@ def _call_flux_pro(prompt: str) -> Image.Image:
     raise last_error or RuntimeError("OpenRouter API 요청이 알 수 없는 이유로 실패했습니다.")
 
 
-def generate_logo_from_survey(survey: dict, num_variants: int = 4, steps: int = 4):
-    """설문 기반 로고 시안을 병렬로 생성한다. (steps는 이 모델에서 쓰이지 않지만
-    기존 app.py/schemas 호출 시그니처와 맞추기 위해 인자로만 받는다.)"""
-    survey = dict(survey)
-    survey["_motif_jitter"] = random.randint(0, 1_000_000)
-    prompts = [build_prompt_from_survey(survey, variant_index=i) for i in range(num_variants)]
+def generate_logo_variants(
+    survey: dict,
+    num_variants: int = 4,
+    steps: int = 4,
+    variant_offset: int = 0,
+):
+    """설문 기반 로고 시안을 병렬로 생성하고, 시안별 생성 파라미터를 함께 반환한다.
+
+    변형(variant)마다 별도 HTTP 요청이 필요한 API라서, 순차 호출 시 총 소요 시간이
+    N배로 늘어난다. ThreadPoolExecutor로 동시에 요청을 보내 벽시계 시간을 단일 요청
+    수준(~1x)으로 줄인다.
+
+    시안마다 build_prompt_from_survey(survey, variant_index=v)로 별도 프롬프트를 만들어
+    같은 설문에서도 서로 다른 비주얼 모티프가 배정되게 한다 — 랜덤 시드만 다른 4장이
+    아니라 실제로 형태 아이디어가 다른 4개 시안을 얻기 위함.
+
+    variant_offset:
+        재생성(F12-2)용. prompt_service._resolve_motif가 variant_index로 모티프와
+        렌더링 방식을 순환 배정하므로, 재생성 시 offset을 주면 직전 회차와 다른
+        모티프가 배정된다. 1회차 0~3 → 2회차 4~7. 이전 로고 이미지를 부정 프롬프트로
+        되돌려 보낼 필요가 없어 요청도 가볍다.
+
+    steps:
+        OpenRouter flux.2-pro에는 해당 파라미터가 없다. 기존 호출부 시그니처를
+        유지하려고 인자로만 받고 쓰지 않는다.
+
+    반환: [{"image": Image, "seed": None, "variant_index": int}, ...] (생성 성공분만)
+        seed는 현재 제공자가 노출하지 않아 항상 None이다. 시드를 돌려주는 제공자로
+        돌아갈 때를 대비해 키 자체는 남겨 백엔드 계약을 흔들지 않는다.
+    """
+    del steps  # 호출부 호환용으로만 받는다
+
+    indices = [variant_offset + i for i in range(num_variants)]
+    prompts = [build_prompt_from_survey(survey, variant_index=v) for v in indices]
 
     started = time.monotonic()
     results = [None] * num_variants
@@ -96,12 +123,29 @@ def generate_logo_from_survey(survey: dict, num_variants: int = 4, steps: int = 
             except Exception as e:
                 errors.append(str(e))
 
-    images = [img for img in results if img is not None]
+    variants = [
+        {"image": img, "seed": None, "variant_index": indices[i]}
+        for i, img in enumerate(results)
+        if img is not None
+    ]
     elapsed = time.monotonic() - started
-    print(f"[flux_service] {len(images)}/{num_variants} variants in {elapsed:.1f}s")
+    print(f"[flux_service] {len(variants)}/{num_variants} variants in {elapsed:.1f}s")
 
-    if not images:
+    if not variants:
         raise RuntimeError(
             "로고 생성에 모두 실패했습니다: " + " | ".join(errors[:num_variants])
         )
-    return images
+    return variants
+
+
+def generate_logo_from_survey(
+    survey: dict,
+    num_variants: int = 4,
+    steps: int = 4,
+    variant_offset: int = 0,
+):
+    """이미지 리스트만 필요한 호출부(스크립트 등)를 위한 얇은 래퍼."""
+    return [
+        v["image"]
+        for v in generate_logo_variants(survey, num_variants, steps, variant_offset)
+    ]

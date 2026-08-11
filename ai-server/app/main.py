@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.api.routes import embedding, generation, health, similarity
+from app.api.routes import brand_kit, embedding, generation, health, similarity
 from app.core.config import settings
 from app.core.exceptions import CodedHTTPException, sanitize_validation_errors
 from app.core.logging import logger
@@ -46,5 +46,6 @@ def coded_error_handler(request: Request, exc: CodedHTTPException):
 
 app.include_router(health.router, tags=["Health"])
 app.include_router(generation.router, prefix="/api/v1/generation", tags=["Generation"])
+app.include_router(brand_kit.router, prefix="/api/v1/generation", tags=["Brand Kit"])
 app.include_router(embedding.router, prefix="/api/v1/embedding", tags=["Embedding"])
 app.include_router(similarity.router, prefix="/api/v1/similarity", tags=["Similarity"])

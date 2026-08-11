@@ -412,3 +412,199 @@ DINOv2의 코사인 유사도는 서로 무관한 상표 간에도 평균 0.49�
 |---|---|---|
 | 등록 상표 간 1위 중앙값 | 2.72 | 30 (SAFE / MODERATE 경계) |
 | 등록 상표 간 1위 상위 5% | 4.91 | 60 (MODERATE / CAUTION 경계) |
+
+---
+
+### 08.11 — 브랜드킷(F14) 신규 · 재생성(F12-2) 대응
+
+담당: 남현욱 · 기준 문서: 백엔드 「AI 서버 작업 요청서」(2026-08-11)
+
+두 항목 모두 **구현 완료 상태이며, 아래 규격이 확정본**입니다. 백엔드는 이 문서대로 붙이면 됩니다.
+
+## 1. 브랜드킷 (POST /api/v1/generation/brand-kit)
+
+### 1-1. 산출 방식 — 로고를 이미지 생성 모델에 넣지 않습니다
+
+요청서 3-3에서 협의 항목으로 남겨두신 부분에 대한 답입니다.
+
+현재 FLUX 호출부(`flux_service._call_flux_klein`)는 `prompt / width / height / seed / steps / samples`만 보내는 **text-to-image 전용** 경로이고, 설령 image-to-image가 열려도 디퓨전 모델은 입력 로고를 그대로 재현하지 못합니다. 브랜드 아이덴티티 산출물에서 사용자의 로고가 변형돼 나오면 기능 자체가 무의미해집니다.
+
+따라서 **배경만 생성하고 로고는 PIL로 정확히 합성**합니다. 이는 기획서 (7) 수행방법의 다음 항목과 동일한 방침입니다.
+
+> CI 명함: 레이아웃 템플릿 + 로고·폰트·사용자 정보 합성 (정보 정확도 확보를 위해 이미지 생성 모델 미사용)
+> BI 썸네일: FLUX.2 [klein] 4B로 제품 연출 배경 생성 후 로고·제품명 폰트 레이어 합성, 1000×1000 규격 산출
+
+### 1-2. kit_type
+
+| 값 | 산출물 | 규격 | 외부 API |
+|---|---|---|---|
+| `BUSINESS_CARD` | 명함 | 1063 × 591 (90×50mm @300dpi) | 없음 |
+| `PRODUCT_THUMBNAIL` | 제품 썸네일 | 1000 × 1000 | FLUX (연출 배경) |
+| `BOTTLE` | `PRODUCT_THUMBNAIL`의 별칭 | 동일 | 동일 |
+
+요청서에는 BI 산출물이 "로션 병"으로 되어 있는데, 기획서 (5)·(7)의 정의는 **스마트스토어 규격 1000×1000 제품 썸네일**입니다. 로션 병은 그 썸네일 안에 들어가는 연출 소재이므로 상충하지 않으며, 정식 명칭만 `PRODUCT_THUMBNAIL`로 둡니다. 이미 배포된 백엔드 코드가 있을 수 있어 `BOTTLE`도 계속 받습니다.
+
+### 1-3. 요청
+
+요청 본문은 제안하신 snake_case를 그대로 씁니다(기존 `/generate`도 snake_case 설문 필드를 받습니다). 응답만 `/generate`의 `logos[].imageBase64`와 맞춰 camelCase입니다.
+
+```json
+{
+  "kit_type": "BUSINESS_CARD",
+  "logo_image_base64": "iVBORw0KGgo...",
+  "ci_bi": "CI",
+  "survey": {
+    "company_name": "젠마크",
+    "industry": "COSMETICS",
+    "tone": "friendly",
+    "colors": ["#4F46E5", "#EC4899"],
+    "logo_style": "combination"
+  },
+  "card_info": {
+    "name": "남현욱",
+    "title": "대표",
+    "company": "주식회사 젠마크",
+    "phone": "010-1234-5678",
+    "email": "wook@genmark.ai",
+    "address": "광주광역시 남구 송암로 60"
+  },
+  "product_name": "수분 세럼"
+}
+```
+
+| 필드 | 필수 | 설명 |
+|---|---|---|
+| `kit_type` | O | 위 표의 3개 값 중 하나. 그 외는 422 |
+| `logo_image_base64` | O | 완성 로고 PNG의 Base64. `data:image/png;base64,` 접두어도 허용 |
+| `ci_bi` | X | 로그·분기 참고용 |
+| `survey` | X | 로고 생성 때 넘긴 것과 같은 구조. **스키마를 고정하지 않고 dict로 받습니다** — 백엔드가 필드를 늘려도 AI 서버 재배포가 필요 없습니다. 현재 실제로 읽는 값은 `colors`(또는 `color_manual`) 첫 번째 HEX와 `company_name`/`brand_name`뿐입니다 |
+| `card_info` | △ | **`kit_type=BUSINESS_CARD`일 때 필수.** 누락 시 400 |
+| `product_name` | X | 썸네일 하단 문구. 없으면 `survey`의 브랜드명 사용 |
+
+**`card_info`는 요청서 3-2 예시에 없던 신규 항목입니다.** 기획서의 "사용자 정보(이름·직함·연락처)를 합성"에 해당하며, 이 값이 없으면 명함에 인쇄할 내용이 없습니다. `name` 외에는 모두 선택이고, 빈 항목은 레이아웃에서 통째로 생략됩니다. 프론트에서 입력받는 화면이 필요합니다.
+
+`logo_image_base64` 전달 방식은 **Base64 유지**를 제안합니다. AI 서버는 백엔드 스토리지(`storage_key`)에 접근 권한이 없고, `/similarity/search`도 이미 Base64로 받고 있어 일관됩니다.
+
+### 1-4. 응답
+
+```json
+{
+  "kitType": "BUSINESS_CARD",
+  "images": [
+    { "imageBase64": "iVBORw0KGgo...", "width": 1063, "height": 591 }
+  ],
+  "preliminary": false,
+  "elapsedMs": 1447
+}
+```
+
+| 필드 | 설명 |
+|---|---|
+| `kitType` | 정규화된 값. `BOTTLE`로 보내도 `PRODUCT_THUMBNAIL`이 돌아옵니다 |
+| `images` | **배열입니다.** 현재는 1장이지만 명함 앞/뒤, 썸네일 각도 변형으로 늘어날 여지를 둡니다 |
+| `preliminary` | `true`면 최종 품질이 아닌 임시 합성 결과 |
+| `elapsedMs` | AI 서버 내부 소요 시간 |
+
+응답 키를 `imageBase64` 단일 값이 아니라 `images[]`로 둔 이유는 위와 같습니다. 백엔드는 `images[0]`만 저장해도 무방합니다.
+
+### 1-5. 현재 구현 상태
+
+| kit_type | 상태 | preliminary |
+|---|---|---|
+| `BUSINESS_CARD` | **완료.** 좌(로고) / 우(인적사항) 2단 템플릿 합성 | `false` |
+| `PRODUCT_THUMBNAIL` | 톤 기반 그라데이션 배경 + 로고·제품명 합성까지 동작. **FLUX 연출 배경 미적용** | `true` |
+
+`preliminary=true`인 동안에도 응답 형식·규격은 확정본과 동일하므로 백엔드 연동과 화면 작업을 지금 진행하실 수 있습니다. FLUX 배경이 붙으면 `preliminary`만 `false`로 바뀝니다.
+
+### 1-6. 소요 시간 · 타임아웃
+
+| 구간 | 측정값 |
+|---|---|
+| 명함 합성 | 1.2 ~ 1.5초 (외부 API 없음) |
+| 썸네일 (현재, 배경 생성 전) | 1.2 ~ 1.4초 |
+| 썸네일 (FLUX 배경 적용 후 예상) | 10 ~ 15초 |
+
+**백엔드 타임아웃은 60초**로 잡아주세요. `/generate`가 4장 병렬 생성에 그 정도를 쓰고 있어 동일 기준입니다.
+
+### 1-7. 에러
+
+기존 계약과 같이 `{"code": ..., "message": ...}` 형식입니다.
+
+| HTTP | code | 상황 | 재시도 |
+|---|---|---|---|
+| 400 | `BRANDKIT_INVALID_IMAGE` | `logo_image_base64` 디코드 실패 / 이미지 아님 / 8px 미만 | 무의미 |
+| 400 | `BRANDKIT_MISSING_CARD_INFO` | `BUSINESS_CARD`인데 `card_info` 없음 | 무의미 |
+| 422 | `SIMILARITY_INVALID_REQUEST` | 스키마 불일치(알 수 없는 `kit_type` 등) | 무의미 |
+| 500 | `BRANDKIT_COMPOSITION_FAILED` | 합성 중 예기치 못한 오류 | 가능 |
+
+입력값은 에러 응답·로그에 되비치지 않습니다(Base64 유출 방지, 계약 §11 동일 적용).
+
+브랜드킷은 임베딩·FAISS를 쓰지 않으므로 **`/health`가 `not_ready`여도 정상 동작**합니다. 상표 데이터 미준비 상태에서도 연동 테스트가 가능합니다.
+
+---
+
+## 2. 재생성 (POST /api/v1/generation/generate)
+
+### 2-1. `avoid_logos` 대신 `variant_offset`을 제안합니다
+
+요청서 4-4에서 지적하신 대로 `storage_key`는 AI 서버가 읽을 수 없어 그대로는 효과가 없습니다. 그런데 **부정 프롬프트 자체가 필요 없습니다.**
+
+`prompt_service.build_prompt_from_survey(survey, variant_index=i)`가 이미 `variant_index`로 모티프와 렌더링 방식을 순환 배정합니다. 최초 생성은 0~3을 쓰므로, 재생성 때 4~7을 쓰면 **자동으로 다른 형태의 시안이 나옵니다.**
+
+| 방식 | 요청 크기 | 정확도 | 판단 |
+|---|---|---|---|
+| (a) 이전 로고 4장 Base64 | 수 MB | 높음 | 요청이 무거움 |
+| (b) 텍스트 설명 | 작음 | 낮음 | 부정확 |
+| (c) 시드 회피 | 작음 | 낮음 | 시드만 바꿔도 모티프는 그대로 |
+| **(d) variant_offset** | **정수 1개** | **높음** | **채택** |
+
+(c)가 효과가 약한 이유는, 같은 프롬프트에서 시드만 바꾸면 색·질감만 달라지고 형태 아이디어는 유지되기 때문입니다. 모티프 자체를 바꿔야 "다른 시안"이 됩니다.
+
+### 2-2. 요청 추가 필드
+
+```json
+{
+  "ci_bi": "CI",
+  "company_name": "젠마크",
+  "...": "기존 필드 그대로",
+
+  "num_variants": 4,
+  "variant_offset": 4
+}
+```
+
+| 필드 | 기본값 | 설명 |
+|---|---|---|
+| `variant_offset` | `0` | 재생성 N회차 = `N × num_variants`. 최초 생성은 생략하거나 0. 범위 0~64 |
+
+백엔드가 이미 추가하신 `logo_generations.parent_generation_id`로 재시도 회차를 셀 수 있으므로, 그 값에 `num_variants`를 곱해 넣어주시면 됩니다.
+
+`avoid_logos`를 계속 보내셔도 됩니다 — `GenerationRequest`에 `extra="forbid"`가 없어 무시되며, 회귀 테스트(`test_generation_ignores_unknown_keys`)로 고정해 두었습니다.
+
+### 2-3. 응답 추가 필드 — `ai_metadata_json` 활용
+
+요청서 4-4의 3번 항목입니다. 시드와 모티프 인덱스를 돌려드립니다.
+
+```json
+{
+  "logos": [
+    { "imageBase64": "iVBORw0KGgo...", "seed": 2847193021, "variantIndex": 4 },
+    { "imageBase64": "iVBORw0KGgo...", "seed":  938471002, "variantIndex": 5 }
+  ]
+}
+```
+
+| 필드 | 설명 |
+|---|---|
+| `seed` | FLUX 호출에 쓴 난수 시드 |
+| `variantIndex` | 이 시안에 배정된 모티프 인덱스 (`variant_offset + i`) |
+
+기존 응답에 **추가만** 된 것이라 지금 붙어 있는 소비자는 영향받지 않습니다. `logo_candidates.ai_metadata_json`에 그대로 저장하시면, 나중에 "몇 회차까지 재생성했는지"와 "어떤 모티프가 선택률이 높은지"를 추적할 수 있습니다.
+
+---
+
+## 3. 백엔드에서 확인 부탁드리는 것
+
+1. `card_info` 입력 화면이 필요합니다 (이름·직함·회사명·연락처·이메일·주소). 프론트 협의 대상입니다.
+2. BI 산출물 명칭을 `PRODUCT_THUMBNAIL`로 맞출지, `BOTTLE`을 계속 쓸지. 둘 다 동작하므로 급하지 않습니다.
+3. `avoid_logos` → `variant_offset` 교체 시점.
