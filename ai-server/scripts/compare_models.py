@@ -171,14 +171,25 @@ def call_model(api_key: str, slug: str, prompt: str, seed=None):
 
 
 def ext_for(media_type: str, raw: bytes) -> str:
-    if "svg" in (media_type or ""):
-        return ".svg"
-    if raw[:5] == b"<?xml" or raw[:4] == b"<svg":
-        return ".svg"
+    """실제 바이트의 매직 넘버로 확장자를 정한다.
+
+    media_type만 믿으면 안 된다 — Recraft는 WEBP를 내려주는데 응답에 media_type이
+    비어 있어 .bin으로 저장된 적이 있다(실측 확인됨). 매직 넘버를 먼저 본다.
+    """
     if raw[:8] == b"\x89PNG\r\n\x1a\n":
         return ".png"
     if raw[:2] == b"\xff\xd8":
         return ".jpg"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return ".webp"
+    if raw.lstrip()[:5] == b"<?xml" or raw.lstrip()[:4] == b"<svg":
+        return ".svg"
+    if "svg" in (media_type or ""):
+        return ".svg"
+    if "webp" in (media_type or ""):
+        return ".webp"
+    if "png" in (media_type or ""):
+        return ".png"
     return ".bin"
 
 
@@ -190,8 +201,9 @@ def build_sheet(results, prompt_note):
     fb = lambda s: ImageFont.truetype(str(F / "bold" / "Pretendard-Bold.ttf"), s)
     fr = lambda s: ImageFont.truetype(str(F / "regular" / "Pretendard-Regular.ttf"), s)
 
+    raster = {".png", ".jpg", ".webp"}
     rows = [(alias, paths) for alias, paths in results.items()
-            if any(p.suffix == ".png" or p.suffix == ".jpg" for p in paths)]
+            if any(p.suffix in raster for p in paths)]
     if not rows:
         print("  (래스터 결과가 없어 비교 시트를 만들지 않습니다)")
         return None
@@ -213,7 +225,7 @@ def build_sheet(results, prompt_note):
         for i, p in enumerate(paths):
             x = LEFT + i * (T + PAD)
             d.rectangle([x, y, x + T, y + T], outline=(226, 230, 238), width=2)
-            if p.suffix not in (".png", ".jpg"):
+            if p.suffix not in raster:
                 d.text((x + T // 2, y + T // 2), p.suffix.upper(), font=fb(26),
                        fill=(190, 60, 90), anchor="mm")
                 continue
@@ -345,8 +357,10 @@ def main() -> int:
     print(f"{'모델':17} {'성공':>6} {'소요':>8}   비고")
     for alias in opts["models"]:
         got = len(results.get(alias, []))
-        svg = sum(1 for p in results.get(alias, []) if p.suffix == ".svg")
-        note = f"SVG {svg}장 (시트 제외)" if svg else ""
+        kinds = {}
+        for p in results.get(alias, []):
+            kinds[p.suffix] = kinds.get(p.suffix, 0) + 1
+        note = " ".join(f"{k[1:]} {v}장" for k, v in sorted(kinds.items()))
         print(f"{alias:17} {got:>4}/{n} {timings.get(alias, 0):>7.1f}초   {note}")
     print("=" * 66)
     print(f"\n결과 폴더: {OUT_DIR}")
