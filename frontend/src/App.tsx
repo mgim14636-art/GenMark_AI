@@ -1049,7 +1049,10 @@ function CustomerApp() {
         )}
 
         {toneMode === 'direct' && (<section className="tone-color-card tone-direct-card" aria-label="직접 색상 지정">
-          <span className="tone-color-sparkles" aria-hidden="true"><Sparkles size={32} strokeWidth={1.6} /></span>
+          <span className="tone-direct-swatches" aria-label="직접 선택한 두 색상">
+            <i style={{ background: rgbToHex(manualColor) }} />
+            <i style={{ background: rgbToHex(manualSecondaryColor) }} />
+          </span>
           <div>
             <h2>직접 색상 지정</h2>
             <p>원하는 색상을 직접 지정할 수 있어요</p>
