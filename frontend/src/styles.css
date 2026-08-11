@@ -4188,6 +4188,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
+  animation: tone-option-in 620ms cubic-bezier(.22, .7, .18, 1) both;
 }
 
 .tone-direct-card > .tone-color-picker-inline { grid-column: 1 / -1; }
@@ -4286,7 +4287,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   border-radius: 15px;
   background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, #ff0000 16%, #ffff00 33%, #00ff00 50%, #00ffff 66%, #0000ff 83%, #ff00ff);
   cursor: pointer;
+  touch-action: none;
+  user-select: none;
 }
+
+.tone-color-palette:focus-visible { outline: 3px solid rgb(155 107 232 / 0.3); outline-offset: 3px; }
 
 .tone-color-palette input {
   position: absolute;
@@ -4299,14 +4304,16 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 .tone-color-palette-preview {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  right: auto;
+  bottom: auto;
   width: 30px;
   height: 30px;
   border: 3px solid rgb(255 255 255 / 0.9);
   border-radius: 50%;
   box-shadow: 0 3px 10px rgb(47 34 75 / 0.2);
   pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: left 120ms ease, top 120ms ease, background 120ms ease;
 }
 
 .tone-rgb-fields {
