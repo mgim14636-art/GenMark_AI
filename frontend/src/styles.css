@@ -6322,6 +6322,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   margin: 14px 0 8px;
   color: #202331;
   font-size: clamp(36px, 3.4vw, 52px);
+  font-family: 'DM Sans', 'Noto Sans KR', sans-serif;
+  font-weight: 700;
+  letter-spacing: .015em;
+  word-spacing: .16em;
 }
 
 .brand-choice-copy > p {
