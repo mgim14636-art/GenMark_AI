@@ -202,7 +202,7 @@ export const projectsApi = {
     headers: { 'Idempotency-Key': idempotencyKey },
   }),
   getGeneration: (projectId: string, generationId: string) => apiRequest<LogoGeneration>(`/projects/${projectId}/logo-generations/${generationId}`),
-  getCandidates: (projectId: string) => apiRequest<LogoCandidate[]>(`/projects/${projectId}/logo-candidates`),
+  getCandidates: (projectId: string, generationId: string) => apiRequest<LogoCandidate[]>(`/projects/${projectId}/logo-generations/${generationId}/logo-candidates`),
   selectCandidate: (projectId: string, candidateId: string) => apiRequest<LogoCandidate>(`/projects/${projectId}/logo-candidates/${candidateId}/select`, {
     method: 'POST',
   }),

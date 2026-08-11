@@ -473,7 +473,9 @@ function CustomerApp() {
     } catch (error) {
       const message = error instanceof AuthError
         ? `${error.message}${error.code ? ` (${error.code}${error.requestId ? `, requestId: ${error.requestId}` : ''})` : ''}`
-        : '로그인 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.'
+        : error instanceof Error
+          ? error.message
+          : '로그인 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.'
       setAuthError(message)
     } finally {
       setAuthLoading(false)
@@ -684,7 +686,7 @@ function CustomerApp() {
         throw new Error(completedGeneration.errorMessage ?? '로고 생성에 실패했어요.')
       }
 
-      const candidates = await projectsApi.getCandidates(nextProjectId)
+      const candidates = await projectsApi.getCandidates(nextProjectId, generation.id)
       if (candidates.length !== 4) throw new Error('로고 후보를 4개 불러오지 못했어요.')
       setLogoCandidates(candidates)
       const selected = candidates.findIndex((candidate) => candidate.selected)

@@ -32,8 +32,7 @@ type ApiErrorPayload = {
   }
 }
 
-const backendPort = import.meta.env.BACKEND_PORT || '8080'
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? `http://localhost:${backendPort}/api/v1`).replace(/\/$/, '')
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/$/, '')
 let accessToken: string | null = null
 
 export class AuthError extends Error {

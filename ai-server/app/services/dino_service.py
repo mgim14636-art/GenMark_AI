@@ -50,6 +50,15 @@ class DinoService:
             raise InvalidBase64()
 
     @staticmethod
+    def to_bytes(src: Union[str, bytes]) -> bytes:
+        """Base64 입력을 원본 바이트로 돌려준다.
+
+        note 생성처럼 같은 쿼리 이미지를 다시 써야 하는 곳에서 호출한다.
+        디코딩 규칙을 한 곳에 두기 위해 _decode를 재사용한다.
+        """
+        return DinoService._decode(src)
+
+    @staticmethod
     def _to_image(src: Union[str, bytes]) -> Image.Image:
         data = DinoService._decode(src)
         try:

@@ -1,26 +1,20 @@
 package com.genmark.ai.web.dto.project;
 
-import com.genmark.ai.entity.Project;
+import com.genmark.ai.entity.ProjectStatus;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-public record ProjectResponse(
+public record CiProjectResponse(
         String id,
-        Project.Status status,
-        String brandType,
+        ProjectStatus status,
+        int currentStep,
         String industry,
-        String brandName,
         String companyName,
-        String companyMotto,
-        List<String> brandValues,
-        String brandValuesText,
-        String targetAge,
+        String coreValues,
         String tone,
-        String colorMode,
         List<String> colors,
         String logoStyle,
-        boolean includeBrandName,
         String additionalRequirements,
         LocalDateTime createdAt,
         LocalDateTime updatedAt

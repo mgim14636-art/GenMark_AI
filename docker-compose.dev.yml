@@ -60,6 +60,9 @@ services:
       DATA_MANIFEST_PATH: /app/data/faiss/data_manifest.json
       TRADEMARK_METADATA_PATH: /app/data/trademarks/meta/trademarks.csv
       TRADEMARK_DATA_ROOT: /app/data/trademarks
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
+      NOTE_TIMEOUT_SECONDS: ${NOTE_TIMEOUT_SECONDS:-8}
       DINO_MODEL_ID: facebook/dinov2-base
       DINO_MODEL_REVISION: ${DINO_MODEL_REVISION:-f9e44c814b77203eaa57a6bdbbd535f21ede1415}
       TZ: Asia/Seoul

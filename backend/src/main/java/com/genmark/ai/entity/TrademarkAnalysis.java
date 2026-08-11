@@ -19,10 +19,6 @@ public class TrademarkAnalysis {
     private String publicId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "project_id", nullable = false, foreignKey = @ForeignKey(name = "fk_analysis_project"))
-    private Project project;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "candidate_id", nullable = false, foreignKey = @ForeignKey(name = "fk_analysis_candidate"))
     private LogoCandidate candidate;
 
@@ -54,4 +50,9 @@ public class TrademarkAnalysis {
         createdAt = LocalDateTime.now(); updatedAt = createdAt;
     }
     @PreUpdate void onUpdate() { updatedAt = LocalDateTime.now(); }
+
+    /** No direct project FK anymore -- derived via candidate -> generation -> (ci|bi) project. */
+    public ProjectLike getProject() {
+        return candidate.getGeneration().getProject();
+    }
 }

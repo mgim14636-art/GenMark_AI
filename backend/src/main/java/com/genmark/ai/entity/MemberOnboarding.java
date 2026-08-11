@@ -14,8 +14,6 @@ import java.time.LocalDateTime;
 @Builder
 public class MemberOnboarding {
 
-    public enum DetailsDecision { SUBMITTED, SKIPPED }
-
     @Id
     @Column(name = "member_id")
     private Long memberId;
@@ -37,16 +35,8 @@ public class MemberOnboarding {
     @Column(nullable = false, length = 100)
     private String audience;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "details_decision", nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
-    private DetailsDecision detailsDecision;
-
     @Column(name = "completed_at", nullable = false)
     private LocalDateTime completedAt;
-
-    @Column(name = "schema_version", nullable = false)
-    @Builder.Default
-    private int schemaVersion = 1;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
