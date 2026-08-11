@@ -84,6 +84,11 @@ const getModeFromUrl = (): ViewMode => {
 
 const clampColorChannel = (value: number) => Math.max(0, Math.min(255, Math.round(value)))
 const rgbToHex = ({ r, g, b }: RgbColor) => `#${[r, g, b].map((channel) => clampColorChannel(channel).toString(16).padStart(2, '0')).join('')}`
+const mixRgb = (source: RgbColor, target: RgbColor, amount: number): RgbColor => ({
+  r: source.r + (target.r - source.r) * amount,
+  g: source.g + (target.g - source.g) * amount,
+  b: source.b + (target.b - source.b) * amount,
+})
 const hexToRgb = (hex: string): RgbColor => {
   const normalized = hex.replace('#', '')
   return {
@@ -273,6 +278,7 @@ function CustomerApp() {
   const [customToneColors, setCustomToneColors] = useState<Partial<Record<ToneOption, string[]>>>({})
   const [manualColors, setManualColors] = useState<string[]>(['#9765e9', '#dcaff5'])
   const [manualColorSlot, setManualColorSlot] = useState(0)
+  const [colorSelectionMode, setColorSelectionMode] = useState<'tone' | 'manual'>('tone')
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const [logoStyle, setLogoStyle] = useState<LogoStyle>('combination')
   const [resultCandidate, setResultCandidate] = useState(0)
@@ -740,24 +746,55 @@ function CustomerApp() {
     setTonePaletteTarget({ toneId, slot: 0 })
   }
 
-  const buildProjectInput = (): ProjectInput => ({
-    brandType: brandKind === 'ci' ? 'CI' : 'BI',
-    industry: industryOptions.find((option) => option.id === industrySelection)?.apiValue ?? 'COSMETICS',
-    brandName: brandName.trim() || undefined,
-    companyName: companyName.trim() || undefined,
-    companyMotto: companyMotto.trim() || undefined,
-    brandValues: coreValueInputMode === 'category' ? coreValues : undefined,
-    brandValuesText: coreValueInputMode === 'direct' ? brandValueDescription.trim() || undefined : undefined,
-    tone: toneSelection,
-    colorMode: 'MANUAL',
-    colors: manualColors,
-    logoStyle,
-    includeBrandName: true,
-    additionalRequirements: additionalRequest.trim() || undefined,
-  })
+  const getSelectedColors = () => {
+    if (colorSelectionMode === 'tone') {
+      return customToneColors[toneSelection]
+        ?? toneOptions.find((option) => option.id === toneSelection)?.colors
+        ?? toneOptions[0].colors
+    }
+
+    return manualColors
+  }
+
+  const buildProjectInput = (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review'): ProjectInput => {
+    const input: ProjectInput = {
+      brandType: brandKind === 'ci' ? 'CI' : 'BI',
+      industry: industryOptions.find((option) => option.id === industrySelection)?.apiValue ?? 'COSMETICS',
+    }
+
+    if (brandKind === 'ci') {
+      input.companyName = companyName.trim() || undefined
+      input.companyMotto = companyMotto.trim() || undefined
+    } else {
+      input.brandName = brandName.trim() || undefined
+      input.brandValues = coreValueInputMode === 'category' ? coreValues : undefined
+      input.brandValuesText = coreValueInputMode === 'direct' ? brandValueDescription.trim() || undefined : undefined
+    }
+
+    if (step === 'tone') {
+      input.tone = toneSelection
+      input.colorMode = colorSelectionMode === 'manual' ? 'MANUAL' : 'TONE'
+      input.colors = getSelectedColors()
+    }
+
+    if (step === 'logo-style') input.logoStyle = logoStyle
+    if (step === 'final-review') input.additionalRequirements = additionalRequest.trim() || undefined
+
+    return input
+  }
+
+  const buildProjectCreateInput = (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review') => {
+    const input = buildProjectInput('brand-brief')
+    if (step === 'brand-brief') return input
+
+    Object.assign(input, buildProjectInput('tone'))
+    if (step === 'logo-style' || step === 'final-review') Object.assign(input, buildProjectInput('logo-style'))
+    if (step === 'final-review') Object.assign(input, buildProjectInput('final-review'))
+    return input
+  }
 
   const ensureProject = async (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review' = 'final-review') => {
-    const input = buildProjectInput()
+    const input = buildProjectInput(step)
     if (projectId) {
       try {
         await projectsApi.updateStep(projectId, step, input)
@@ -769,9 +806,12 @@ function CustomerApp() {
       }
     }
 
-    const project = await projectsApi.create(input)
+    if (step === 'brand-brief') return null
+
+    const project = await projectsApi.create(buildProjectCreateInput(step))
     setProjectId(project.id)
     window.localStorage.setItem('genmark-project-id', project.id)
+    await projectsApi.updateStep(project.id, step, input)
     return project.id
   }
 
@@ -780,7 +820,9 @@ function CustomerApp() {
     setProjectSaving(true)
     setProjectError('')
     try {
-      await ensureProject(step)
+      // Company/brand details are collected locally. The first backend write
+      // happens on the tone step, where the required color1/color2 values exist.
+      if (step !== 'brand-brief') await ensureProject(step)
       setMode(nextMode)
     } catch (error) {
       setProjectError(error instanceof Error ? error.message : '프로젝트 정보를 저장하지 못했어요.')
@@ -809,6 +851,7 @@ function CustomerApp() {
     setMode('loading')
     try {
       const nextProjectId = await ensureProject('final-review')
+      if (!nextProjectId) throw new Error('프로젝트 정보를 먼저 입력해주세요.')
       const generation = await projectsApi.createGeneration(nextProjectId, crypto.randomUUID())
       setGenerationId(generation.id)
       const completedGeneration = await waitForLogoGeneration(nextProjectId, generation.id)
@@ -1246,14 +1289,14 @@ function CustomerApp() {
               role="tab"
               aria-selected={toneMode === 'recommended'}
               className={toneMode === 'recommended' ? 'tone-mode-tab active' : 'tone-mode-tab'}
-              onClick={() => { setToneMode('recommended'); setColorPickerOpen(false); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
+              onClick={() => { setToneMode('recommended'); setColorSelectionMode('tone'); setColorPickerOpen(false); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
             >추천</button>
             <button
               type="button"
               role="tab"
               aria-selected={toneMode === 'direct'}
               className={toneMode === 'direct' ? 'tone-mode-tab active' : 'tone-mode-tab'}
-              onClick={() => { setToneMode('direct'); setColorPickerOpen(true); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
+              onClick={() => { setToneMode('direct'); setColorSelectionMode('manual'); setColorPickerOpen(true); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
             >직접 지정</button>
           </div>
           <h1 id="tone-selection-title">톤앤매너와<br />색상을 골라주세요</h1>
@@ -1272,7 +1315,7 @@ function CustomerApp() {
                 type="button"
                 className={selected ? 'tone-option selected' : 'tone-option'}
                 aria-pressed={selected}
-                onClick={() => setToneSelection(tone.id)}
+                onClick={() => { setToneSelection(tone.id); setColorSelectionMode('tone') }}
               >
                 <span className="tone-swatches" aria-hidden="true">
                   {toneColors.map((color, index) => <i key={`${tone.id}-${index}-${color}`} style={{ background: color }} />)}
@@ -1369,6 +1412,7 @@ function CustomerApp() {
             aria-expanded={colorPickerOpen}
             aria-controls="tone-color-picker"
             onClick={() => {
+              setColorSelectionMode('manual')
               if (!colorPickerOpen) setManualColorSlot(0)
               setColorPickerOpen((current) => !current)
             }}
