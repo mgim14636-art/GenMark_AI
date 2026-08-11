@@ -1,5 +1,20 @@
-# 연령대·추가요구사항 같은 부가 설명만 예산이 남는 만큼 붙인다 (_fit_to_budget 참고).
-NVIDIA_PROMPT_MAX_LEN = 800
+"""설문 -> 이미지 생성 프롬프트 조립.
+
+핵심 지시(core)는 항상 포함하고, 연령대·추가요구사항 같은 부가 설명만 예산이
+남는 만큼 붙인다 (_fit_to_budget 참고).
+"""
+import os
+import re
+
+# 프롬프트 길이 예산.
+# 800자는 NVIDIA Build 엔드포인트의 제한이었다(초과 시 422). OpenRouter Image API로
+# 옮긴 뒤로는 그 제한이 없는데 값이 그대로 남아, 톤·미학·가치 설명이 예산 부족으로
+# 조용히 잘려나가고 있었다. 넉넉히 올리되 무한정 늘리지는 않는다 — 프롬프트가 길수록
+# 개별 지시의 반영 강도가 희석된다.
+PROMPT_MAX_LEN = int(os.environ.get("PROMPT_MAX_LEN", "1400"))
+
+# 이전 이름을 참조하는 코드가 남아 있을 수 있어 별칭을 유지한다.
+NVIDIA_PROMPT_MAX_LEN = PROMPT_MAX_LEN
 
 TONE_MAP = {
     "친근하고 다정한": "a friendly, approachable feeling with gently rounded, soft shapes",
@@ -122,6 +137,11 @@ MOTIF_MAP = {
     ],
 }
 
+# 카테고리를 고르지 않았을 때 MOTIF_MAP의 고정 목록을 쓸 업종.
+# "기타"는 별·무한대·링처럼 상투적인 도형만 있어 강제하면 오히려 밋밋해진다
+# (94062ed에서 열린 지시로 바꾼 이유). 뷰티 풀은 업종 특화 모티프라 강제해도 좋다.
+MOTIF_POOL_INDUSTRIES = {"뷰티"}
+
 USER_MOTIF_RENDERING_APPROACHES = (
     "a bold simplified flat silhouette",
     "soft organic abstract contours",
@@ -233,19 +253,41 @@ def _raw_value_keys(survey: dict) -> list:
     return list(raw_values or [])[:3]
 
 
+_HANGUL = re.compile(r"[가-힣]")
+
+
 def _resolve_values(survey: dict) -> str:
-    """'기업 가치·방향성' — 키워드 칩(최대 3개) 또는 서술형 자유 입력을 모두 지원."""
+    """'기업 가치·방향성' — 키워드 칩(최대 3개) 또는 서술형 자유 입력을 모두 지원.
+
+    서술형은 예전에 원문을 그대로 이어 붙였다. 그 결과 영문 프롬프트 한복판에
+    "... rather than a sketch. 신뢰, 혁신 The overall style ..." 처럼 한글 조각이
+    문장 없이 박혔다(실측 확인됨). 텍스트 인코더에는 노이즈일 뿐이라, 아는 키워드는
+    영어로 바꾸고 남은 한글은 버린다. 전부 한글이면 이 문장 자체를 생략한다.
+    """
     raw_values = _raw_value_keys(survey)
     if raw_values:
         translated = [VALUE_KEYWORD_MAP.get(v, v) for v in raw_values]
         joined = ", ".join(dict.fromkeys(translated))  # 순서 보존 중복 제거
         return f"The brand values are {joined}."
 
-    # 서술형(자유 텍스트) 입력 — 키워드 매핑 없이 그대로 보조 컨텍스트로 사용
-    free_text = survey.get("brand_values_text") or survey.get("brand_description")
-    if free_text:
-        return free_text.strip()[:200]
-    return ""
+    free_text = (
+        survey.get("brand_values_text") or survey.get("brand_description") or ""
+    ).strip()[:200]
+    if not free_text:
+        return ""
+
+    # 쉼표·중점으로 끊어 토큰 단위로 번역을 시도한다("신뢰, 혁신" -> 각각 조회).
+    tokens = [t.strip() for t in re.split(r"[,،·/]|、", free_text) if t.strip()]
+    usable = []
+    for t in tokens:
+        mapped = VALUE_KEYWORD_MAP.get(t)
+        if mapped:
+            usable.append(mapped)
+        elif not _HANGUL.search(t):
+            usable.append(t)  # 이미 영문으로 적혀 있으면 그대로 쓴다
+    if not usable:
+        return ""
+    return f"The brand values are {', '.join(dict.fromkeys(usable))}."
 
 
 def _raw_motif_categories(survey: dict) -> list:
@@ -265,8 +307,16 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
     쓰는 기본값이다. 이전에는 motif_category를 아예 읽지 않아서 "동물/생명체"를
     골라도 항상 업종 고정 보태니컬 모티프(잎사귀·물방울 등)만 나왔다(실측 확인됨).
 
-    motif_category와 추가 요청이 모두 없으면 특정 원·별·무한대 같은 도형을
-    강제하지 않고, 설문 전체를 바탕으로 한 열린 모티프 지시를 사용한다.
+    카테고리를 고르지 않았을 때의 동작은 업종에 따라 다르다.
+
+    - 뷰티: MOTIF_MAP["뷰티"]의 구체 모티프(잎사귀·물방울·꽃잎·초승달 등 16종)를
+      순환 배정한다. 열린 지시만 주면 모델이 매번 비슷한 추상 도형으로 수렴해
+      시안 4장이 사실상 같아 보이는 문제가 있었다(실측 확인됨).
+    - 그 외 업종: 열린 지시를 유지한다. MOTIF_MAP["기타"]는 별·무한대·링처럼
+      로고에서 흔히 쓰이는 상투적 도형이라, 이를 강제하지 않기로 한 기존 판단
+      (94062ed, test_default_variants_do_not_force_fixed_fallback_shapes)을 그대로 둔다.
+
+    MVP 범위가 뷰티 한정이므로 실제 서비스 경로는 위쪽이다.
     """
     extra = " ".join((survey.get("additional_requirements") or "").split())[:200]
     if extra:
@@ -278,15 +328,85 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
             if motif not in category_pool:
                 category_pool.append(motif)
 
-    if category_pool:
+    # 카테고리 미선택 시, 큐레이션된 풀이 있는 업종만 고정 목록으로 폴백한다.
+    pool = category_pool
+    if not pool and industry_key in MOTIF_POOL_INDUSTRIES:
+        pool = MOTIF_MAP.get(industry_key, [])
+
+    if pool:
+        # 브랜드명으로 시작점을 흔들어, 브랜드가 다르면 같은 순번이라도 다른 모티프가
+        # 배정되게 한다. variant_index로 시안 간·재생성 회차 간 순환도 함께 준다.
         brand_name = (survey.get("brand_name") or "").strip().lower()
         offset = sum(ord(c) for c in brand_name) if brand_name else 0
-        return category_pool[(offset + variant_index) % len(category_pool)]
+        return pool[(offset + variant_index) % len(pool)]
 
     approach = USER_MOTIF_RENDERING_APPROACHES[
         variant_index % len(USER_MOTIF_RENDERING_APPROACHES)
     ]
-    return f"an original brand-specific subject derived from the survey, rendered with {approach}"
+    return f"an original brand-specific subject, rendered with {approach}"
+
+
+# 색상 팔레트를 프롬프트에 넣을 때 쓰는 이름 사전.
+# 텍스트 인코더는 "#4F46E5" 같은 헥사 코드를 색으로 해석하지 못한다 — 화면에서 고른
+# 색이 프롬프트에서 사실상 무시되고 있었다. 가장 가까운 색 이름으로 바꿔서 넣는다.
+# 브랜딩에서 실제로 쓰이는 색 위주로, 명도 단계까지 구분해 뒀다.
+_COLOR_NAMES = (
+    ((255, 255, 255), "white"),
+    ((248, 246, 240), "ivory"),
+    ((240, 234, 220), "soft beige"),
+    ((214, 196, 168), "warm sand"),
+    ((198, 168, 110), "gold"),
+    ((176, 141, 87), "bronze"),
+    ((139, 105, 70), "warm brown"),
+    ((94, 70, 52), "deep coffee brown"),
+    ((205, 127, 90), "terracotta"),
+    ((224, 122, 95), "coral"),
+    ((219, 88, 86), "warm red"),
+    ((190, 40, 55), "crimson red"),
+    ((236, 72, 153), "vivid pink"),
+    ((244, 168, 195), "soft pink"),
+    ((226, 190, 214), "pale lilac"),
+    ((150, 100, 190), "violet"),
+    ((79, 70, 229), "indigo blue"),
+    ((59, 110, 200), "cobalt blue"),
+    ((120, 175, 220), "sky blue"),
+    ((30, 58, 95), "deep navy"),
+    ((70, 160, 160), "teal"),
+    ((110, 170, 140), "sage green"),
+    ((60, 130, 85), "forest green"),
+    ((160, 190, 110), "fresh olive green"),
+    ((250, 220, 110), "soft yellow"),
+    ((245, 166, 60), "warm amber"),
+    ((190, 190, 190), "light grey"),
+    ((120, 120, 125), "cool grey"),
+    ((45, 45, 50), "charcoal black"),
+    ((15, 15, 18), "black"),
+)
+
+
+def _article(word: str) -> str:
+    """a / an 선택. 색 이름을 사전에서 뽑아 끼우다 보니 "in a indigo blue"처럼
+    관사가 틀어지는 경우가 생긴다."""
+    return "an" if word[:1].lower() in "aeiou" else "a"
+
+
+def _hex_to_color_name(value) -> str:
+    """#RRGGBB를 가장 가까운 색 이름으로 바꾼다. 이미 이름이면 그대로 둔다."""
+    text = str(value).strip()
+    if not text:
+        return ""
+    raw = text.lstrip("#")
+    if len(raw) == 3:
+        raw = "".join(c * 2 for c in raw)
+    if len(raw) != 6:
+        return text  # "gold" 처럼 이미 이름으로 들어온 경우
+    try:
+        r, g, b = (int(raw[i : i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return text
+    # 단순 유클리드 거리로 충분하다 — 후보가 30개뿐이고 정확한 색 재현이 아니라
+    # "무슨 색 계열인지"만 모델에 전달하면 되는 용도다.
+    return min(_COLOR_NAMES, key=lambda c: sum((a - b_) ** 2 for a, b_ in zip(c[0], (r, g, b))))[1]
 
 
 def _resolve_colors(survey: dict, tone: str) -> str:
@@ -303,18 +423,20 @@ def _resolve_colors(survey: dict, tone: str) -> str:
         if isinstance(manual_colors, str):
             manual_colors = [manual_colors]
         if manual_colors:
-            if len(manual_colors) == 1:
-                return manual_colors[0]
-            if len(manual_colors) == 2:
-                return f"{manual_colors[0]} and {manual_colors[1]}"
-            return ", ".join(manual_colors[:-1]) + f", and {manual_colors[-1]}"
+            named = [_hex_to_color_name(c) for c in manual_colors]
+            named = [c for c in dict.fromkeys(named) if c]
+            if len(named) == 1:
+                return named[0]
+            if len(named) == 2:
+                return f"{named[0]} and {named[1]}"
+            return ", ".join(named[:-1]) + f", and {named[-1]}"
     return TONE_COLOR_MAP.get(tone, "pastel muted tones")
 
 
 def _fit_to_budget(core: str, optional_parts: list) -> str:
     """core는 절대 자르지 않고, optional_parts를 예산이 허용하는 만큼만 순서대로 덧붙인다.
 
-    NVIDIA API가 prompt 길이를 제한(NVIDIA_PROMPT_MAX_LEN, 초과 시 422)하기 때문에, 끝에서부터
+    프롬프트가 지나치게 길어지면 개별 지시의 반영 강도가 희석되므로, 끝에서부터
     무작정 슬라이싱하면 가장 중요한 품질/형태 지시(core)가 잘려나갈 위험이 있다. 대신 core를
     먼저 확정하고, 톤·미학·가치·연령대·추가요구사항 같은 부가 설명은 예산이 허용하는 동안만
     하나씩 붙인다 — 부족하면 뒤쪽(덜 중요한 것)부터 자연스럽게 생략된다.
@@ -324,11 +446,11 @@ def _fit_to_budget(core: str, optional_parts: list) -> str:
         if not part:
             continue
         candidate = f"{prompt} {part}"
-        if len(candidate) <= NVIDIA_PROMPT_MAX_LEN:
+        if len(candidate) <= PROMPT_MAX_LEN:
             prompt = candidate
         else:
             break
-    return prompt[:NVIDIA_PROMPT_MAX_LEN]
+    return prompt[:PROMPT_MAX_LEN]
 
 
 def _normalize_survey(survey: dict) -> dict:
@@ -413,7 +535,7 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     # outline)도 core 안에 자연스러운 문장으로 녹여 예산 초과로도 잘리지 않게 한다.
     #
     # additional_requirements(사용자가 직접 적은 자유 서술)는 예전엔 optional_parts
-    # 맨 뒤에 있어서 예산(NVIDIA_PROMPT_MAX_LEN)이 부족하면 조용히 잘려나갔다(실측
+    # 맨 뒤에 있어서 예산(PROMPT_MAX_LEN)이 부족하면 조용히 잘려나갔다(실측
     # 확인됨 — "역동적이고 강렬한 느낌으로" 같은 명시적 지시가 반영 안 되는 문제). 사용자가
     # 직접 쓴 유일한 지시라 core로 승격해 항상 포함되게 한다.
     #
@@ -424,12 +546,16 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     # 바로 다음(가장 이른 위치)으로 옮겨 우선순위를 높였다.
     core = (
         user_motif_lead
-        + f"A minimalist flat vector logo icon for {industry} in a {color_kw} color palette, "
+        + f"A minimalist flat vector logo icon for {industry} "
+        f"in {_article(color_kw)} {color_kw} color palette, "
         f"drawn as one bold, large, solid-filled silhouette in {motif_kw}, with a thick, "
         f"clean, unbroken outline that fills the canvas. {style_sentence} "
         + (f"The shape is {concreteness_kw}. " if concreteness_kw else "")
-        + f"The design has {tone_kw or 'a clean, balanced'} character, "
-        f"flat 2D, with no gradients, shadows, or 3D rendering. "
+        # tone_kw는 "a friendly, approachable feeling with ..." 처럼 이미 완결된
+        # 명사구다. 뒤에 "character"를 붙이면 "...soft shapes character"라는 비문이
+        # 된다(실측 확인됨). 문구를 그대로 문장으로 세운다.
+        + f"The design conveys {tone_kw or 'a clean, balanced character'}. "
+        f"It is flat 2D, with no gradients, shadows, or 3D rendering. "
         f"Centered on a plain white background, with no readable letters or words, "
         f"finished and complete rather than a sketch."
     )
