@@ -169,3 +169,44 @@ export const logout = async () => {
 }
 
 export const apiRequest = request
+
+export const apiRequestWithToken = async <T>(token: string, path: string, init: RequestInit = {}): Promise<T> => {
+  const headers = new Headers(init.headers)
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  headers.set('Authorization', `Bearer ${token}`)
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers })
+  const payload = await parsePayload(response)
+  if (!response.ok) {
+    const errorPayload = payload as ApiErrorPayload | undefined
+    throw new AuthError(
+      errorPayload?.error?.message ?? '관리자 요청에 실패했어요.',
+      errorPayload?.error?.code ?? 'ADMIN_REQUEST_FAILED',
+      response.status,
+      errorPayload?.error?.requestId,
+      errorPayload?.error?.details,
+    )
+  }
+  return (payload as { data: T } | undefined)?.data as T
+}
+
+export const downloadAuthenticatedFile = async (path: string): Promise<Blob> => {
+  const doFetch = async () => {
+    const headers = new Headers()
+    if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+    return fetch(`${API_BASE_URL}${path}`, { headers })
+  }
+
+  let response = await doFetch()
+  if (response.status === 401 && await refreshAccessToken()) response = await doFetch()
+  if (!response.ok) {
+    const payload = await response.json().catch(() => undefined) as ApiErrorPayload | undefined
+    throw new AuthError(
+      payload?.error?.message ?? '파일을 다운로드하지 못했어요.',
+      payload?.error?.code ?? 'DOWNLOAD_FAILED',
+      response.status,
+      payload?.error?.requestId,
+      payload?.error?.details,
+    )
+  }
+  return response.blob()
+}

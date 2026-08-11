@@ -245,6 +245,15 @@
 .mypage-empty-state h3 { margin: 17px 0 7px; color: #26304a; font-size: 20px; letter-spacing: -.07em; }
 .mypage-empty-state p { margin: 0 0 20px; color: #7d8496; font-size: 14px; }
 .survey-entry-card { display: grid; grid-template-columns: 50px minmax(0, 1fr) 24px; align-items: center; gap: 14px; width: 100%; margin-top: 20px; border: 1px solid #ebe3f7; border-radius: 19px; padding: 17px 21px; color: #8154dd; background: #fff; text-align: left; }
+.pinned-logo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 18px; }
+.pinned-logo-card { overflow: hidden; border: 1px solid #ebe4f6; border-radius: 16px; background: #fff; box-shadow: 0 8px 22px rgb(82 55 133 / .06); }
+.pinned-logo-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: #faf8ff; }
+.pinned-logo-card div { display: grid; gap: 4px; padding: 11px 13px 13px; }
+.pinned-logo-card strong { color: #283149; font-size: 14px; }
+.pinned-logo-card span, .download-history-count, .logo-pin-expiry { color: #858c9e; font-size: 12px; }
+.download-history-section { margin-top: 20px; }
+.download-history-count { margin: 16px 0 0; }
+.logo-pin-expiry { margin: 10px 0 0; text-align: center; }
 .survey-entry-card > span { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 14px; background: #f4edff; }
 .survey-entry-card strong { color: #283149; font-size: 16px; letter-spacing: -.07em; }
 .survey-entry-card p { margin: 5px 0 0; color: #858c9e; font-size: 13px; letter-spacing: -.06em; }

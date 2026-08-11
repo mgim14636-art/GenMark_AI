@@ -3,8 +3,8 @@ import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, Circl
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
-import { AuthError, type AuthProvider, type AuthUser, loginWithProvider, logout, restoreSession } from './auth'
-import { getLogoCandidateImageUrl, onboardingApi, projectsApi, type LogoCandidate, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
+import { AuthError, type AuthProvider, type AuthUser, downloadAuthenticatedFile, loginWithProvider, logout, restoreSession } from './auth'
+import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type DownloadRecord, type LogoCandidate, type PinnedLogo, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
 
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
 
@@ -28,6 +28,8 @@ const toneOptions: Array<{ id: ToneOption; label: string; description: string; c
   { id: 'trendy', label: '유니크하고 트렌디한', description: '개성 있고 감각적인 인상', colors: ['#171713', '#f2f2f4'] },
   { id: 'minimal', label: '미니멀하고 직관적인', description: '군더더기 없이 명확한 인상', colors: ['#396fc8', '#dde4ff'] },
 ]
+
+const coreValueIds = new Set<CoreValue>(['vegan', 'crueltyFree', 'lowIrritation', 'derma', 'cleanBeauty', 'natural', 'premium', 'sustainable', 'scientific', 'reasonable', 'emotional'])
 
 const industryOptions: Array<{ id: IndustryOption; title: string; description: string; apiValue: string; icon: LucideIcon }> = [
   { id: 'beauty', title: '뷰티', description: '스킨케어 · 메이크업 · 향수', apiValue: 'COSMETICS', icon: Sparkles },
@@ -193,6 +195,13 @@ function CustomerApp() {
   const [projectError, setProjectError] = useState('')
   const [logoCandidates, setLogoCandidates] = useState<LogoCandidate[]>([])
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null)
+  const [pinnedLogos, setPinnedLogos] = useState<PinnedLogo[]>([])
+  const [downloadHistory, setDownloadHistory] = useState<DownloadRecord[]>([])
+  const [pinError, setPinError] = useState('')
+  const [brandKit, setBrandKit] = useState<BrandKit | null>(null)
+  const [brandKitError, setBrandKitError] = useState('')
+  const [ciProfileLoading, setCiProfileLoading] = useState(false)
+  const ciProfileLoaded = useRef(false)
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   const [analysisError, setAnalysisError] = useState('')
   const [trademarkMatches, setTrademarkMatches] = useState<TrademarkMatch[]>([])
@@ -207,7 +216,7 @@ function CustomerApp() {
   const [remainingCredits, setRemainingCredits] = useState(2)
   const [creditModal, setCreditModal] = useState<'credit' | 'survey' | null>(null)
   const [choiceInfoModal, setChoiceInfoModal] = useState<'ci' | 'bi' | null>(null)
-  const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; storageKey?: string } | null>(null)
+  const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; candidateId?: string; storageKey?: string } | null>(null)
 
   const setMode = (nextMode: ViewMode, options: { replace?: boolean } = {}) => {
     setModeState(nextMode)
@@ -302,6 +311,42 @@ function CustomerApp() {
     window.localStorage.setItem('genmark-company-profile', JSON.stringify({ name: companyName, motto: companyMotto }))
   }, [companyName, companyMotto])
 
+  useEffect(() => {
+    if (mode !== 'company-details' || !loggedIn || brandKind !== 'ci' || ciProfileLoaded.current) return undefined
+
+    let cancelled = false
+    ciProfileLoaded.current = true
+    setCiProfileLoading(true)
+    void ciProjectsApi.latestProfile()
+      .then((profile) => {
+        if (cancelled || !profile.hasPrevious) return
+        if (profile.companyName && !companyName.trim()) setCompanyName(profile.companyName)
+        if (profile.coreValues && !companyMotto.trim()) setCompanyMotto(profile.coreValues)
+      })
+      .catch((error) => {
+        // A first-time CI user may not have a previous profile yet.
+        if (!(error instanceof AuthError) || error.status !== 404) setProjectError('이전 CI 정보를 불러오지 못했어요. 직접 입력해 진행해주세요.')
+      })
+      .finally(() => {
+        if (!cancelled) setCiProfileLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [brandKind, companyMotto, companyName, loggedIn, mode])
+
+  useEffect(() => {
+    if (!loggedIn || (mode !== 'mypage' && mode !== 'survey')) return
+    void Promise.allSettled([
+      meApi.getCredits().then((result) => setRemainingCredits(result.balance)),
+      meApi.getSurvey().then((result) => {
+        setSurveySubmitted(result.completed)
+        setRemainingCredits(result.creditBalance)
+      }),
+      meApi.getPins().then(setPinnedLogos),
+      meApi.getDownloads().then(setDownloadHistory),
+    ])
+  }, [loggedIn, mode])
+
   useEffect(() => () => {
     if (onboardingTransitionTimer.current !== null) window.clearTimeout(onboardingTransitionTimer.current)
   }, [])
@@ -364,6 +409,40 @@ function CustomerApp() {
     setSurveyImprovements((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])
   }
 
+  const restoreProjectState = async (resumeId: string): Promise<ViewMode | null> => {
+    try {
+      const project = await projectsApi.get(resumeId)
+      setProjectId(project.id)
+      window.localStorage.setItem('genmark-project-id', project.id)
+
+      const nextBrandKind = project.brandType === 'CI' ? 'ci' : project.brandType === 'BI' ? 'bi' : null
+      setBrandKind(nextBrandKind)
+      setIndustrySelection(industryOptions.find((option) => option.apiValue === project.industry)?.id ?? null)
+      setBrandName(project.brandName ?? '')
+      setCompanyName(project.companyName ?? '')
+      setCompanyMotto(project.companyMotto ?? '')
+      setBrandValueDescription(project.brandValuesText ?? '')
+      setCoreValues((project.brandValues ?? []).filter((value): value is CoreValue => coreValueIds.has(value as CoreValue)))
+      if (project.tone && toneOptions.some((option) => option.id === project.tone)) setToneSelection(project.tone as ToneOption)
+      if (project.colors?.[0]) setManualColor(hexToRgb(project.colors[0]))
+      if (project.logoStyle && logoStyleOptions.some((option) => option.id === project.logoStyle)) setLogoStyle(project.logoStyle as LogoStyle)
+
+      const step = (project.currentStep ?? '').toLowerCase().replace(/[-\s]/g, '_')
+      if (['tone', 'tone_color', 'tone_selection'].includes(step)) return 'tone'
+      if (['logo_style', 'style_combination', 'style_selection'].includes(step)) return 'style'
+      if (['final_review', 'final'].includes(step)) return 'final'
+      if (['candidate_generation', 'generating', 'result_ready', 'completed'].includes(step) || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED') return 'result'
+      return nextBrandKind === 'ci' ? 'company-details' : 'brand-details'
+    } catch (error) {
+      if (error instanceof AuthError && error.status === 404) {
+        setProjectId(null)
+        window.localStorage.removeItem('genmark-project-id')
+        return null
+      }
+      throw error
+    }
+  }
+
   const completeLogin = async (provider: AuthProvider) => {
     if (authLoading) return
     setAuthLoading(true)
@@ -379,11 +458,18 @@ function CustomerApp() {
         setProjectId(null)
         window.localStorage.removeItem('genmark-project-id')
       }
-      setOnboardingCompleted(session.user.onboardingCompleted)
-      setOnboardingStep(1)
-      setIndustryBackMode(session.user.onboardingCompleted ? 'home' : 'onboarding')
-      setMode(session.user.onboardingCompleted ? loginDestination : 'onboarding')
-      setLoginDestination('home')
+       setOnboardingCompleted(session.user.onboardingCompleted)
+       setOnboardingStep(1)
+       setIndustryBackMode(session.user.onboardingCompleted ? 'home' : 'onboarding')
+       if (!session.user.onboardingCompleted) {
+         setMode('onboarding')
+       } else if (loginDestination === 'industry' && session.resumeProjectId) {
+         const resumedMode = await restoreProjectState(session.resumeProjectId)
+         setMode(resumedMode ?? 'industry')
+       } else {
+         setMode(loginDestination)
+       }
+       setLoginDestination('home')
     } catch (error) {
       const message = error instanceof AuthError
         ? `${error.message}${error.code ? ` (${error.code}${error.requestId ? `, requestId: ${error.requestId}` : ''})` : ''}`
@@ -604,6 +690,7 @@ function CustomerApp() {
       const selected = candidates.findIndex((candidate) => candidate.selected)
       setResultCandidate(selected >= 0 ? selected : 0)
       setSelectedCandidateId(selected >= 0 ? candidates[selected].id : null)
+      setResultLiked(Boolean(candidates[selected >= 0 ? selected : 0]?.pinnedAt))
       setMode('result')
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : '로고 생성 중 문제가 발생했어요.')
@@ -619,6 +706,7 @@ function CustomerApp() {
       const selected = await projectsApi.selectCandidate(projectId, candidate.id)
       setSelectedCandidateId(selected.id)
       setLogoCandidates((current) => current.map((item) => ({ ...item, selected: item.id === selected.id })))
+      setResultLiked(Boolean(candidate.pinnedAt))
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : '로고 후보를 선택하지 못했어요.')
     }
@@ -657,34 +745,101 @@ function CustomerApp() {
     }
   }
 
-  const downloadLogo = (candidate: { name: string; subtitle?: string; storageKey?: string }) => {
-    if (!candidate.storageKey) return
-
-    const downloadUrl = getLogoCandidateImageUrl(candidate.storageKey)
-    const link = document.createElement('a')
-    link.href = downloadUrl
-    link.download = `${candidate.name.toLowerCase()}-logo.png`
-    link.click()
+  const requestBrandKit = async () => {
+    if (!projectId || !selectedCandidateId) return
+    setBrandKitError('')
+    try {
+      const requested = await projectsApi.requestBrandKit(projectId, selectedCandidateId)
+      setBrandKit(requested)
+      if (requested.status === 'QUEUED' || requested.status === 'RUNNING') {
+        for (let attempt = 0; attempt < 60; attempt += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 2_000))
+          const next = await projectsApi.getBrandKit(projectId, selectedCandidateId)
+          setBrandKit(next)
+          if (next.status === 'SUCCEEDED' || next.status === 'FAILED') break
+        }
+      }
+    } catch (error) {
+      setBrandKitError(error instanceof Error ? error.message : '브랜드 키트를 요청하지 못했어요.')
+    }
   }
 
-  const requestLogoDownload = (candidate: { name: string; subtitle: string; storageKey?: string }) => {
+  const downloadLogo = async (candidate: { name: string; subtitle?: string; candidateId?: string; storageKey?: string }): Promise<boolean> => {
+    if (!candidate.storageKey) return false
+
+    try {
+      let blob: Blob
+      if (projectId && candidate.candidateId) {
+        const download = await projectsApi.downloadCandidate(projectId, candidate.candidateId)
+        setDownloadHistory((current) => [download, ...current.filter((item) => item.downloadId !== download.downloadId)])
+        blob = await downloadAuthenticatedFile(download.imageUrl)
+      } else {
+        const response = await fetch(getLogoCandidateImageUrl(candidate.storageKey))
+        if (!response.ok) throw new Error('로고 파일을 불러오지 못했어요.')
+        blob = await response.blob()
+      }
+
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `${candidate.name.toLowerCase()}-logo.png`
+      link.click()
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 0)
+      return true
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : '로고를 다운로드하지 못했어요.')
+      return false
+    }
+  }
+
+  const requestLogoDownload = (candidate: { name: string; subtitle: string; candidateId?: string; storageKey?: string }) => {
     setPendingDownload(candidate)
     setCreditModal('credit')
   }
 
   const downloadWithCredit = () => {
     if (!pendingDownload || remainingCredits < 1) return
-    setRemainingCredits((current) => current - 1)
-    downloadLogo(pendingDownload)
-    setPendingDownload(null)
-    setCreditModal(null)
+    void downloadLogo(pendingDownload).then((downloaded) => {
+      if (!downloaded) return
+      setRemainingCredits((current) => Math.max(0, current - 1))
+      setPendingDownload(null)
+      setCreditModal(null)
+    })
+  }
+
+  const submitSurveyResponse = async () => {
+    const result = await meApi.submitSurvey({
+      rating: surveyRating,
+      improvements: surveyImprovements,
+      comment: surveyComment,
+    })
+    setRemainingCredits(result.creditBalance)
+    setSurveySubmitted(true)
   }
 
   const submitCreditSurvey = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setRemainingCredits((current) => current + 1)
-    setSurveySubmitted(true)
-    setCreditModal(null)
+    void submitSurveyResponse()
+      .then(() => setCreditModal(null))
+      .catch((error) => setProjectError(error instanceof Error ? error.message : '설문을 제출하지 못했어요.'))
+  }
+
+  const toggleCandidatePin = async (candidate: LogoCandidate) => {
+    if (!projectId) return
+    setPinError('')
+    try {
+      const pinned = candidate.pinnedAt
+        ? await projectsApi.unpinCandidate(projectId, candidate.id)
+        : await projectsApi.pinCandidate(projectId, candidate.id)
+      setLogoCandidates((current) => current.map((item) => item.id === candidate.id
+        ? { ...item, pinnedAt: pinned.pinnedAt ?? null }
+        : item))
+      setResultLiked(Boolean(pinned.pinnedAt))
+      setPinnedLogos((current) => candidate.pinnedAt
+        ? current.filter((item) => item.candidateId !== candidate.id)
+        : [{ ...pinned, projectId }, ...current.filter((item) => item.candidateId !== candidate.id)])
+    } catch (error) {
+      setPinError(error instanceof Error ? error.message : '찜 상태를 변경하지 못했어요.')
+    }
   }
 
   const onboardingOptions: Array<{
@@ -904,7 +1059,7 @@ function CustomerApp() {
 
         <header className="brand-details-heading">
           <h1 id="company-details-title">어떤 기업을 만들고 있나요?</h1>
-          <p>기업의 방향과 고객에게 전하고 싶은 이미지를 알려주세요.</p>
+          <p>기업의 방향과 고객에게 전하고 싶은 이미지를 알려주세요.{ciProfileLoading ? ' 이전 CI 정보를 불러오는 중이에요.' : ''}</p>
         </header>
 
         <section className="brand-details-section brand-name-section" aria-labelledby="company-name-title">
@@ -1189,6 +1344,8 @@ function CustomerApp() {
   const renderChoiceScreen = () => {
     const chooseBrandKind = (kind: 'ci' | 'bi') => {
       setBrandKind(kind)
+      ciProfileLoaded.current = false
+      setProjectError('')
       setMode(kind === 'ci' ? 'company-details' : 'brand-details')
     }
 
@@ -1665,7 +1822,7 @@ function CustomerApp() {
           <div className="logo-result-counter" aria-label={`로고 ${resultCandidate + 1} / 4`}>{resultCandidate + 1} / 4</div>
 
           <section className="logo-candidate-panel" aria-label="로고 후보 미리보기">
-            <button className={resultLiked ? 'logo-candidate-action like liked' : 'logo-candidate-action like'} type="button" aria-label={resultLiked ? '찜 취소' : '찜'} aria-pressed={resultLiked} onClick={() => setResultLiked((current) => !current)}>
+            <button className={resultLiked ? 'logo-candidate-action like liked' : 'logo-candidate-action like'} type="button" aria-label={resultLiked ? '찜 취소' : '찜'} aria-pressed={resultLiked} onClick={() => void toggleCandidatePin(candidate)}>
               <Heart size={22} strokeWidth={1.9} fill={resultLiked ? 'currentColor' : 'none'} />
             </button>
             <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => { const next = (resultCandidate + candidates.length - 1) % candidates.length; void selectLogoCandidate(candidates[next], next) }}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>
@@ -1679,10 +1836,12 @@ function CustomerApp() {
               <small>{candidate.subtitle}</small>
             </div>
             <button className="logo-candidate-arrow next" type="button" aria-label="다음 후보" onClick={() => { const next = (resultCandidate + 1) % candidates.length; void selectLogoCandidate(candidates[next], next) }}><ChevronRight aria-hidden="true" size={26} strokeWidth={1.8} /></button>
-            <button className="logo-candidate-action download" type="button" aria-label="로고 파일 다운로드" onClick={() => requestLogoDownload(candidate)}>
+              <button className="logo-candidate-action download" type="button" aria-label="로고 파일 다운로드" onClick={() => requestLogoDownload({ ...candidate, candidateId: candidate.id })}>
               <Download size={21} strokeWidth={1.9} />
             </button>
           </section>
+          {candidate.pinnedAt ? <p className="logo-pin-expiry">찜한 로고예요. 3일 뒤 자동으로 사라져요.</p> : null}
+          {pinError && <p className="project-error" role="alert">{pinError}</p>}
           <div className="logo-result-dots" aria-label="후보 선택">
             {candidates.map((item, index) => <button key={item.id} className={index === resultCandidate ? 'active' : ''} type="button" aria-label={`후보 ${index + 1}`} aria-pressed={index === resultCandidate} onClick={() => void selectLogoCandidate(item, index)} />)}
           </div>
@@ -1713,8 +1872,10 @@ function CustomerApp() {
 
           <div className="logo-result-utility-grid">
             <button className="utility-primary" type="button" onClick={() => void startLogoGeneration()}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />조건을 바꿔<br />다시 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
-            <button className="utility-secondary" type="button"><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />제품 썸네일 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+            <button className="utility-secondary" type="button" onClick={() => void requestBrandKit()}><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />{brandKit?.status === 'SUCCEEDED' ? '브랜드 키트 확인하기' : '브랜드 키트 만들기'}<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
           </div>
+          {brandKit && <p className="project-error" role="status">브랜드 키트 상태: {brandKit.status === 'QUEUED' || brandKit.status === 'RUNNING' ? '생성 중' : brandKit.status === 'SUCCEEDED' ? '완료' : '실패'}</p>}
+          {brandKitError && <p className="project-error" role="alert">{brandKitError}</p>}
         </section>
       </main>
     )
@@ -1832,7 +1993,7 @@ function CustomerApp() {
             <div className="continue-project-card">
               <div className="project-art-placeholder" aria-hidden="true"><Sparkles size={30} strokeWidth={1.6} /></div>
               <div className="project-card-copy"><strong>{brandKind === 'ci' ? '기업 로고 프로젝트' : '새 브랜드 프로젝트'}</strong><span>브랜드 설명 단계에서 작성 중</span></div>
-              <button className="gradient-button" type="button" onClick={() => setMode(brandKind === 'ci' ? 'company-details' : 'brand-details')}>이어서 작성하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+               <button className="gradient-button" type="button" onClick={() => void (projectId ? restoreProjectState(projectId).then((next) => setMode(next ?? (brandKind === 'ci' ? 'company-details' : 'brand-details'))) : setMode(brandKind === 'ci' ? 'company-details' : 'brand-details'))}>이어서 작성하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
             </div>
           </section>
 
@@ -1855,6 +2016,25 @@ function CustomerApp() {
             )}
           </section>
 
+          {pinnedLogos.length > 0 && (
+            <section className="mypage-section" aria-labelledby="pinned-title">
+              <div className="section-title-row"><div><h2 id="pinned-title">찜한 로고</h2><p>찜한 로고는 3일 동안 보관돼요.</p></div><Heart aria-hidden="true" size={27} strokeWidth={1.8} /></div>
+              <div className="pinned-logo-grid">
+                {pinnedLogos.map((item) => (
+                  <article className="pinned-logo-card" key={item.candidateId}>
+                    <img src={getLogoCandidateImageUrl(item.storageKey)} alt="찜한 로고" />
+                    <div><strong>{item.projectType ?? 'BRAND'} 로고</strong><span>{new Date(item.expiresAt).toLocaleDateString('ko-KR')}까지 보관</span></div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="mypage-section download-history-section" aria-labelledby="download-history-title">
+            <div className="section-title-row"><div><h2 id="download-history-title">다운로드 기록</h2><p>다운로드한 로고는 유형별로 최대 20개까지 보관돼요.</p></div><Download aria-hidden="true" size={27} strokeWidth={1.8} /></div>
+            <p className="download-history-count">현재 {downloadHistory.length}개의 다운로드 기록이 있어요.</p>
+          </section>
+
           <button className="survey-entry-card" type="button" onClick={() => { setSurveySubmitted(false); setMode('survey') }}><span><MessageSquare aria-hidden="true" size={23} strokeWidth={1.8} /></span><div><strong>서비스를 이용해보셨나요?</strong><p>더 쉬운 브랜드 제작을 위해 의견을 들려주세요.</p></div><ChevronRight aria-hidden="true" size={21} strokeWidth={1.8} /></button>
         </section>
       </main>
@@ -1873,7 +2053,7 @@ function CustomerApp() {
         {surveySubmitted ? (
           <section className="survey-complete-card" aria-live="polite"><div className="survey-complete-icon"><Check aria-hidden="true" size={36} strokeWidth={2.2} /></div><h1>의견을 보내주셔서 감사합니다.</h1><p>더 쉬운 브랜드 제작 서비스를 만드는 데 활용할게요.</p><button className="gradient-button" type="button" onClick={() => setMode('mypage')}>마이페이지로 돌아가기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></section>
         ) : (
-          <form className="survey-content" onSubmit={(event) => { event.preventDefault(); setSurveySubmitted(true) }}>
+          <form className="survey-content" onSubmit={(event) => { event.preventDefault(); void submitSurveyResponse().catch((error) => setProjectError(error instanceof Error ? error.message : '설문을 제출하지 못했어요.')) }}>
             <header className="survey-heading"><div className="survey-heading-icon"><MessageSquare aria-hidden="true" size={28} strokeWidth={1.7} /></div><h1 id="survey-title">로고를 만드는 과정은 어떠셨나요?</h1><p>초기 화장품 창업자가 더 쉽게 사용할 수 있도록 의견을 들려주세요.</p></header>
 
             <section className="survey-section" aria-labelledby="rating-title"><h2 id="rating-title">결과에 얼마나 만족하시나요?</h2><div className="rating-options" role="radiogroup" aria-label="결과 만족도"><button type="button" role="radio" aria-checked={surveyRating === 5} className={surveyRating === 5 ? 'rating-choice like selected' : 'rating-choice like'} onClick={() => setSurveyRating(5)}><ThumbsUp aria-hidden="true" size={34} strokeWidth={1.7} fill={surveyRating === 5 ? 'currentColor' : 'none'} /><span>좋아요</span></button><button type="button" role="radio" aria-checked={surveyRating === 1} className={surveyRating === 1 ? 'rating-choice dislike selected' : 'rating-choice dislike'} onClick={() => setSurveyRating(1)}><ThumbsDown aria-hidden="true" size={34} strokeWidth={1.7} fill={surveyRating === 1 ? 'currentColor' : 'none'} /><span>싫어요</span></button></div></section>
@@ -1882,7 +2062,8 @@ function CustomerApp() {
 
             <section className="survey-section" aria-labelledby="comment-title"><h2 id="comment-title">추가 의견</h2><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /><div className="survey-character-count">{surveyComment.length} / 500</div></section>
 
-            <button className="survey-submit gradient-button" type="submit">의견 보내기 <ChevronRight aria-hidden="true" size={22} strokeWidth={1.8} /></button>
+            {projectError && <p className="project-error" role="alert">{projectError}</p>}
+            <button className="survey-submit gradient-button" type="submit" disabled={surveyRating === 0}>의견 보내기 <ChevronRight aria-hidden="true" size={22} strokeWidth={1.8} /></button>
           </form>
         )}
       </main>

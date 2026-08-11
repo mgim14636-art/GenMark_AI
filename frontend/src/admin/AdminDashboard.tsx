@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import {
   ArrowRight,
   ArrowUpRight,
@@ -23,6 +23,8 @@ import {
   UsersRound,
 } from 'lucide-react'
 import GenMarkLogo from '../components/ui/GenMarkLogo'
+import { AuthError } from '../auth'
+import { adminApi, type AdminDashboardStats, type AdminMember } from '../lib/genmarkApi'
 import './admin-dashboard.css'
 
 type DashboardSection = 'overview' | 'generation' | 'download' | 'signup' | 'requests' | 'members' | 'credits'
@@ -32,6 +34,24 @@ type AdminDashboardProps = {
 }
 
 const defaultAdminId = 'admin@genmark.ai'
+const ADMIN_TOKEN_KEY = 'genmark-admin-access-token'
+
+const getStoredAdminToken = () => {
+  try {
+    return window.localStorage.getItem(ADMIN_TOKEN_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+const storeAdminToken = (token: string) => {
+  try {
+    if (token) window.localStorage.setItem(ADMIN_TOKEN_KEY, token)
+    else window.localStorage.removeItem(ADMIN_TOKEN_KEY)
+  } catch {
+    // Some browsers disable localStorage for files opened directly from disk.
+  }
+}
 
 const getStoredAdminId = () => {
   try {
@@ -88,6 +108,13 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
   const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false)
   const [adminId, setAdminId] = useState(getStoredAdminId)
   const [adminIdDraft, setAdminIdDraft] = useState(getStoredAdminId)
+  const [adminToken, setAdminToken] = useState(getStoredAdminToken)
+  const [adminLoginId, setAdminLoginId] = useState(getStoredAdminId)
+  const [adminPassword, setAdminPassword] = useState('')
+  const [adminLoginError, setAdminLoginError] = useState('')
+  const [adminLoginLoading, setAdminLoginLoading] = useState(false)
+  const [adminStats, setAdminStats] = useState<AdminDashboardStats | null>(null)
+  const [adminMemberData, setAdminMemberData] = useState<AdminMember[]>([])
   const adminInitial = Array.from(adminId.trim())[0]?.toLocaleUpperCase() || 'A'
 
   const saveAdminId = () => {
@@ -167,6 +194,56 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     document.addEventListener('pointerdown', handleAdminMenuOutsidePointerDown)
     return () => document.removeEventListener('pointerdown', handleAdminMenuOutsidePointerDown)
   }, [isAdminMenuOpen])
+
+  useEffect(() => {
+    if (standalone || !adminToken) return
+    void Promise.allSettled([
+      adminApi.dashboard(adminToken).then(setAdminStats),
+      adminApi.members(adminToken).then(setAdminMemberData),
+    ]).then((results) => {
+      if (results.some((result) => result.status === 'rejected' && result.reason instanceof AuthError && result.reason.status === 401)) {
+        setAdminToken('')
+        storeAdminToken('')
+        setAdminLoginError('관리자 세션이 만료되었습니다. 다시 로그인해주세요.')
+      }
+    })
+  }, [adminToken, standalone])
+
+  const submitAdminLogin = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (adminLoginLoading) return
+    setAdminLoginLoading(true)
+    setAdminLoginError('')
+    void adminApi.login(adminLoginId.trim(), adminPassword)
+      .then((result) => {
+        setAdminToken(result.accessToken)
+        storeAdminToken(result.accessToken)
+        setAdminId(result.loginId)
+        setAdminIdDraft(result.loginId)
+        storeAdminId(result.loginId)
+        setAdminPassword('')
+      })
+      .catch((error) => {
+        setAdminLoginError(error instanceof AuthError && error.code === 'ADMIN_LOGIN_FAILED' ? '아이디 또는 비밀번호를 확인해주세요.' : error instanceof Error ? error.message : '관리자 로그인에 실패했어요.')
+      })
+      .finally(() => setAdminLoginLoading(false))
+  }
+
+  const renderAdminLoginScreen = () => (
+    <main className="admin-login-screen">
+      <form className="admin-login-card" onSubmit={submitAdminLogin}>
+        <div className="admin-brand"><GenMarkLogo className="admin-brand-mark" /><strong>GenMark <em>AI</em></strong></div>
+        <h1>관리자 로그인</h1>
+        <p>관리자 계정으로 대시보드에 접근하세요.</p>
+        <label htmlFor="admin-login-id">아이디</label>
+        <input id="admin-login-id" value={adminLoginId} onChange={(event) => setAdminLoginId(event.target.value)} autoComplete="username" />
+        <label htmlFor="admin-login-password">비밀번호</label>
+        <input id="admin-login-password" type="password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} autoComplete="current-password" />
+        {adminLoginError && <p className="admin-login-error" role="alert">{adminLoginError}</p>}
+        <button type="submit" disabled={adminLoginLoading}>{adminLoginLoading ? '로그인 중…' : '로그인'}</button>
+      </form>
+    </main>
+  )
 
   const renderDashboardScreen = () => {
     const periodLabels = { daily: '일일', weekly: '주간', monthly: '월간', custom: '사용자 지정' }
@@ -305,7 +382,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
 
         <section className="admin-dashboard-content">
           {dashboardSection !== 'requests' && <header className="admin-dashboard-header">
-            <div><p className="admin-eyebrow">ADMIN · ANALYTICS</p><h1>GenMark AI {dashboardSectionLabels[dashboardSection]}</h1></div>
+             <div><p className="admin-eyebrow">ADMIN · ANALYTICS</p><h1>GenMark AI {dashboardSectionLabels[dashboardSection]}</h1>{adminStats && <p className="admin-live-status">실시간 API 연결됨 · 회원 {adminStats.totalMembers}명 · 생성 {adminStats.totalGenerations}건</p>}</div>
             <div className="admin-header-actions" ref={adminAccountMenuRef}>
               <button className="admin-account-trigger" type="button" aria-label="관리자 계정 메뉴" aria-expanded={isAdminMenuOpen} onClick={() => setIsAdminMenuOpen((open) => !open)}>
                 <span className="admin-avatar">{adminInitial}</span>
@@ -404,5 +481,5 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
   }
 
 
-  return renderDashboardScreen()
+  return standalone || adminToken ? renderDashboardScreen() : renderAdminLoginScreen()
 }
