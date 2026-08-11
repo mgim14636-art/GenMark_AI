@@ -44,7 +44,7 @@ def _fake_variants(monkeypatch, captured=None):
     monkeypatch.setattr(
         generation.logo_composer,
         "compose_final_logo",
-        lambda symbol, survey: symbol,
+        lambda symbol, survey, variant_index=None: symbol,
     )
 
 

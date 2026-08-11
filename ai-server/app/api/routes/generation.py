@@ -33,7 +33,11 @@ def generate_logo(req: GenerationRequest):
             logos=[
                 GeneratedLogo(
                     imageBase64=_image_to_base64(
-                        logo_composer.compose_final_logo(v["image"], survey)
+                        # variant_index를 넘겨 폰트·자간이 시안마다 다르되
+                        # 같은 설문이면 재현되도록 한다.
+                        logo_composer.compose_final_logo(
+                            v["image"], survey, variant_index=v["variant_index"]
+                        )
                     ),
                     seed=v["seed"],
                     variantIndex=v["variant_index"],

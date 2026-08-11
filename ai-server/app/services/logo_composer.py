@@ -29,6 +29,7 @@ _FONT_DIR = os.path.normpath(
 _FONT_CANDIDATES = {
     "bold": [
         os.path.join(_FONT_DIR, "modern_sans", "bold", "Pretendard-Bold.ttf"),
+        os.path.join(_FONT_DIR, "elegant_serif", "bold", "GowunBatang-Bold.ttf"),
         os.path.join(_FONT_DIR, "NotoSansKR-Bold.otf"),
         os.path.join(_FONT_DIR, "modern_sans", "bold", "NanumGothicBold.ttf"),
         "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf",
@@ -39,12 +40,28 @@ _FONT_CANDIDATES = {
     ],
     "regular": [
         os.path.join(_FONT_DIR, "modern_sans", "regular", "Pretendard-Regular.ttf"),
+        os.path.join(_FONT_DIR, "modern_sans", "regular", "IBMPlexSansKR-Regular.ttf"),
+        os.path.join(_FONT_DIR, "elegant_serif", "regular", "GowunBatang-Regular.ttf"),
+        os.path.join(_FONT_DIR, "elegant_serif", "regular", "NotoSerifKR-Regular.ttf"),
+        os.path.join(_FONT_DIR, "elegant_serif", "regular", "Hahmlet-Regular.ttf"),
         os.path.join(_FONT_DIR, "NotoSansKR-Regular.otf"),
         os.path.join(_FONT_DIR, "modern_sans", "bold", "NanumGothicBold.ttf"),
         "/usr/share/fonts/truetype/noto/NotoSansKR-Regular.otf",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "C:/Windows/Fonts/malgun.ttf",
         "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+    ],
+    # 2026 뷰티 브랜딩은 얇은 웨이트 + 넓은 자간이 프리미엄 워드마크의 기본 문법이다
+    # (The Ordinary, Rhode 등 타이포그래피 우선 아이덴티티). 기존 풀에는 Bold/Regular만
+    # 있어 이 인상 자체를 만들 수 없었다.
+    "light": [
+        os.path.join(_FONT_DIR, "modern_sans", "light", "Pretendard-Light.ttf"),
+        os.path.join(_FONT_DIR, "elegant_serif", "light", "NotoSerifKR-Light.ttf"),
+        os.path.join(_FONT_DIR, "elegant_serif", "light", "Hahmlet-Light.ttf"),
+        os.path.join(_FONT_DIR, "modern_sans", "light", "IBMPlexSansKR-Light.ttf"),
+        os.path.join(_FONT_DIR, "modern_sans", "light", "Pretendard-Thin.ttf"),
+        # light가 하나도 없는 환경에서도 동작하도록 regular로 자연스럽게 내려간다
+        os.path.join(_FONT_DIR, "modern_sans", "regular", "Pretendard-Regular.ttf"),
     ],
 }
 
@@ -61,37 +78,77 @@ _FONT_CANDIDATES = {
 #   - 유니크하고 트렌디한 : 라운드체 + 손글씨 — 관습적이지 않은 개성 있는 인상
 #   - 미니얼하고 직관적인 : 명조 — 장식 없는 세리프는 미니멀 취지를 해치지 않으면서도
 #     고딕 일변도에서 벗어나게 해줌 (손글씨/라운드체는 "심플한 여백" 취지와 어긋나 제외)
+def _f(*parts) -> str:
+    return os.path.join(_FONT_DIR, *parts)
+
+
+_SERIF_L = _f("elegant_serif", "light", "NotoSerifKR-Light.ttf")
+_HAHMLET_L = _f("elegant_serif", "light", "Hahmlet-Light.ttf")
+_GOWUN = _f("elegant_serif", "regular", "GowunBatang-Regular.ttf")
+_GOWUN_B = _f("elegant_serif", "bold", "GowunBatang-Bold.ttf")
+_SERIF_R = _f("elegant_serif", "regular", "NotoSerifKR-Regular.ttf")
+_HAHMLET_R = _f("elegant_serif", "regular", "Hahmlet-Regular.ttf")
+_MYEONGJO_B = _f("elegant_serif", "bold", "NanumMyeongjo-Bold.ttf")
+_MYEONGJO_R = _f("elegant_serif", "regular", "NanumMyeongjo-Regular.ttf")
+_PRE_L = _f("modern_sans", "light", "Pretendard-Light.ttf")
+_PLEX_L = _f("modern_sans", "light", "IBMPlexSansKR-Light.ttf")
+_PLEX_R = _f("modern_sans", "regular", "IBMPlexSansKR-Regular.ttf")
+_GAEGU = _f("Gaegu-Bold.ttf")
+_JUA = _f("Jua-Regular.ttf")
+
 TONE_FONT_BIAS = {
     "친근하고 다정한": {
-        "bold": [os.path.join(_FONT_DIR, "Gaegu-Bold.ttf"), os.path.join(_FONT_DIR, "Jua-Regular.ttf")],
-        "regular": [os.path.join(_FONT_DIR, "Jua-Regular.ttf")],
+        "light": [_PRE_L, _PLEX_L],
+        "regular": [_JUA, _PLEX_R],
+        "bold": [_GAEGU, _JUA],
     },
     "전문적이고 신뢰감 있는": {
-        "bold": [os.path.join(_FONT_DIR, "elegant_serif", "bold", "NanumMyeongjo-Bold.ttf")],
-        "regular": [os.path.join(_FONT_DIR, "elegant_serif", "regular", "NanumMyeongjo-Regular.ttf")],
+        "light": [_PLEX_L, _SERIF_L],
+        "regular": [_PLEX_R, _SERIF_R],
+        "bold": [_MYEONGJO_B],
     },
     "감성적이고 따뜻한": {
-        "bold": [os.path.join(_FONT_DIR, "elegant_serif", "bold", "NanumMyeongjo-Bold.ttf"), os.path.join(_FONT_DIR, "Gaegu-Bold.ttf")],
-        "regular": [os.path.join(_FONT_DIR, "elegant_serif", "regular", "NanumMyeongjo-Regular.ttf")],
+        # 우아한 세리프 계열. 나눔명조보다 고운바탕·Noto Serif가 훨씬 세련된 인상을 준다.
+        "light": [_SERIF_L, _HAHMLET_L],
+        "regular": [_GOWUN, _SERIF_R],
+        "bold": [_GOWUN_B, _MYEONGJO_B],
     },
     "유니크하고 트렌디한": {
-        "bold": [os.path.join(_FONT_DIR, "Jua-Regular.ttf"), os.path.join(_FONT_DIR, "Gaegu-Bold.ttf")],
-        "regular": [os.path.join(_FONT_DIR, "Jua-Regular.ttf")],
+        "light": [_HAHMLET_L, _PRE_L],
+        "regular": [_HAHMLET_R, _JUA],
+        "bold": [_JUA, _GAEGU],
     },
     "미니얼하고 직관적인": {
-        "bold": [os.path.join(_FONT_DIR, "elegant_serif", "bold", "NanumMyeongjo-Bold.ttf")],
-        "regular": [os.path.join(_FONT_DIR, "elegant_serif", "regular", "NanumMyeongjo-Regular.ttf")],
+        # 얇은 산세리프 + 넓은 자간 = 2026 프리미엄 워드마크의 기본형
+        "light": [_PRE_L, _PLEX_L],
+        "regular": [_PLEX_R, _GOWUN],
+        "bold": [_MYEONGJO_B],
     },
 }
 
-# (굵기, 자간(em 단위)) 조합 후보 — 시안마다 이 중 하나를 무작위로 골라 텍스트
-# 스타일 자체도 시안 간에 달라지게 한다. (혼합형/심볼+텍스트 케이스에서 사용)
+# (굵기, 자간(em 단위)) 조합 후보.
+#
+# 자간 상한을 0.2em -> 0.45em으로 올렸다. 프리미엄 뷰티 워드마크는 "L U N E R I A"
+# 처럼 글자를 넓게 벌려 여백으로 격을 만드는데, 0.2em으로는 그 인상이 나오지 않는다.
+# light 웨이트도 함께 넣어 "얇은 글자 + 넓은 자간" 조합이 실제로 나오게 했다.
 _TEXT_STYLE_POOL = [
-    ("bold", 0.0),
-    ("bold", 0.12),
+    ("light", 0.45),
+    ("light", 0.30),
+    ("regular", 0.22),
     ("regular", 0.0),
-    ("regular", 0.2),
+    ("bold", 0.12),
+    ("bold", 0.0),
 ]
+
+# 톤별로 어울리는 (굵기, 자간) 조합. 무작위 대신 이 목록을 variant_index로 순환해
+# 같은 설문이면 같은 결과가 나오게 한다 — 재생성 회차마다 조합이 바뀌되 예측 가능하다.
+TONE_TEXT_STYLES = {
+    "친근하고 다정한": [("regular", 0.10), ("bold", 0.06), ("regular", 0.0), ("light", 0.20)],
+    "전문적이고 신뢰감 있는": [("light", 0.30), ("regular", 0.22), ("light", 0.40), ("regular", 0.12)],
+    "감성적이고 따뜻한": [("light", 0.40), ("regular", 0.28), ("light", 0.30), ("regular", 0.18)],
+    "유니크하고 트렌디한": [("bold", 0.0), ("light", 0.45), ("regular", 0.30), ("bold", 0.10)],
+    "미니얼하고 직관적인": [("light", 0.45), ("light", 0.35), ("regular", 0.25), ("light", 0.25)],
+}
 
 _font_cache = {}
 
@@ -115,17 +172,34 @@ def _existing_font_candidates(weight: str, tone: str = "") -> list:
     return [p for p in candidates if p and os.path.isfile(p)]
 
 
-def _pick_random_font_path(weight: str, tone: str = "") -> Optional[str]:
-    """해당 굵기(및 톤)에서 실제로 존재하는 폰트 파일들 중 하나를 무작위로 고른다.
+def _pick_font_path(weight: str, tone: str = "", variant_index: Optional[int] = None) -> Optional[str]:
+    """해당 굵기(및 톤)에서 실제로 존재하는 폰트 파일 중 하나를 고른다.
+
+    variant_index를 주면 후보 목록을 그 값으로 순환 선택한다 — 같은 설문을 다시
+    돌리면 같은 폰트가 나오고, 시안 간에는 서로 다른 폰트가 배정된다. 예전에는
+    무조건 random.choice라 같은 입력에도 매번 폰트가 바뀌어 결과를 재현할 수 없었다.
 
     존재하는 후보가 하나도 없으면 None을 반환하고, 이 경우 _resolve_font가
-    ImageFont.load_default()로 최종 폴백한다. LOGO_FONT_PATH 환경변수가 설정돼
-    있으면 이 함수를 아예 거치지 않고 그쪽이 우선 사용된다(호출부에서 처리).
+    ImageFont.load_default()로 최종 폴백한다.
     """
     candidates = _existing_font_candidates(weight, tone)
     if not candidates:
         return None
-    return random.choice(candidates)
+    if variant_index is None:
+        return random.choice(candidates)
+    return candidates[variant_index % len(candidates)]
+
+
+def _pick_text_style(tone: str = "", variant_index: Optional[int] = None) -> tuple:
+    """(굵기, 자간) 조합을 고른다. 톤 목록이 있으면 그 안에서 순환한다."""
+    pool = TONE_TEXT_STYLES.get(_normalize_tone(tone)) or _TEXT_STYLE_POOL
+    if variant_index is None:
+        return random.choice(pool)
+    return pool[variant_index % len(pool)]
+
+
+# 하위 호환 — 기존 이름으로 부르는 코드가 남아 있을 수 있다
+_pick_random_font_path = _pick_font_path
 
 
 def _resolve_font(
@@ -151,7 +225,8 @@ def _resolve_font(
 
 
 def _resolve_font_path_for_call(
-    font_path: Optional[str], weight: str, tone: str = ""
+    font_path: Optional[str], weight: str, tone: str = "",
+    variant_index: Optional[int] = None,
 ) -> Optional[str]:
     """이번 로고 한 장을 그리는 동안 고정해서 쓸 폰트 경로를 정한다.
 
@@ -165,7 +240,7 @@ def _resolve_font_path_for_call(
     env_font = os.environ.get("LOGO_FONT_PATH")
     if env_font:
         return env_font
-    return _pick_random_font_path(weight, tone)
+    return _pick_font_path(weight, tone, variant_index)
 
 
 def _color_distance(a: tuple, b: tuple) -> float:
@@ -292,9 +367,10 @@ def compose_logo_with_text(
     font_path: Optional[str] = None,
     text_style: Optional[tuple] = None,
     text_color: Optional[str] = None,
-    font_size_ratio: float = 0.17,
-    gap_ratio: float = 0.35,
+    font_size_ratio: float = 0.115,
+    gap_ratio: float = 0.55,
     tone: str = "",
+    variant_index: Optional[int] = None,
 ) -> Image.Image:
     """심볼 로고에 브랜드명 텍스트를 자연스럽게 합성한 새 이미지를 반환한다. (혼합형/심볼+텍스트용)
 
@@ -320,15 +396,22 @@ def compose_logo_with_text(
     symbol_h = max(bottom - top, round(height * 0.3))
     symbol_center_x = (left + right) / 2
 
-    weight, letter_spacing_em = text_style or random.choice(_TEXT_STYLE_POOL)
+    weight, letter_spacing_em = text_style or _pick_text_style(tone, variant_index)
     resolved_color = text_color or _dominant_color(flattened, bg_rgb)
     # 이 로고 한 장을 그리는 동안 폰트 경로를 한 번만 정하고 계속 재사용한다 —
     # 축소 루프 중간에 폰트가 바뀌면 폭 계산이 어긋나 텍스트가 잘리거나 넘칠 수 있다.
-    resolved_font_path = _resolve_font_path_for_call(font_path, weight, tone)
+    resolved_font_path = _resolve_font_path_for_call(font_path, weight, tone, variant_index)
 
-    font_size = max(14, round(symbol_h * font_size_ratio))
+    # 글자 크기는 캔버스 폭을 기준으로 잡는다.
+    #
+    # 예전에는 심볼의 바운딩 박스 높이(symbol_h)에 비례시켰다. 심볼이 항상 캔버스를
+    # 꽉 채우던 시절에는 문제가 없었지만, 여백을 둔 마크가 들어오면서 브랜드명이
+    # 같이 쪼그라들어 시안마다 글자 크기가 제각각이 됐다(실측 확인됨 — 같은 4시안
+    # 안에서도 눈에 띄게 차이 남). 캔버스 기준이면 어떤 심볼이 와도 일정하다.
+    font_size = max(14, round(width * font_size_ratio))
     font = _resolve_font(font_size, resolved_font_path, weight)
-    gap = max(4, round(font_size * gap_ratio))
+    # 심볼과 글자 사이 여백도 글자 크기에 비례시켜, 얇은 웨이트일 때 답답해 보이지 않게 한다.
+    gap = max(6, round(font_size * gap_ratio))
     letter_spacing = round(font_size * letter_spacing_em)
 
     probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
@@ -400,6 +483,7 @@ def compose_logo(
     text_color: Optional[str] = None,
     font_path: Optional[str] = None,
     tone: str = "",
+    variant_index: Optional[int] = None,
 ) -> Image.Image:
     """심볼과 브랜드명을 합성해 최종 로고를 만든다.
 
@@ -410,7 +494,8 @@ def compose_logo(
       - 혼합형  : 심볼 위 + 브랜드명 아래 (compose_logo_with_text)
 
     tone(설문의 톤)을 넘기면 폰트 후보도 그 톤에 맞춰 고른다 — 자세한 기준은
-    _existing_font_candidates 참고.
+    _existing_font_candidates 참고. variant_index를 함께 넘기면 폰트·자간이 무작위가
+    아니라 그 값으로 순환 선택돼, 같은 설문을 다시 돌려도 같은 결과가 나온다.
     """
     if style == "심볼":
         if symbol is None:
@@ -425,7 +510,7 @@ def compose_logo(
         text = _initials(brand_name) if style == "레터마크" else brand_name
         # 워드마크/레터마크는 항상 "bold" 굵기를 써왔으므로(_fit_font_to_width의
         # 기존 동작과 동일하게) weight="bold" 기준으로 폰트 경로를 무작위 선택한다.
-        resolved_font_path = _resolve_font_path_for_call(font_path, "bold", tone)
+        resolved_font_path = _resolve_font_path_for_call(font_path, "bold", tone, variant_index)
         font = _fit_font_to_width(draw, text, int(canvas_size * 0.7), resolved_font_path)
         tw, th = _text_size(draw, text, font)
         left, top, _, _ = draw.textbbox((0, 0), text, font=font)
@@ -441,7 +526,8 @@ def compose_logo(
     if symbol is None:
         raise ValueError(f"'{style}' 스타일에는 symbol 이미지가 필요합니다.")
     return compose_logo_with_text(
-        symbol, brand_name, font_path=font_path, text_color=text_color, tone=tone
+        symbol, brand_name, font_path=font_path, text_color=text_color, tone=tone,
+        variant_index=variant_index,
     )
 
 
@@ -465,7 +551,9 @@ def _wants_text_overlay(survey: dict, style_key: str, brand_name: str) -> bool:
     return style_key in ("워드마크", "레터마크", "혼합형")
 
 
-def compose_final_logo(symbol: Image.Image, survey: dict) -> Image.Image:
+def compose_final_logo(
+    symbol: Image.Image, survey: dict, variant_index: Optional[int] = None
+) -> Image.Image:
     """FLUX가 생성한 심볼과 설문 응답을 받아 최종 로고 1장을 만든다.
 
     라우트(app/api/routes/generation.py)의 단일 진입점 — 텍스트 합성 여부 판단부터
@@ -487,4 +575,7 @@ def compose_final_logo(symbol: Image.Image, survey: dict) -> Image.Image:
 
     text_color = survey.get("text_color")
     tone = survey.get("tone", "")
-    return compose_logo(symbol, brand_name, style=style_key, text_color=text_color, tone=tone)
+    return compose_logo(
+        symbol, brand_name, style=style_key, text_color=text_color, tone=tone,
+        variant_index=variant_index,
+    )
