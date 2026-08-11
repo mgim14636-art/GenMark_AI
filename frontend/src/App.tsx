@@ -268,11 +268,11 @@ function CustomerApp() {
   const [brandValueDescription, setBrandValueDescription] = useState('')
   const [toneSelection, setToneSelection] = useState<ToneOption>('friendly')
   const [toneMode, setToneMode] = useState<'recommended' | 'direct'>('recommended')
-  const [tonePaletteTarget, setTonePaletteTarget] = useState<{ toneId: ToneOption; slot: 0 | 1 } | null>(null)
-  const [customToneColors, setCustomToneColors] = useState<Partial<Record<ToneOption, [string, string]>>>({})
-  const [manualColor, setManualColor] = useState<RgbColor>({ r: 151, g: 101, b: 233 })
-  const [manualSecondaryColor, setManualSecondaryColor] = useState<RgbColor>({ r: 220, g: 175, b: 245 })
-  const [manualColorSlot, setManualColorSlot] = useState<0 | 1>(0)
+  const [tonePaletteTarget, setTonePaletteTarget] = useState<{ toneId: ToneOption; slot: number } | null>(null)
+  const [tonePaletteDraft, setTonePaletteDraft] = useState<{ toneId: ToneOption; colors: string[] } | null>(null)
+  const [customToneColors, setCustomToneColors] = useState<Partial<Record<ToneOption, string[]>>>({})
+  const [manualColors, setManualColors] = useState<string[]>(['#9765e9', '#dcaff5'])
+  const [manualColorSlot, setManualColorSlot] = useState(0)
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const [logoStyle, setLogoStyle] = useState<LogoStyle>('combination')
   const [resultCandidate, setResultCandidate] = useState(0)
@@ -529,7 +529,7 @@ function CustomerApp() {
       setBrandValueDescription(project.brandValuesText ?? '')
       setCoreValues((project.brandValues ?? []).filter((value): value is CoreValue => coreValueIds.has(value as CoreValue)))
       if (project.tone && toneOptions.some((option) => option.id === project.tone)) setToneSelection(project.tone as ToneOption)
-      if (project.colors?.[0]) setManualColor(hexToRgb(project.colors[0]))
+      if (project.colors?.length) setManualColors(project.colors.slice(0, 4))
       if (project.logoStyle && logoStyleOptions.some((option) => option.id === project.logoStyle)) setLogoStyle(project.logoStyle as LogoStyle)
 
       const step = typeof project.currentStep === 'number' ? project.currentStep : Number(project.currentStep)
@@ -706,17 +706,38 @@ function CustomerApp() {
   }
 
   const updateManualColorFromHex = (hex: string) => {
-    if (manualColorSlot === 0) setManualColor(hexToRgb(hex))
-    else setManualSecondaryColor(hexToRgb(hex))
+    setManualColors((current) => {
+      const next = [...current]
+      next[manualColorSlot] = hex
+      return next
+    })
   }
 
-  const updateToneColorFromHex = (toneId: ToneOption, slot: 0 | 1, hex: string) => {
-    setCustomToneColors((current) => {
-      const base = current[toneId] ?? toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#ffffff', '#ffffff']
-      const next: [string, string] = [...base] as [string, string]
+  const resetManualColors = () => {
+    setManualColors(['#9765e9', '#dcaff5'])
+    setManualColorSlot(0)
+  }
+
+  const updateToneColorFromHex = (toneId: ToneOption, slot: number, hex: string) => {
+    setTonePaletteDraft((current) => {
+      const base = current?.toneId === toneId
+        ? current.colors
+        : customToneColors[toneId] ?? toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#eadfff', '#ffe1ef']
+      const next = [...base]
       next[slot] = hex
-      return { ...current, [toneId]: next }
+      return { toneId, colors: next }
     })
+  }
+
+  const resetToneColors = (toneId: ToneOption) => {
+    const original = toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#eadfff', '#ffe1ef']
+    setCustomToneColors((current) => {
+      const next = { ...current }
+      delete next[toneId]
+      return next
+    })
+    setTonePaletteDraft({ toneId, colors: [...original] })
+    setTonePaletteTarget({ toneId, slot: 0 })
   }
 
   const buildProjectInput = (): ProjectInput => ({
@@ -729,7 +750,7 @@ function CustomerApp() {
     brandValuesText: coreValueInputMode === 'direct' ? brandValueDescription.trim() || undefined : undefined,
     tone: toneSelection,
     colorMode: 'MANUAL',
-    colors: [rgbToHex(manualColor), rgbToHex(manualSecondaryColor)],
+    colors: manualColors,
     logoStyle,
     includeBrandName: true,
     additionalRequirements: additionalRequest.trim() || undefined,
@@ -1225,14 +1246,14 @@ function CustomerApp() {
               role="tab"
               aria-selected={toneMode === 'recommended'}
               className={toneMode === 'recommended' ? 'tone-mode-tab active' : 'tone-mode-tab'}
-              onClick={() => { setToneMode('recommended'); setColorPickerOpen(false); setTonePaletteTarget(null) }}
+              onClick={() => { setToneMode('recommended'); setColorPickerOpen(false); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
             >추천</button>
             <button
               type="button"
               role="tab"
               aria-selected={toneMode === 'direct'}
               className={toneMode === 'direct' ? 'tone-mode-tab active' : 'tone-mode-tab'}
-              onClick={() => { setToneMode('direct'); setColorPickerOpen(true); setTonePaletteTarget(null) }}
+              onClick={() => { setToneMode('direct'); setColorPickerOpen(true); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
             >직접 지정</button>
           </div>
           <h1 id="tone-selection-title">톤앤매너와<br />색상을 골라주세요</h1>
@@ -1243,6 +1264,8 @@ function CustomerApp() {
         <section className="tone-options" aria-label="톤앤매너 선택">
           {toneOptions.map((tone) => {
             const selected = toneSelection === tone.id
+            const toneColors = customToneColors[tone.id] ?? tone.colors
+            const canAddColor = toneColors.length < 4
             return (
               <div className="tone-option-shell" key={tone.id}>
               <button
@@ -1252,7 +1275,7 @@ function CustomerApp() {
                 onClick={() => setToneSelection(tone.id)}
               >
                 <span className="tone-swatches" aria-hidden="true">
-                  {(customToneColors[tone.id] ?? tone.colors).map((color) => <i key={color} style={{ background: color }} />)}
+                  {toneColors.map((color, index) => <i key={`${tone.id}-${index}-${color}`} style={{ background: color }} />)}
                 </span>
                 <span className="tone-option-copy">
                   <strong>{tone.label}</strong>
@@ -1265,25 +1288,48 @@ function CustomerApp() {
                 type="button"
                 aria-label={`${tone.label} 색상 직접 지정`}
                 aria-expanded={tonePaletteTarget?.toneId === tone.id}
-                onClick={() => setTonePaletteTarget((current) => current?.toneId === tone.id ? null : { toneId: tone.id, slot: 0 })}
+              onClick={() => {
+                if (tonePaletteTarget?.toneId === tone.id) {
+                  setTonePaletteTarget(null)
+                  setTonePaletteDraft(null)
+                  return
+                }
+                const currentColors = customToneColors[tone.id] ?? tone.colors
+                if (!canAddColor) {
+                  setTonePaletteDraft({ toneId: tone.id, colors: [...currentColors] })
+                  setTonePaletteTarget({ toneId: tone.id, slot: 0 })
+                  return
+                }
+                setTonePaletteDraft({ toneId: tone.id, colors: [...currentColors, '#eadfff'] })
+                setTonePaletteTarget({ toneId: tone.id, slot: currentColors.length })
+              }}
               ><Plus aria-hidden="true" size={20} strokeWidth={1.9} /></button>
               {tonePaletteTarget?.toneId === tone.id && (
                 <div className="tone-inline-picker" role="group" aria-label={`${tone.label} 색상 지정`}>
-                  <div className="tone-inline-picker-heading"><strong>두 가지 색상을 선택하세요</strong><span>선택한 색은 왼쪽 색상 칸에 적용됩니다.</span></div>
+                  <div className="tone-inline-picker-heading"><strong>색상을 선택하세요</strong><span>기존 색상을 조정하거나 새 색상을 하나씩 추가할 수 있어요.</span></div>
                   <div className="tone-picker-slots">
-                    {[0, 1].map((slot) => {
-                      const colors = customToneColors[tone.id] ?? tone.colors
-                      return <button key={slot} type="button" className={tonePaletteTarget.slot === slot ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setTonePaletteTarget({ toneId: tone.id, slot: slot as 0 | 1 })}><i style={{ background: colors[slot as 0 | 1] }} /><span>{slot === 0 ? '첫 번째 색' : '두 번째 색'}</span></button>
+                    {(tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors).map((_, slot) => {
+                      const colors = tonePaletteDraft?.toneId === tone.id
+                        ? tonePaletteDraft.colors
+                        : customToneColors[tone.id] ?? tone.colors
+                      return <button key={slot} type="button" className={tonePaletteTarget.slot === slot ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setTonePaletteTarget({ toneId: tone.id, slot })}><i style={{ background: colors[slot] }} /><span>{slot < 2 ? `${slot + 1}번째 색` : `추가 색상 ${slot - 1}`}</span></button>
                     })}
                   </div>
                   <ToneColorPalette
-                    value={hexToRgb((customToneColors[tone.id] ?? tone.colors)[tonePaletteTarget.slot])}
+                    value={hexToRgb((tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors)[tonePaletteTarget.slot])}
                     onChange={(color) => updateToneColorFromHex(tone.id, tonePaletteTarget.slot, rgbToHex(color))}
-                    onComplete={() => setTonePaletteTarget(null)}
+                    onComplete={() => {
+                      if (tonePaletteDraft?.toneId === tone.id) {
+                        setCustomToneColors((current) => ({ ...current, [tone.id]: tonePaletteDraft.colors }))
+                      }
+                      setTonePaletteTarget(null)
+                      setTonePaletteDraft(null)
+                    }}
                     ariaLabel={`${tone.label} 색상 팔레트`}
                   />
                   <div className="tone-inline-picker-footer">
-                    <span>두 색상 · {(customToneColors[tone.id] ?? tone.colors).join(' / ')}</span>
+                    <span>선택한 색상 · {(tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors).join(' / ')}</span>
+                    <button type="button" className="tone-inline-reset" onClick={() => resetToneColors(tone.id)}>초기화</button>
                   </div>
                 </div>
               )}
@@ -1294,10 +1340,25 @@ function CustomerApp() {
         )}
 
         {toneMode === 'direct' && (<section className="tone-color-card tone-direct-card" aria-label="직접 색상 지정">
-          <span className="tone-direct-swatches" aria-label="직접 선택한 두 색상">
-            <i style={{ background: rgbToHex(manualColor) }} />
-            <i style={{ background: rgbToHex(manualSecondaryColor) }} />
-          </span>
+          <div className="tone-direct-swatches" aria-label="직접 선택한 색상">
+            {manualColors.map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
+            <button
+              className="tone-direct-custom-trigger"
+              type="button"
+              aria-label={manualColors.length < 4 ? '색상 추가' : '색상 편집'}
+              aria-expanded={colorPickerOpen}
+              onClick={() => {
+                if (manualColors.length >= 4) {
+                  setManualColorSlot(0)
+                  setColorPickerOpen(true)
+                  return
+                }
+                setManualColors((current) => [...current, '#eadfff'])
+                setManualColorSlot(manualColors.length)
+                setColorPickerOpen(true)
+              }}
+            ><Plus aria-hidden="true" size={19} strokeWidth={1.9} /></button>
+          </div>
           <div>
             <h2>직접 색상 지정</h2>
             <p>원하는 색상을 직접 지정할 수 있어요</p>
@@ -1307,9 +1368,12 @@ function CustomerApp() {
             type="button"
             aria-expanded={colorPickerOpen}
             aria-controls="tone-color-picker"
-            onClick={() => setColorPickerOpen((current) => !current)}
+            onClick={() => {
+              if (!colorPickerOpen) setManualColorSlot(0)
+              setColorPickerOpen((current) => !current)
+            }}
           >
-            <span className="tone-picker-summary" aria-hidden="true"><i className="tone-picker-swatch" style={{ background: rgbToHex(manualColor) }} /><i className="tone-picker-swatch" style={{ background: rgbToHex(manualSecondaryColor) }} /></span>
+            <span className="tone-picker-summary" aria-hidden="true">{manualColors.map((color, index) => <i className="tone-picker-swatch" key={`${color}-${index}`} style={{ background: color }} />)}</span>
             직접
           </button>
 
@@ -1320,17 +1384,17 @@ function CustomerApp() {
                 <button type="button" aria-label="색상 팔레트 닫기" onClick={() => setColorPickerOpen(false)}>×</button>
               </div>
               <div className="tone-picker-slots direct-slots">
-                <button type="button" className={manualColorSlot === 0 ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setManualColorSlot(0)}><i style={{ background: rgbToHex(manualColor) }} /><span>첫 번째 색</span></button>
-                <button type="button" className={manualColorSlot === 1 ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setManualColorSlot(1)}><i style={{ background: rgbToHex(manualSecondaryColor) }} /><span>두 번째 색</span></button>
+                {manualColors.map((color, slot) => <button key={slot} type="button" className={manualColorSlot === slot ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setManualColorSlot(slot)}><i style={{ background: color }} /><span>{slot < 2 ? `${slot + 1}번째 색` : `추가 색상 ${slot - 1}`}</span></button>)}
               </div>
               <ToneColorPalette
-                value={manualColorSlot === 0 ? manualColor : manualSecondaryColor}
+                value={hexToRgb(manualColors[manualColorSlot] ?? manualColors[0])}
                 onChange={(color) => updateManualColorFromHex(rgbToHex(color))}
                 onComplete={() => setColorPickerOpen(false)}
                 ariaLabel="색상 팔레트"
               />
               <div className="tone-color-picker-footer">
-                <span>두 색상 · {rgbToHex(manualColor)} / {rgbToHex(manualSecondaryColor)}</span>
+                <span>선택한 색상 · {manualColors.join(' / ')}</span>
+                <button type="button" className="tone-inline-reset" onClick={resetManualColors}>초기화</button>
               </div>
             </div>
           )}
