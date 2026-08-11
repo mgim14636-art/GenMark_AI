@@ -18,7 +18,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.List;
 
 /**
- * 브랜드킷 (F14). CI는 명함, BI는 로션 병 이미지를 만든다.
+ * 브랜드킷 (F14). CI는 명함, BI는 제품 썸네일 이미지를 만든다.
  *
  * <p>킷 종류를 사용자가 고르지 않는다. 프로젝트가 CI인지 BI인지에 따라 자동으로 정해진다.
  *
@@ -53,8 +53,8 @@ public class BrandKitService {
                         candidateId, project.getId(), memberId))
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
 
-        // CI면 명함, BI면 로션 병. 사용자가 선택하는 값이 아니다.
-        BrandKit.KitType kitType = isCi ? BrandKit.KitType.BUSINESS_CARD : BrandKit.KitType.BOTTLE;
+        // CI면 명함, BI면 제품 썸네일. 사용자가 선택하는 값이 아니다.
+        BrandKit.KitType kitType = isCi ? BrandKit.KitType.BUSINESS_CARD : BrandKit.KitType.THUMBNAIL;
 
         BrandKit done = brandKitRepository
                 .findFirstByCandidateIdAndKitTypeAndStatusOrderByCompletedAtDesc(
