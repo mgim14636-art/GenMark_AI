@@ -51,7 +51,10 @@ class BrandKitRequest(BaseModel):
     # 않고 dict로 받는다 — 백엔드가 필드를 늘려도 AI 서버 배포 없이 흡수된다.
     survey: Dict[str, Any] = Field(default_factory=dict)
 
-    card_info: Optional[CardInfo] = Field(None, description="kit_type=BUSINESS_CARD일 때 필수")
+    # 백엔드 BrandKitProcessor.buildRequest는 현재 kit_type/logo_image_base64/survey/ci_bi
+    # 네 가지만 보낸다. 필수로 잡으면 CI 브랜드킷이 전부 FAILED로 끝나므로 선택 항목으로
+    # 두고, 없으면 회사명만 넣은 브랜드 카드로 합성한 뒤 preliminary=True로 표시한다.
+    card_info: Optional[CardInfo] = Field(None, description="명함에 인쇄할 사용자 정보")
     product_name: Optional[str] = Field(None, max_length=60, description="썸네일 하단 문구(생략 가능)")
 
     @property
@@ -67,9 +70,19 @@ class BrandKitImage(BaseModel):
 
 class BrandKitResponse(BaseModel):
     kitType: str
+
+    # 백엔드 FastApiBrandKitAiClient가 응답 최상위의 imageBase64를 읽는다.
+    # images[]는 앞/뒤면·각도 변형을 대비한 정식 필드이고, imageBase64는 그 첫 장을
+    # 그대로 복제해 백엔드 수정 없이 붙을 수 있게 둔 호환 필드다.
+    imageBase64: str
     images: List[BrandKitImage]
+
     preliminary: bool = Field(
         False,
         description="True면 최종 산출 품질이 아닌 임시 합성 결과. 연동 테스트용.",
+    )
+    warnings: List[str] = Field(
+        default_factory=list,
+        description="preliminary인 이유. 백엔드가 error_message 대신 로깅용으로 쓸 수 있다.",
     )
     elapsedMs: int = 0

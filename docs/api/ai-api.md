@@ -478,10 +478,14 @@ DINOv2의 코사인 유사도는 서로 무관한 상표 간에도 평균 0.49�
 | `logo_image_base64` | O | 완성 로고 PNG의 Base64. `data:image/png;base64,` 접두어도 허용 |
 | `ci_bi` | X | 로그·분기 참고용 |
 | `survey` | X | 로고 생성 때 넘긴 것과 같은 구조. **스키마를 고정하지 않고 dict로 받습니다** — 백엔드가 필드를 늘려도 AI 서버 재배포가 필요 없습니다. 현재 실제로 읽는 값은 `colors`(또는 `color_manual`) 첫 번째 HEX와 `company_name`/`brand_name`뿐입니다 |
-| `card_info` | △ | **`kit_type=BUSINESS_CARD`일 때 필수.** 누락 시 400 |
+| `card_info` | X | 명함에 인쇄할 사용자 정보. 없으면 회사명만 넣은 브랜드 카드로 합성되고 `preliminary: true`가 됩니다 |
 | `product_name` | X | 썸네일 하단 문구. 없으면 `survey`의 브랜드명 사용 |
 
-**`card_info`는 요청서 3-2 예시에 없던 신규 항목입니다.** 기획서의 "사용자 정보(이름·직함·연락처)를 합성"에 해당하며, 이 값이 없으면 명함에 인쇄할 내용이 없습니다. `name` 외에는 모두 선택이고, 빈 항목은 레이아웃에서 통째로 생략됩니다. 프론트에서 입력받는 화면이 필요합니다.
+**`card_info`는 요청서 3-2 예시에 없던 신규 항목입니다.** 기획서의 "사용자 정보(이름·직함·연락처)를 합성"에 해당합니다.
+
+현재 `BrandKitProcessor.buildRequest`는 `kit_type / logo_image_base64 / survey / ci_bi` 네 가지만 보내고 있어, 이를 필수로 잡으면 CI 브랜드킷이 전부 `FAILED`로 끝납니다. 그래서 **선택 항목으로 두고, 없으면 회사명만 넣은 브랜드 카드로 합성한 뒤 `preliminary: true`와 `warnings`로 알립니다.** 레이아웃은 동일하므로 나중에 값이 채워지면 그대로 명함이 됩니다.
+
+`Member` 엔티티에 `name`과 `email`이 이미 있으므로, 화면 없이도 그 둘만 먼저 채워 보내실 수 있습니다. 직함·연락처·주소는 사용자 입력이 필요합니다. 현재 `POST /brand-kits`는 요청 본문이 없어 입력받을 자리가 없다는 점도 함께 봐주세요.
 
 `logo_image_base64` 전달 방식은 **Base64 유지**를 제안합니다. AI 서버는 백엔드 스토리지(`storage_key`)에 접근 권한이 없고, `/similarity/search`도 이미 Base64로 받고 있어 일관됩니다.
 
@@ -490,10 +494,12 @@ DINOv2의 코사인 유사도는 서로 무관한 상표 간에도 평균 0.49�
 ```json
 {
   "kitType": "BUSINESS_CARD",
+  "imageBase64": "iVBORw0KGgo...",
   "images": [
     { "imageBase64": "iVBORw0KGgo...", "width": 1063, "height": 591 }
   ],
   "preliminary": false,
+  "warnings": [],
   "elapsedMs": 1447
 }
 ```
@@ -501,17 +507,20 @@ DINOv2의 코사인 유사도는 서로 무관한 상표 간에도 평균 0.49�
 | 필드 | 설명 |
 |---|---|
 | `kitType` | 정규화된 값. `BOTTLE`로 보내도 `PRODUCT_THUMBNAIL`이 돌아옵니다 |
-| `images` | **배열입니다.** 현재는 1장이지만 명함 앞/뒤, 썸네일 각도 변형으로 늘어날 여지를 둡니다 |
+| `imageBase64` | **최상위 호환 필드.** `FastApiBrandKitAiClient`가 `body.get("imageBase64")`를 읽고 있어, 백엔드 수정 없이 붙도록 `images[0]`을 그대로 복제해 둡니다 |
+| `images` | 정식 필드. 현재는 1장이지만 명함 앞/뒤, 썸네일 각도 변형으로 늘어날 여지를 둡니다 |
 | `preliminary` | `true`면 최종 품질이 아닌 임시 합성 결과 |
+| `warnings` | `preliminary`인 이유. 로깅용이며 비어 있을 수 있습니다 |
 | `elapsedMs` | AI 서버 내부 소요 시간 |
 
-응답 키를 `imageBase64` 단일 값이 아니라 `images[]`로 둔 이유는 위와 같습니다. 백엔드는 `images[0]`만 저장해도 무방합니다.
+**백엔드는 지금 코드 그대로 두셔도 동작합니다.** `images[]`로 옮기는 건 여유 있을 때 하시면 됩니다.
 
 ### 1-5. 현재 구현 상태
 
 | kit_type | 상태 | preliminary |
 |---|---|---|
-| `BUSINESS_CARD` | **완료.** 좌(로고) / 우(인적사항) 2단 템플릿 합성 | `false` |
+| `BUSINESS_CARD` (`card_info` 있음) | **완료.** 좌(로고) / 우(인적사항) 2단 템플릿 합성 | `false` |
+| `BUSINESS_CARD` (`card_info` 없음) | 회사명만 넣은 브랜드 카드로 합성 | `true` |
 | `PRODUCT_THUMBNAIL` | 톤 기반 그라데이션 배경 + 로고·제품명 합성까지 동작. **FLUX 연출 배경 미적용** | `true` |
 
 `preliminary=true`인 동안에도 응답 형식·규격은 확정본과 동일하므로 백엔드 연동과 화면 작업을 지금 진행하실 수 있습니다. FLUX 배경이 붙으면 `preliminary`만 `false`로 바뀝니다.
@@ -533,7 +542,6 @@ DINOv2의 코사인 유사도는 서로 무관한 상표 간에도 평균 0.49�
 | HTTP | code | 상황 | 재시도 |
 |---|---|---|---|
 | 400 | `BRANDKIT_INVALID_IMAGE` | `logo_image_base64` 디코드 실패 / 이미지 아님 / 8px 미만 | 무의미 |
-| 400 | `BRANDKIT_MISSING_CARD_INFO` | `BUSINESS_CARD`인데 `card_info` 없음 | 무의미 |
 | 422 | `SIMILARITY_INVALID_REQUEST` | 스키마 불일치(알 수 없는 `kit_type` 등) | 무의미 |
 | 500 | `BRANDKIT_COMPOSITION_FAILED` | 합성 중 예기치 못한 오류 | 가능 |
 
@@ -605,6 +613,6 @@ DINOv2의 코사인 유사도는 서로 무관한 상표 간에도 평균 0.49�
 
 ## 3. 백엔드에서 확인 부탁드리는 것
 
-1. `card_info` 입력 화면이 필요합니다 (이름·직함·회사명·연락처·이메일·주소). 프론트 협의 대상입니다.
+1. `card_info` 입력 화면이 필요합니다 (이름·직함·회사명·연락처·이메일·주소). 없어도 실패하지는 않지만 명함에 인적사항이 비어 나갑니다. `POST /brand-kits`에 요청 본문을 추가하는 작업이 함께 필요합니다.
 2. BI 산출물 명칭을 `PRODUCT_THUMBNAIL`로 맞출지, `BOTTLE`을 계속 쓸지. 둘 다 동작하므로 급하지 않습니다.
 3. `avoid_logos` → `variant_offset` 교체 시점.

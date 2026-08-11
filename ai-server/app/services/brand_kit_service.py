@@ -23,10 +23,7 @@ from typing import Optional, Tuple
 import numpy as np
 from PIL import Image, ImageDraw
 
-from app.core.exceptions import (
-    BrandKitInvalidImage,
-    BrandKitMissingCardInfo,
-)
+from app.core.exceptions import BrandKitInvalidImage
 from app.schemas.brand_kit import (
     KIT_SIZE,
     BrandKitImage,
@@ -160,11 +157,16 @@ def _readable_on(bg: Tuple[int, int, int]) -> Tuple[int, int, int]:
 
 
 # --------------------------------------------------------------------------- 명함
-def _compose_business_card(logo: Image.Image, info: CardInfo, survey: dict) -> Image.Image:
+def _compose_business_card(
+    logo: Image.Image, info: Optional[CardInfo], survey: dict
+) -> Image.Image:
     """좌: 로고 / 우: 인적사항 2단 구성.
 
     로고를 위, 정보를 아래에 쌓으면 명함 가로폭(1063px) 우측 절반이 통째로 비어
     허전해진다(실측 확인됨). 좌우로 나눠 양쪽 무게를 맞춘다.
+
+    info가 없으면(백엔드가 아직 card_info를 안 보내는 상태) 회사명만 넣은 브랜드
+    카드로 합성한다. 레이아웃은 동일하므로 나중에 값이 채워지면 그대로 명함이 된다.
     """
     W, H = KIT_SIZE["BUSINESS_CARD"]
     accent = _pick_accent(survey)
@@ -195,16 +197,22 @@ def _compose_business_card(logo: Image.Image, info: CardInfo, survey: dict) -> I
     f_title = _resolve_font(24, weight="regular")
     f_body = _resolve_font(22, weight="regular")
 
-    company = (info.company or "").strip()
-    lines = [t.strip() for t in (info.phone, info.email, info.address) if t and t.strip()]
+    brand = _brand_name(survey)
+    if info is None:
+        headline, title, company, lines = brand or " ", None, "", []
+    else:
+        headline = info.name
+        title = (info.title or "").strip() or None
+        company = (info.company or brand or "").strip()
+        lines = [t.strip() for t in (info.phone, info.email, info.address) if t and t.strip()]
 
-    block_h = 56 + (34 if info.title else 0) + (30 if company else 0) + len(lines) * 32
+    block_h = 56 + (34 if title else 0) + (30 if company else 0) + len(lines) * 32
     y = (H - block_h) // 2
 
-    d.text((tx, y), info.name, font=f_name, fill=(24, 28, 36))
+    d.text((tx, y), headline, font=f_name, fill=(24, 28, 36))
     y += 56
-    if info.title:
-        d.text((tx, y), info.title, font=f_title, fill=accent)
+    if title:
+        d.text((tx, y), title, font=f_title, fill=accent)
         y += 34
     if company:
         d.text((tx, y), company, font=f_body, fill=(120, 128, 142))
@@ -259,28 +267,26 @@ def _to_base64(img: Image.Image) -> str:
 def create_brand_kit(req: BrandKitRequest) -> BrandKitResponse:
     started = time.monotonic()
     kit_type = req.canonical_kit_type
-
-    if kit_type == "BUSINESS_CARD" and req.card_info is None:
-        raise BrandKitMissingCardInfo()
-
     logo = _decode_logo(req.logo_image_base64)
+    warnings: list[str] = []
 
     if kit_type == "BUSINESS_CARD":
         image = _compose_business_card(logo, req.card_info, req.survey)
-        preliminary = False
+        if req.card_info is None:
+            warnings.append(
+                "card_info가 없어 회사명만 넣은 브랜드 카드로 합성했습니다. "
+                "이름·직함·연락처를 보내면 명함으로 완성됩니다."
+            )
     else:
         image = _compose_product_thumbnail(logo, req.product_name, req.survey)
-        preliminary = True  # FLUX 연출 배경 미적용
+        warnings.append("FLUX 연출 배경 미적용 — 톤 기반 그라데이션으로 대체했습니다.")
 
+    encoded = _to_base64(image)
     return BrandKitResponse(
         kitType=kit_type,
-        images=[
-            BrandKitImage(
-                imageBase64=_to_base64(image),
-                width=image.width,
-                height=image.height,
-            )
-        ],
-        preliminary=preliminary,
+        imageBase64=encoded,
+        images=[BrandKitImage(imageBase64=encoded, width=image.width, height=image.height)],
+        preliminary=bool(warnings),
+        warnings=warnings,
         elapsedMs=int((time.monotonic() - started) * 1000),
     )

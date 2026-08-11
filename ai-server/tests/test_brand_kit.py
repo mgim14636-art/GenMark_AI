@@ -58,18 +58,69 @@ def test_business_card_returns_print_sized_image():
     assert _decode(image).size == (1063, 591)
 
 
-def test_business_card_requires_card_info():
+def test_response_exposes_top_level_image_base64():
+    """백엔드 FastApiBrandKitAiClient가 응답 최상위 imageBase64를 읽는다.
+
+    images[]만 내보내면 AI_INVALID_RESPONSE로 떨어지므로 두 자리를 함께 채운다.
+    """
+    response = client.post(
+        "/api/v1/generation/brand-kit",
+        json={"kit_type": "BUSINESS_CARD", "logo_image_base64": _logo_b64(), "survey": {}},
+    )
+
+    body = response.json()
+    assert isinstance(body["imageBase64"], str) and body["imageBase64"]
+    assert body["imageBase64"] == body["images"][0]["imageBase64"]
+
+
+def test_business_card_without_card_info_degrades_instead_of_failing():
+    """백엔드 BrandKitProcessor는 현재 card_info를 보내지 않는다.
+
+    400을 내면 CI 브랜드킷이 전부 FAILED로 끝나므로, 회사명만 넣은 카드로 합성하고
+    preliminary와 warnings로 미완성임을 알린다.
+    """
     response = client.post(
         "/api/v1/generation/brand-kit",
         json={
             "kit_type": "BUSINESS_CARD",
             "logo_image_base64": _logo_b64(),
-            "survey": {},
+            "ci_bi": "CI",
+            "survey": {"company_name": "젠마크", "color_manual": ["#4F46E5"]},
         },
     )
 
-    assert response.status_code == 400
-    assert response.json()["code"] == "BRANDKIT_MISSING_CARD_INFO"
+    assert response.status_code == 200
+    body = response.json()
+    assert body["preliminary"] is True
+    assert any("card_info" in w for w in body["warnings"])
+    assert body["images"][0]["width"] == 1063
+
+
+def test_backend_minimal_request_shape_is_accepted():
+    """BrandKitProcessor.buildRequest가 실제로 보내는 4개 키만으로 동작해야 한다."""
+    response = client.post(
+        "/api/v1/generation/brand-kit",
+        json={
+            "kit_type": "BOTTLE",
+            "logo_image_base64": _logo_b64(),
+            "survey": {
+                "ci_bi": "BI",
+                "company_name": "젠마크",
+                "industry": "COSMETICS",
+                "company_values_text": "신뢰, 혁신",
+                "tone": "friendly",
+                "color_mode": "MANUAL",
+                "color_manual": ["#4F46E5", "#EC4899"],
+                "style": "combination",
+                "additional_requirements": None,
+                "num_variants": 4,
+            },
+            "ci_bi": "BI",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["images"][0]["width"] == 1000
 
 
 def test_product_thumbnail_is_1000x1000_and_flagged_preliminary():
@@ -89,6 +140,7 @@ def test_product_thumbnail_is_1000x1000_and_flagged_preliminary():
     assert body["kitType"] == "PRODUCT_THUMBNAIL"
     # FLUX 연출 배경이 붙기 전까지는 임시 결과임을 백엔드가 구분할 수 있어야 한다
     assert body["preliminary"] is True
+    assert any("FLUX" in w for w in body["warnings"])
     image = body["images"][0]
     assert (image["width"], image["height"]) == (1000, 1000)
 

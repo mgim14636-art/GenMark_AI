@@ -75,12 +75,6 @@ class BrandKitInvalidImage(CodedHTTPException):
     message_default = "logo_image_base64 could not be decoded as an image."
 
 
-class BrandKitMissingCardInfo(CodedHTTPException):
-    code = "BRANDKIT_MISSING_CARD_INFO"
-    status_code_default = status.HTTP_400_BAD_REQUEST
-    message_default = "card_info is required when kit_type is BUSINESS_CARD."
-
-
 class BrandKitCompositionFailed(CodedHTTPException):
     code = "BRANDKIT_COMPOSITION_FAILED"
     status_code_default = status.HTTP_500_INTERNAL_SERVER_ERROR
