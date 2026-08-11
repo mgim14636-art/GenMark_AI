@@ -122,7 +122,7 @@ const hsvToRgb = (h: number, s: number, v: number): RgbColor => {
   return { r: (red + match) * 255, g: (green + match) * 255, b: (blue + match) * 255 }
 }
 
-const ToneColorPalette = ({ value, onChange, ariaLabel }: { value: RgbColor; onChange: (color: RgbColor) => void; ariaLabel: string }) => {
+const ToneColorPalette = ({ value, onChange, onComplete, ariaLabel }: { value: RgbColor; onChange: (color: RgbColor) => void; onComplete: () => void; ariaLabel: string }) => {
   const hsv = rgbToHsv(value)
   const updateFromPointer = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -144,11 +144,14 @@ const ToneColorPalette = ({ value, onChange, ariaLabel }: { value: RgbColor; onC
       >
         <span className="tone-color-palette-preview" style={{ left: `${hsv.h / 3.6}%`, top: `${(1 - hsv.v) * 100}%`, background: rgbToHex(value) }} />
       </div>
-      <label className="tone-native-picker-button">
-        <span className="tone-native-picker-dot" style={{ background: rgbToHex(value) }} aria-hidden="true" />
-        <span>색상 세부 조정</span>
-        <input type="color" aria-label={`${ariaLabel} 세부 조정`} value={rgbToHex(value)} onChange={(event) => onChange(hexToRgb(event.target.value))} />
-      </label>
+      <div className="tone-palette-actions">
+        <label className="tone-native-picker-button">
+          <span className="tone-native-picker-dot" style={{ background: rgbToHex(value) }} aria-hidden="true" />
+          <span>색상 세부 조정</span>
+          <input type="color" aria-label={`${ariaLabel} 세부 조정`} value={rgbToHex(value)} onChange={(event) => onChange(hexToRgb(event.target.value))} />
+        </label>
+        <button className="tone-native-picker-done" type="button" onClick={onComplete}>선택 완료</button>
+      </div>
     </div>
   )
 }
@@ -1097,11 +1100,11 @@ function CustomerApp() {
                   <ToneColorPalette
                     value={hexToRgb((customToneColors[tone.id] ?? tone.colors)[tonePaletteTarget.slot])}
                     onChange={(color) => updateToneColorFromHex(tone.id, tonePaletteTarget.slot, rgbToHex(color))}
+                    onComplete={() => setTonePaletteTarget(null)}
                     ariaLabel={`${tone.label} 색상 팔레트`}
                   />
                   <div className="tone-inline-picker-footer">
                     <span>두 색상 · {(customToneColors[tone.id] ?? tone.colors).join(' / ')}</span>
-                    <button type="button" onClick={() => setTonePaletteTarget(null)}>선택 완료</button>
                   </div>
                 </div>
               )}
@@ -1144,6 +1147,7 @@ function CustomerApp() {
               <ToneColorPalette
                 value={manualColorSlot === 0 ? manualColor : manualSecondaryColor}
                 onChange={(color) => updateManualColorFromHex(rgbToHex(color))}
+                onComplete={() => setColorPickerOpen(false)}
                 ariaLabel="색상 팔레트"
               />
               <div className="tone-rgb-fields" aria-label="RGB 값 입력">
@@ -1163,7 +1167,6 @@ function CustomerApp() {
               </div>
               <div className="tone-color-picker-footer">
                 <span>두 색상 · {rgbToHex(manualColor)} / {rgbToHex(manualSecondaryColor)}</span>
-                <button type="button" onClick={() => setColorPickerOpen(false)}>선택 완료</button>
               </div>
             </div>
           )}

@@ -4295,6 +4295,13 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 .tone-palette-control { display: grid; gap: 10px; width: 100%; }
 
+.tone-palette-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .tone-native-picker-button {
   display: inline-flex;
   position: relative;
@@ -4317,6 +4324,19 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   border-color: #a477eb;
   background: #faf7ff;
   transform: translateY(-1px);
+}
+
+.tone-native-picker-done {
+  min-height: 32px;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 14px;
+  color: #fff;
+  background: linear-gradient(100deg, #8e5ae7, #df6bb7);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .tone-native-picker-dot {
