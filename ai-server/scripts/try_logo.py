@@ -181,7 +181,7 @@ def main() -> int:
     tag = "".join(c for c in str(survey.get("tone", "")) if c.isalnum()) or "default"
     prefix = "logo_v2" if v2 else "logo_try"
     for i, symbol in enumerate(symbols, 1):
-        logo = logo_composer.compose_final_logo(symbol, survey)
+        logo = logo_composer.compose_final_logo(symbol, survey, variant_index=i - 1)
         path = OUT_DIR / f"{prefix}_{tag}_{i}.png"
         logo.save(path)
         print(f"   저장: {path}  {logo.size}", flush=True)
