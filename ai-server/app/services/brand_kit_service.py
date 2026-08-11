@@ -1,9 +1,9 @@
 """브랜드킷(F14) 합성 서비스.
 
 설계 전제 — 로고를 이미지 생성 모델에 통째로 넣지 않는다.
-현재 FLUX 호출부(flux_service._call_flux_klein)는 prompt/width/height/seed/steps만
-보내는 text-to-image 경로이고, 설령 image-to-image가 열려도 디퓨전 모델은 입력 로고를
-그대로 재현하지 못한다. 브랜드 아이덴티티 산출물에서 사용자의 로고가 변형돼 나오면
+현재 FLUX 호출부(flux_service._call_flux_pro)는 프롬프트만 보내는 text-to-image
+경로다. OpenRouter Image API에 input_references(image-to-image)가 있긴 하지만,
+디퓨전 모델은 입력 로고를 그대로 재현하지 못한다. 브랜드 아이덴티티 산출물에서 사용자의 로고가 변형돼 나오면
 기능 자체가 무의미해지므로, 배경만 생성하고 로고는 PIL로 정확히 얹는다.
 이 방침은 기획서 (7) 수행방법의 'CI 명함: 정보 정확도 확보를 위해 이미지 생성 모델
 미사용' 항목과 동일하다.

@@ -71,10 +71,10 @@ def main() -> int:
 
     from app.services import flux_service, logo_composer
 
-    if not flux_service.NVIDIA_API_KEY:
-        print("NVIDIA_API_KEY가 없습니다. ai-server/.env를 확인하세요.")
+    if not flux_service.OPENROUTER_API_KEY:
+        print("OPENROUTER_API_KEY가 없습니다. ai-server/.env를 확인하세요.")
         return 1
-    print(f"URL: {flux_service.NVIDIA_API_URL}\n", flush=True)
+    print(f"URL: {flux_service.OPENROUTER_API_URL} ({flux_service.OPENROUTER_MODEL})\n", flush=True)
 
     rng = random.Random(20260810)
     per_style = max(1, target // len(STYLES))

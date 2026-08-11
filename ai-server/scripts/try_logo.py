@@ -1,6 +1,6 @@
 """로고 생성 스모크 테스트.
 
-FLUX API가 실제로 응답하는지, 폰트 합성까지 끝나는지 한 번에 확인한다.
+OpenRouter 이미지 API가 실제로 응답하는지, 폰트 합성까지 끝나는지 한 번에 확인한다.
 
 사용법:
     cd ai-server
@@ -41,25 +41,25 @@ def main() -> int:
 
     from app.services import flux_service, logo_composer
 
-    key = flux_service.NVIDIA_API_KEY or ""
+    key = flux_service.OPENROUTER_API_KEY or ""
     print("=" * 60, flush=True)
-    print(f"URL   : {flux_service.NVIDIA_API_URL}", flush=True)
-    print(f"KEY   : {key[:6]}... ({len(key)}자)" if key else "KEY   : ❌ 없음", flush=True)
+    print(f"URL   : {flux_service.OPENROUTER_API_URL}", flush=True)
+    print(f"MODEL : {flux_service.OPENROUTER_MODEL}", flush=True)
+    print(f"KEY   : {key[:8]}... ({len(key)}자)" if key else "KEY   : ❌ 없음", flush=True)
     print(f"시안수 : {n}", flush=True)
     print(f"타임아웃: {flux_service.REQUEST_TIMEOUT}초 x (재시도 {flux_service.MAX_RETRIES}회)", flush=True)
     print("=" * 60, flush=True)
 
     if not key:
-        print("\nNVIDIA_API_KEY가 없습니다. ai-server/.env를 확인하세요.", flush=True)
+        print("\nOPENROUTER_API_KEY가 없습니다. ai-server/.env를 확인하세요.", flush=True)
         return 1
-    if "ngrok" in flux_service.NVIDIA_API_URL:
-        print("\n⚠️  ngrok 터널 주소입니다. 해당 PC가 켜져 있어야 동작합니다.", flush=True)
 
     print("\n요청 중... (최대 2분, 끊으려면 Ctrl+C)\n", flush=True)
     started = time.time()
 
     try:
-        symbols = flux_service.generate_logo_from_survey(SURVEY, num_variants=n)
+        variants = flux_service.generate_logo_variants(SURVEY, num_variants=n)
+        symbols = [v["image"] for v in variants]
     except KeyboardInterrupt:
         print(f"\n사용자가 중단했습니다 ({time.time() - started:.0f}초 경과).", flush=True)
         return 130
@@ -69,6 +69,8 @@ def main() -> int:
         return 1
 
     print(f"\n✅ 심볼 {len(symbols)}장 수신 ({time.time() - started:.1f}초)", flush=True)
+    for v in variants:
+        print(f"   variantIndex={v['variant_index']}  seed={v['seed']}", flush=True)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for i, symbol in enumerate(symbols, 1):

@@ -596,8 +596,8 @@ DINOv2의 코사인 유사도는 서로 무관한 상표 간에도 평균 0.49�
 ```json
 {
   "logos": [
-    { "imageBase64": "iVBORw0KGgo...", "seed": null, "variantIndex": 4 },
-    { "imageBase64": "iVBORw0KGgo...", "seed": null, "variantIndex": 5 }
+    { "imageBase64": "iVBORw0KGgo...", "seed": 2847193021, "variantIndex": 4 },
+    { "imageBase64": "iVBORw0KGgo...", "seed":  938471002, "variantIndex": 5 }
   ]
 }
 ```
@@ -605,7 +605,7 @@ DINOv2의 코사인 유사도는 서로 무관한 상표 간에도 평균 0.49�
 | 필드 | 설명 |
 |---|---|
 | `variantIndex` | 이 시안에 배정된 모티프 인덱스 (`variant_offset + i`) |
-| `seed` | **현재 항상 `null`입니다.** 로고 생성이 OpenRouter flux.2-pro로 전환되면서(`d0a9b45`) 시드 파라미터가 사라졌습니다. 시드를 노출하는 제공자로 돌아갈 때를 대비해 키 자체는 남겨 두었으니, `ai_metadata_json`에는 `variantIndex`만 저장하시면 됩니다 |
+| `seed` | 생성에 쓴 시드. OpenRouter Image API의 `seed` 파라미터로 넘긴 값이며, flux.2-pro 엔드포인트가 이를 지원함을 `images/models/black-forest-labs/flux.2-pro/endpoints`에서 확인했습니다 |
 
 기존 응답에 **추가만** 된 것이라 지금 붙어 있는 소비자는 영향받지 않습니다. `logo_candidates.ai_metadata_json`에 그대로 저장하시면, 나중에 "몇 회차까지 재생성했는지"와 "어떤 모티프가 선택률이 높은지"를 추적할 수 있습니다.
 

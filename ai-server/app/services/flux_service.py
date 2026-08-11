@@ -1,5 +1,6 @@
 import base64
 import os
+import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
@@ -14,6 +15,7 @@ load_dotenv()
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/images"
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "black-forest-labs/flux.2-pro")
 
 REQUEST_TIMEOUT = 60
 MAX_RETRIES = 1
@@ -21,9 +23,7 @@ MAX_RETRIES = 1
 _session = requests.Session()
 
 
-
-
-def _call_flux_pro(prompt: str) -> Image.Image:
+def _call_flux_pro(prompt: str, seed: int | None = None) -> Image.Image:
     if not OPENROUTER_API_KEY:
         raise RuntimeError(
             "OPENROUTER_API_KEY가 설정되지 않았습니다. .env 파일에 OPENROUTER_API_KEY를 추가하세요."
@@ -34,11 +34,16 @@ def _call_flux_pro(prompt: str) -> Image.Image:
         "Content-Type": "application/json",
     }
     payload = {
-        "model": "black-forest-labs/flux.2-pro",
+        "model": OPENROUTER_MODEL,
         "prompt": prompt,
         "aspect_ratio": "1:1",
         "output_format": "png",
     }
+    # flux.2-pro 엔드포인트가 seed를 지원한다(images/models/.../endpoints에서 확인).
+    # 같은 프롬프트로 재현하거나, 마음에 든 시안을 다시 뽑을 때 필요하므로 넘기고
+    # 백엔드 ai_metadata_json에 저장할 수 있게 응답에도 실어 보낸다.
+    if seed is not None:
+        payload["seed"] = seed
 
     last_error = None
     for attempt in range(MAX_RETRIES + 1):
@@ -98,14 +103,13 @@ def generate_logo_variants(
         OpenRouter flux.2-pro에는 해당 파라미터가 없다. 기존 호출부 시그니처를
         유지하려고 인자로만 받고 쓰지 않는다.
 
-    반환: [{"image": Image, "seed": None, "variant_index": int}, ...] (생성 성공분만)
-        seed는 현재 제공자가 노출하지 않아 항상 None이다. 시드를 돌려주는 제공자로
-        돌아갈 때를 대비해 키 자체는 남겨 백엔드 계약을 흔들지 않는다.
+    반환: [{"image": Image, "seed": int, "variant_index": int}, ...] (생성 성공분만)
     """
     del steps  # 호출부 호환용으로만 받는다
 
     indices = [variant_offset + i for i in range(num_variants)]
     prompts = [build_prompt_from_survey(survey, variant_index=v) for v in indices]
+    seeds = [random.randint(0, 2_147_483_647) for _ in range(num_variants)]
 
     started = time.monotonic()
     results = [None] * num_variants
@@ -113,7 +117,7 @@ def generate_logo_variants(
 
     with ThreadPoolExecutor(max_workers=num_variants) as executor:
         future_to_idx = {
-            executor.submit(_call_flux_pro, prompts[i]): i
+            executor.submit(_call_flux_pro, prompts[i], seeds[i]): i
             for i in range(num_variants)
         }
         for future in as_completed(future_to_idx):
@@ -124,7 +128,7 @@ def generate_logo_variants(
                 errors.append(str(e))
 
     variants = [
-        {"image": img, "seed": None, "variant_index": indices[i]}
+        {"image": img, "seed": seeds[i], "variant_index": indices[i]}
         for i, img in enumerate(results)
         if img is not None
     ]
