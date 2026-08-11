@@ -14,7 +14,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
@@ -38,19 +41,21 @@ public class LogoGenerationProcessor {
             Map<String, Object> survey = objectMapper.readValue(
                     generation.getRequestSnapshotJson(), new TypeReference<>() {});
             LogoAiClient.LogoAiResult result = logoAiClient.generate(survey);
-            List<String> logos = result.logos();
+            List<LogoAiClient.GeneratedLogo> logos = result.logos();
             if (!result.success() || logos == null || logos.size() != 4) {
                 throw new ApiException(ErrorCode.AI_INCOMPLETE_RESULT);
             }
             List<LogoFileStorage.StoredImage> images = new ArrayList<>(4);
             for (int i = 0; i < 4; i++) {
-                images.add(storage.store(generation.getPublicId(), i + 1, logos.get(i)));
+                images.add(storage.store(generation.getPublicId(), i + 1, logos.get(i).imageBase64()));
             }
             for (int i = 0; i < 4; i++) {
                 LogoFileStorage.StoredImage image = images.get(i);
                 candidateRepository.save(LogoCandidate.builder().generation(generation).candidateOrder(i + 1)
                         .storageKey(image.storageKey()).mimeType("image/png")
-                        .width(image.width()).height(image.height()).build());
+                        .width(image.width()).height(image.height())
+                        .aiMetadataJson(writeMetadata(logos.get(i)))
+                        .build());
             }
             generation.setStatus(LogoGeneration.Status.SUCCEEDED);
             generation.getProject().setStatus(ProjectStatus.RESULT_READY);
@@ -61,6 +66,26 @@ public class LogoGenerationProcessor {
             generation.setErrorCode(ex instanceof ApiException api ? api.getErrorCode().name() : ErrorCode.AI_UNAVAILABLE.name());
             generation.setErrorMessage(safeMessage(ex));
             generation.setCompletedAt(LocalDateTime.now());
+        }
+    }
+
+    /**
+     * AI가 이 후보와 함께 돌려준 시드·모티프 번호를 저장해둔다. 재생성(F12-2) 시
+     * {@link LogoGenerationService}가 이 값을 근거로 다음 모티프 위치를 계산한다.
+     *
+     * <p>AI가 값을 안 주면(둘 다 null) 저장할 게 없으므로 null을 돌려주고, 컬럼은
+     * 비워둔다. 메타데이터 직렬화 실패가 로고 생성 자체를 실패시켜서는 안 되므로
+     * 예외를 던지지 않는다.
+     */
+    private String writeMetadata(LogoAiClient.GeneratedLogo logo) {
+        if (logo.seed() == null && logo.variantIndex() == null) return null;
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (logo.variantIndex() != null) metadata.put("variantIndex", logo.variantIndex());
+        if (logo.seed() != null) metadata.put("seed", logo.seed());
+        try {
+            return objectMapper.writeValueAsString(metadata);
+        } catch (JsonProcessingException e) {
+            return null;
         }
     }
 

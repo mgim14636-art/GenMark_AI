@@ -10,11 +10,15 @@ export default defineConfig(({ mode }) => {
     // KAKAO_REST_API_KEY remains backend-only.
     define: {
       'import.meta.env.GOOGLE_CLIENT_ID': JSON.stringify(env.GOOGLE_CLIENT_ID ?? ''),
+      'import.meta.env.BACKEND_PORT': JSON.stringify(env.BACKEND_PORT ?? ''),
     },
     plugins: [react()],
     server: {
       proxy: {
-        '/api': `http://localhost:${backendPort}`,
+        '/api': {
+          target: `http://localhost:${backendPort}`,
+          changeOrigin: true,
+        },
       },
     },
   }

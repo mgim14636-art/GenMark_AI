@@ -9,7 +9,7 @@ import java.util.UUID;
 /**
  * 브랜드킷 결과물. 완성된 로고를 실제 물건에 얹은 이미지다.
  *
- * <p>CI는 명함({@link KitType#BUSINESS_CARD}), BI는 로션 병({@link KitType#BOTTLE})을 만든다.
+ * <p>CI는 명함({@link KitType#BUSINESS_CARD}), BI는 제품 썸네일({@link KitType#THUMBNAIL})을 만든다.
  *
  * <p>AI가 이미지를 만드는 작업이라 시간이 걸리고 실패할 수 있으므로,
  * {@link LogoGeneration}·{@link TrademarkAnalysis}와 같은 비동기 구조
@@ -22,8 +22,8 @@ public class BrandKit {
 
     public enum Status { QUEUED, RUNNING, SUCCEEDED, FAILED }
 
-    /** BUSINESS_CARD = 명함(CI용), BOTTLE = 로션 병(BI용). */
-    public enum KitType { BUSINESS_CARD, BOTTLE }
+    /** BUSINESS_CARD = 명함(CI용), THUMBNAIL = 제품 썸네일(BI용). */
+    public enum KitType { BUSINESS_CARD, THUMBNAIL }
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
