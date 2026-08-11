@@ -71,6 +71,7 @@ class GeneratedLogo(BaseModel):
 
     # 백엔드 logo_candidates.ai_metadata_json에 저장해 재생성 품질 추적에 쓰는 값들.
     # 응답 본문에 추가만 된 것이라 기존 소비자는 영향받지 않는다.
+    # seed는 현재 제공자(OpenRouter flux.2-pro)가 노출하지 않아 항상 null이다.
     seed: Optional[int] = None
     variantIndex: Optional[int] = None
 

@@ -35,8 +35,9 @@ def _fake_variants(monkeypatch, captured=None):
     def fake(survey, num_variants=4, steps=None, variant_offset=0):
         if captured is not None:
             captured["variant_offset"] = variant_offset
+        # seed는 OpenRouter flux.2-pro가 노출하지 않아 실제로도 None이다
         return [
-            {"image": symbols[i], "seed": 1000 + i, "variant_index": variant_offset + i}
+            {"image": symbols[i], "seed": None, "variant_index": variant_offset + i}
             for i in range(num_variants)
         ]
 
@@ -62,7 +63,7 @@ def test_generation(monkeypatch):
     assert all(base64.b64decode(logo["imageBase64"]).startswith(b"\x89PNG") for logo in logos)
     # 백엔드 ai_metadata_json 저장용 필드가 실제로 실려 나가는지
     assert [logo["variantIndex"] for logo in logos] == [0, 1, 2, 3]
-    assert all(logo["seed"] is not None for logo in logos)
+    assert all("seed" in logo for logo in logos)
 
 
 def test_generation_variant_offset_is_passed_through(monkeypatch):
