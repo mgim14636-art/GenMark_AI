@@ -5,7 +5,7 @@
 
 사용법:
     cd ai-server
-    python scripts/try_similarity.py                      # data/outputs/logo_try_*.png 전부
+    python scripts/try_similarity.py                      # logo_try_*.png + logo_v2_*.png 전부
     python scripts/try_similarity.py data/outputs/a.png   # 특정 파일
 
 산출물:
@@ -33,7 +33,9 @@ OUT_DIR = ROOT / "data" / "outputs"
 def collect_targets() -> list[Path]:
     if len(sys.argv) > 1:
         return [Path(p) for p in sys.argv[1:]]
-    found = sorted(OUT_DIR.glob("logo_try_*.png"))
+    # v1(logo_try_*)과 v2(logo_v2_*) 결과를 모두 훑는다. 프롬프트 방식이 바뀌면
+    # 유사도 점수가 어떻게 움직이는지 같은 실행에서 비교해야 하기 때문이다.
+    found = sorted(OUT_DIR.glob("logo_try_*.png")) + sorted(OUT_DIR.glob("logo_v2_*.png"))
     if not found:
         found = sorted(OUT_DIR.glob("logo_test_*.png"))
     return found
