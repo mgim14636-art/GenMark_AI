@@ -36,11 +36,36 @@ public class JwtProvider {
         return accessTokenExpirationSeconds;
     }
 
+    /**
+     * 관리자 토큰임을 구분하는 클레임 이름. 이 값이 {@link #TOKEN_TYPE_ADMIN}이면 관리자 토큰이다.
+     * 클레임이 없는 기존 토큰은 모두 회원 토큰으로 취급된다(하위 호환).
+     */
+    public static final String CLAIM_TOKEN_TYPE = "typ";
+    public static final String TOKEN_TYPE_ADMIN = "admin";
+
     public String generateAccessToken(Long memberId, String email) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(String.valueOf(memberId))
                 .claim("email", email)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plusSeconds(accessTokenExpirationSeconds)))
+                .signWith(signingKey, Jwts.SIG.HS256)
+                .compact();
+    }
+
+    /**
+     * 관리자용 액세스 토큰. 회원 토큰과 서명 키는 같지만 {@code typ=admin} 클레임으로 구분한다.
+     *
+     * <p>클레임을 나누는 이유: 회원 토큰으로 관리자 API를 부르거나 그 반대가 되면 안 되기 때문이다.
+     * 필터가 이 값을 보고 서로 다른 principal과 권한을 부여한다.
+     */
+    public String generateAdminAccessToken(Long adminId, String loginId) {
+        Instant now = Instant.now();
+        return Jwts.builder()
+                .subject(String.valueOf(adminId))
+                .claim("loginId", loginId)
+                .claim(CLAIM_TOKEN_TYPE, TOKEN_TYPE_ADMIN)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(accessTokenExpirationSeconds)))
                 .signWith(signingKey, Jwts.SIG.HS256)

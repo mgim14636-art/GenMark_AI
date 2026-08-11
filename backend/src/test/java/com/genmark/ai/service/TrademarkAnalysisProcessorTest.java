@@ -20,9 +20,10 @@ class TrademarkAnalysisProcessorTest {
         TrademarkMatchRepository matchRepository = mock(TrademarkMatchRepository.class);
         TrademarkAiClient aiClient = mock(TrademarkAiClient.class);
         LogoFileStorage storage = mock(LogoFileStorage.class);
-        Project project = Project.builder().build();
-        LogoCandidate candidate = LogoCandidate.builder().storageKey("logos/c.png").build();
-        TrademarkAnalysis analysis = TrademarkAnalysis.builder().id(1L).project(project).candidate(candidate)
+        CiProject project = CiProject.builder().build();
+        LogoGeneration generation = LogoGeneration.builder().ciProject(project).build();
+        LogoCandidate candidate = LogoCandidate.builder().storageKey("logos/c.png").generation(generation).build();
+        TrademarkAnalysis analysis = TrademarkAnalysis.builder().id(1L).candidate(candidate)
                 .status(TrademarkAnalysis.Status.QUEUED).build();
         when(analysisRepository.findById(1L)).thenReturn(Optional.of(analysis));
         when(storage.read("logos/c.png")).thenReturn(new byte[]{1, 2, 3});
@@ -33,7 +34,7 @@ class TrademarkAnalysisProcessorTest {
         new TrademarkAnalysisProcessor(analysisRepository, matchRepository, aiClient, storage).process(1L);
 
         assertThat(analysis.getStatus()).isEqualTo(TrademarkAnalysis.Status.FAILED);
-        assertThat(project.getStatus()).isEqualTo(Project.Status.RESULT_READY);
+        assertThat(project.getStatus()).isEqualTo(ProjectStatus.RESULT_READY);
         verify(matchRepository, never()).save(any());
     }
 }

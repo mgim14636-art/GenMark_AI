@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public interface TrademarkAnalysisRepository extends JpaRepository<TrademarkAnalysis, Long> {
-    Optional<TrademarkAnalysis> findByPublicIdAndProjectMemberId(String publicId, Long memberId);
+    Optional<TrademarkAnalysis> findByPublicIdAndCandidateGenerationCiProjectMemberId(String publicId, Long memberId);
+    Optional<TrademarkAnalysis> findByPublicIdAndCandidateGenerationBiProjectMemberId(String publicId, Long memberId);
     List<TrademarkAnalysis> findByStatusAndStartedAtBefore(TrademarkAnalysis.Status status, LocalDateTime threshold);
 }

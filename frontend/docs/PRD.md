@@ -260,7 +260,7 @@ PUT    /projects/{id}/logo-style
 PUT    /projects/{id}/final-review
 POST   /projects/{id}/logo-generations
 GET    /projects/{id}/logo-generations/{generationId}
-GET    /projects/{id}/logo-candidates
+GET    /projects/{id}/logo-generations/{generationId}/logo-candidates
 POST   /projects/{id}/trademark-analyses
 GET    /projects/{id}/trademark-analyses/{analysisId}
 POST   /projects/{id}/logo-candidates/{candidateId}/select

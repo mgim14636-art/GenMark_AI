@@ -10,11 +10,12 @@ import static org.mockito.Mockito.mock;
 class TrademarkAnalysisServiceTest {
     @Test
     void mapsRiskLabelsWithoutRecalculatingScore() {
-        TrademarkAnalysisService service = new TrademarkAnalysisService(mock(ProjectService.class), null, null, null, null, null);
-        var project = com.genmark.ai.entity.Project.builder().publicId("p").build();
-        var generation = com.genmark.ai.entity.LogoGeneration.builder().project(project).build();
+        TrademarkAnalysisService service = new TrademarkAnalysisService(
+                mock(ProjectLookupService.class), null, null, null, null, null, null);
+        var project = com.genmark.ai.entity.CiProject.builder().publicId("p").build();
+        var generation = com.genmark.ai.entity.LogoGeneration.builder().ciProject(project).build();
         var candidate = com.genmark.ai.entity.LogoCandidate.builder().publicId("c").generation(generation).build();
-        TrademarkAnalysis analysis = TrademarkAnalysis.builder().publicId("a").project(project).candidate(candidate)
+        TrademarkAnalysis analysis = TrademarkAnalysis.builder().publicId("a").candidate(candidate)
                 .status(TrademarkAnalysis.Status.SUCCEEDED).maxSimilarity(73)
                 .riskLevel(TrademarkAnalysis.RiskLevel.CAUTION).build();
 

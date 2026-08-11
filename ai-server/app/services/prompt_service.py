@@ -37,6 +37,38 @@ _LEGACY_TONE_ALIASES = {
     "미니멀": "미니얼하고 직관적인",
 }
 
+_CURRENT_SURVEY_ALIASES = {
+    "industry": {
+        "COSMETICS": "뷰티",
+        "FASHION": "기타",
+        "FOOD": "기타",
+        "TECH": "기타",
+        "OTHER": "기타",
+    },
+    "tone": {
+        "friendly": "친근하고 다정한",
+        "professional": "전문적이고 신뢰감 있는",
+        "warm": "감성적이고 따뜻한",
+        "trendy": "유니크하고 트렌디한",
+        "minimal": "미니얼하고 직관적인",
+    },
+    "style": {
+        "symbol": "심볼",
+        "wordmark": "워드마크",
+        "combination": "혼합형",
+        "lettermark": "레터마크",
+    },
+    "target_age": {
+        "10-20": "10-20대",
+        "20-30": "20-30대",
+        "30-40": "30-40대",
+        "40-50": "40-50대",
+        "50-60": "50-60대",
+        "ALL": "전 연령",
+        "ALL_AGES": "전 연령",
+    },
+}
+
 
 def _normalize_tone(tone: str) -> str:
     return _LEGACY_TONE_ALIASES.get(tone, tone)
@@ -89,6 +121,13 @@ MOTIF_MAP = {
         "an infinity loop shape",
     ],
 }
+
+USER_MOTIF_RENDERING_APPROACHES = (
+    "a bold simplified flat silhouette",
+    "soft organic abstract contours",
+    "a clever negative-space construction",
+    "a balanced abstract composition",
+)
 
 # 설문 화면(FR-06)의 "모티프 카테고리" 칩 — 사용자가 이걸 고르면 업종 고정 목록
 # (MOTIF_MAP) 대신 이 목록에서 모티프를 고른다. 예전엔 이 필드가 코드에서 아예 읽히지
@@ -170,6 +209,7 @@ VALUE_KEYWORD_MAP = {
 
 TARGET_AGE_MODIFIER = {
     "10-20대": "a youthful, playful character",
+    "20-30대": "a youthful, modern character",
     "30-40대": "a modern, confident character",
     "40-50대": "a refined, reliable character",
     "50-60대": "a classic, dependable character",
@@ -225,9 +265,13 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
     쓰는 기본값이다. 이전에는 motif_category를 아예 읽지 않아서 "동물/생명체"를
     골라도 항상 업종 고정 보태니컬 모티프(잎사귀·물방울 등)만 나왔다(실측 확인됨).
 
-    motif_category가 없으면 기존처럼 업종 고정 목록에서, 선택한 가치 키워드
-    (VALUE_MOTIF_BIAS)에 해당하는 모티프를 우선 후보로 끌어올려 고른다.
+    motif_category와 추가 요청이 모두 없으면 특정 원·별·무한대 같은 도형을
+    강제하지 않고, 설문 전체를 바탕으로 한 열린 모티프 지시를 사용한다.
     """
+    extra = " ".join((survey.get("additional_requirements") or "").split())[:200]
+    if extra:
+        return "the exact user-requested subject"
+
     category_pool = []
     for cat in _raw_motif_categories(survey):
         for motif in MOTIF_CATEGORY_MAP.get(cat, []):
@@ -235,19 +279,14 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
                 category_pool.append(motif)
 
     if category_pool:
-        candidates = category_pool
-    else:
-        pool = MOTIF_MAP.get(industry_key, MOTIF_MAP["기타"])
-        biased = []
-        for key in _raw_value_keys(survey):
-            for motif in VALUE_MOTIF_BIAS.get(key, []):
-                if motif in pool and motif not in biased:
-                    biased.append(motif)
-        candidates = biased + [m for m in pool if m not in biased] if biased else pool
+        brand_name = (survey.get("brand_name") or "").strip().lower()
+        offset = sum(ord(c) for c in brand_name) if brand_name else 0
+        return category_pool[(offset + variant_index) % len(category_pool)]
 
-    brand_name = (survey.get("brand_name") or "").strip().lower()
-    offset = sum(ord(c) for c in brand_name) if brand_name else 0
-    return candidates[(offset + variant_index) % len(candidates)]
+    approach = USER_MOTIF_RENDERING_APPROACHES[
+        variant_index % len(USER_MOTIF_RENDERING_APPROACHES)
+    ]
+    return f"an original brand-specific subject derived from the survey, rendered with {approach}"
 
 
 def _resolve_colors(survey: dict, tone: str) -> str:
@@ -313,6 +352,15 @@ def _normalize_survey(survey: dict) -> dict:
             survey.setdefault("brand_values_text", survey.get("company_values_text"))
     elif survey.get("brand_direction") is not None:
         survey.setdefault("brand_values_text", survey.get("brand_direction"))
+
+    for field, aliases in _CURRENT_SURVEY_ALIASES.items():
+        value = survey.get(field)
+        if value in aliases:
+            survey[field] = aliases[value]
+
+    color_mode = survey.get("color_mode")
+    if isinstance(color_mode, str):
+        survey["color_mode"] = color_mode.lower()
     return survey
 
 
@@ -348,6 +396,16 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     extra = (survey.get("additional_requirements") or "").strip()
     extra = " ".join(extra.split())[:200]  # 개행 제거 및 과도한 길이 방지
 
+    user_motif_lead = ""
+    if extra:
+        approach = USER_MOTIF_RENDERING_APPROACHES[
+            variant_index % len(USER_MOTIF_RENDERING_APPROACHES)
+        ]
+        user_motif_lead = (
+            f"The primary motif must satisfy this exact user request: {extra}. "
+            f"Preserve that requested subject while using {approach}. "
+        )
+
     # core: 반드시 포함돼야 하는 핵심 지시(업종/스타일/색상/모티프+구체성+형태 품질/텍스트
     # 배제 규칙, 그리고 사용자가 직접 적은 추가 요구사항)를 완전한 문장으로 서술한다.
     # 모티프(가장 중요한 정보)를 맨 앞에 배치해 모델이 우선적으로 주목하게 하고, "선이
@@ -365,7 +423,8 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     # 문장 앞쪽 정보일수록 few-step 모델이 더 강하게 반영하는 경향이 있어, 업종
     # 바로 다음(가장 이른 위치)으로 옮겨 우선순위를 높였다.
     core = (
-        f"A minimalist flat vector logo icon for {industry} in a {color_kw} color palette, "
+        user_motif_lead
+        + f"A minimalist flat vector logo icon for {industry} in a {color_kw} color palette, "
         f"drawn as one bold, large, solid-filled silhouette in {motif_kw}, with a thick, "
         f"clean, unbroken outline that fills the canvas. {style_sentence} "
         + (f"The shape is {concreteness_kw}. " if concreteness_kw else "")
@@ -373,7 +432,6 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
         f"flat 2D, with no gradients, shadows, or 3D rendering. "
         f"Centered on a plain white background, with no readable letters or words, "
         f"finished and complete rather than a sketch."
-        + (f" {extra}" if extra else "")
     )
 
     # 부가 설명은 예산이 남는 만큼만 순서대로 붙인다. value_kw(사용자가 직접 고른 기업

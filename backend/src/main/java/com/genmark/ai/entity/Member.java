@@ -40,6 +40,16 @@ public class Member {
     @Column(name = "provider_id", length = 100)
     private String providerId;
 
+    /**
+     * 남은 크레딧 개수. 가입 시 2개를 받고, 로고를 쓸 때 차감되며, 설문조사에 응하면 2개를 더 받는다.
+     *
+     * <p>조회가 매우 잦아서(화면 상단 표시, 관리자 회원관리 목록) 잔액은 여기에 직접 둔다.
+     * 증감 내역은 {@link CreditHistory}에 따로 쌓이며, 그 합계는 이 값과 같아야 한다.
+     */
+    @Column(name = "credit_balance", nullable = false)
+    @Builder.Default
+    private int creditBalance = 2;
+
     /** 리프레시 토큰 원문은 저장하지 않고 SHA-256 해시만 저장한다. */
     @Column(name = "refresh_token_hash", length = 128)
     private String refreshTokenHash;

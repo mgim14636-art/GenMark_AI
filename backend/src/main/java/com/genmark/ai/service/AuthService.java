@@ -1,13 +1,17 @@
 package com.genmark.ai.service;
 
+import com.genmark.ai.entity.BiProject;
+import com.genmark.ai.entity.CiProject;
+import com.genmark.ai.entity.CreditHistory;
 import com.genmark.ai.entity.Member;
-import com.genmark.ai.entity.Project;
+import com.genmark.ai.entity.ProjectStatus;
 import com.genmark.ai.oauth.OAuthUserInfo;
 import com.genmark.ai.oauth.OAuthVerifier;
 import com.genmark.ai.oauth.OAuthVerifierResolver;
 import com.genmark.ai.repository.MemberRepository;
 import com.genmark.ai.repository.MemberOnboardingRepository;
-import com.genmark.ai.repository.ProjectRepository;
+import com.genmark.ai.repository.BiProjectRepository;
+import com.genmark.ai.repository.CiProjectRepository;
 import com.genmark.ai.security.JwtProvider;
 import com.genmark.ai.security.TokenHasher;
 import com.genmark.ai.web.exception.ApiException;
@@ -17,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 /**
  * API_SPEC.md 5.1 인증 흐름의 구현체.
@@ -28,7 +33,9 @@ public class AuthService {
     private final OAuthVerifierResolver oAuthVerifierResolver;
     private final JwtProvider jwtProvider;
     private final MemberOnboardingRepository onboardingRepository;
-    private final ProjectRepository projectRepository;
+    private final CiProjectRepository ciProjectRepository;
+    private final BiProjectRepository biProjectRepository;
+    private final CreditService creditService;
     private final long refreshTokenExpirationDays;
 
     public AuthService(
@@ -36,14 +43,18 @@ public class AuthService {
             OAuthVerifierResolver oAuthVerifierResolver,
             JwtProvider jwtProvider,
             MemberOnboardingRepository onboardingRepository,
-            ProjectRepository projectRepository,
+            CiProjectRepository ciProjectRepository,
+            BiProjectRepository biProjectRepository,
+            CreditService creditService,
             @Value("${jwt.refresh-token-expiration-days:14}") long refreshTokenExpirationDays
     ) {
         this.memberRepository = memberRepository;
         this.oAuthVerifierResolver = oAuthVerifierResolver;
         this.jwtProvider = jwtProvider;
         this.onboardingRepository = onboardingRepository;
-        this.projectRepository = projectRepository;
+        this.ciProjectRepository = ciProjectRepository;
+        this.biProjectRepository = biProjectRepository;
+        this.creditService = creditService;
         this.refreshTokenExpirationDays = refreshTokenExpirationDays;
     }
 
@@ -109,13 +120,22 @@ public class AuthService {
         return onboardingRepository.existsByMemberIdAndCompletedAtIsNotNull(memberId);
     }
 
-    /** 완료(COMPLETED) 상태가 아닌 프로젝트 중 가장 최근에 수정된 것을 "이어서 작업할 프로젝트"로 본다. */
+    /**
+     * 완료(COMPLETED) 상태가 아닌 프로젝트 중 가장 최근에 수정된 것을 "이어서 작업할 프로젝트"로 본다.
+     * CI_PROJECT/BI_PROJECT 양쪽을 각각 조회해서 더 최근에 수정된 쪽을 고른다.
+     */
     @Transactional(readOnly = true)
     public String findResumeProjectId(Long memberId) {
-        return projectRepository
-                .findFirstByMemberIdAndStatusNotOrderByUpdatedAtDesc(memberId, Project.Status.COMPLETED)
-                .map(Project::getPublicId)
-                .orElse(null);
+        Optional<CiProject> ci = ciProjectRepository
+                .findFirstByMemberIdAndStatusNotOrderByUpdatedAtDesc(memberId, ProjectStatus.COMPLETED);
+        Optional<BiProject> bi = biProjectRepository
+                .findFirstByMemberIdAndStatusNotOrderByUpdatedAtDesc(memberId, ProjectStatus.COMPLETED);
+        if (ci.isPresent() && bi.isPresent()) {
+            return ci.get().getUpdatedAt().isAfter(bi.get().getUpdatedAt())
+                    ? ci.get().getPublicId() : bi.get().getPublicId();
+        }
+        return ci.map(CiProject::getPublicId)
+                .orElseGet(() -> bi.map(BiProject::getPublicId).orElse(null));
     }
 
     private Member createMember(String provider, OAuthUserInfo info) {
@@ -127,8 +147,15 @@ public class AuthService {
                 .name(name)
                 .provider(provider)
                 .providerId(info.providerId())
+                // 잔액 0으로 만든 뒤 아래에서 정식으로 지급한다. 처음부터 2를 넣어버리면
+                // credit_histories에 기록이 남지 않아 "이력 합계 = 잔액"이 깨진다.
+                .creditBalance(0)
                 .build();
-        return memberRepository.save(member);
+        memberRepository.save(member);
+
+        // 가입 축하 크레딧 2개. 잔액과 이력이 함께 남는다.
+        creditService.grant(member.getId(), CreditService.SIGNUP_GRANT, CreditHistory.Reason.SIGNUP);
+        return member;
     }
 
     /**

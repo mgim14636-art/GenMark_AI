@@ -1,11 +1,15 @@
 package com.genmark.ai.service;
 
+import com.genmark.ai.entity.BiProject;
+import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.LogoCandidate;
-import com.genmark.ai.entity.Project;
+import com.genmark.ai.entity.ProjectLike;
+import com.genmark.ai.entity.ProjectStatus;
 import com.genmark.ai.entity.TrademarkAnalysis;
 import com.genmark.ai.entity.TrademarkMatch;
+import com.genmark.ai.repository.BiProjectRepository;
+import com.genmark.ai.repository.CiProjectRepository;
 import com.genmark.ai.repository.LogoCandidateRepository;
-import com.genmark.ai.repository.ProjectRepository;
 import com.genmark.ai.repository.TrademarkAnalysisRepository;
 import com.genmark.ai.repository.TrademarkMatchRepository;
 import com.genmark.ai.web.dto.trademark.TrademarkAnalysisResponse;
@@ -24,8 +28,9 @@ import java.util.List;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class TrademarkAnalysisService {
-    private final ProjectService projectService;
-    private final ProjectRepository projectRepository;
+    private final ProjectLookupService projectLookup;
+    private final CiProjectRepository ciProjectRepository;
+    private final BiProjectRepository biProjectRepository;
     private final LogoCandidateRepository candidateRepository;
     private final TrademarkAnalysisRepository analysisRepository;
     private final TrademarkMatchRepository matchRepository;
@@ -33,38 +38,47 @@ public class TrademarkAnalysisService {
 
     @Transactional
     public TrademarkAnalysisResponse create(String projectPublicId, Long memberId) {
-        Project project = projectService.requireOwned(projectPublicId, memberId);
-        LogoCandidate candidate = candidateRepository.findFirstByGenerationProjectIdAndSelectedTrue(project.getId())
+        ProjectLike project = projectLookup.requireOwned(projectPublicId, memberId);
+        boolean isCi = project instanceof CiProject;
+        LogoCandidate candidate = (isCi
+                ? candidateRepository.findFirstByGenerationCiProjectIdAndSelectedTrue(project.getId())
+                : candidateRepository.findFirstByGenerationBiProjectIdAndSelectedTrue(project.getId()))
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_CONFLICT, "먼저 최종 로고 후보를 선택해 주세요."));
-        if (project.getStatus() == Project.Status.ANALYZING) {
+        if (project.getStatus() == ProjectStatus.ANALYZING) {
             throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "이미 상표 분석이 진행 중입니다.");
         }
         TrademarkAnalysis analysis = analysisRepository.save(TrademarkAnalysis.builder()
-                .project(project).candidate(candidate).status(TrademarkAnalysis.Status.QUEUED).build());
-        project.setStatus(Project.Status.ANALYZING);
-        projectRepository.save(project);
+                .candidate(candidate).status(TrademarkAnalysis.Status.QUEUED).build());
+        project.setStatus(ProjectStatus.ANALYZING);
+        saveProject(project);
         runAfterCommit(() -> worker.execute(analysis.getId()));
         return toResponse(analysis);
     }
 
     public TrademarkAnalysisResponse get(String projectId, String analysisId, Long memberId) {
-        projectService.requireOwned(projectId, memberId);
+        projectLookup.requireOwned(projectId, memberId);
         TrademarkAnalysis analysis = requireOwned(analysisId, memberId);
         if (!analysis.getProject().getPublicId().equals(projectId)) throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
         return toResponse(analysis);
     }
 
     public List<TrademarkMatchResponse> matches(String projectId, String analysisId, Long memberId) {
-        projectService.requireOwned(projectId, memberId);
+        projectLookup.requireOwned(projectId, memberId);
         TrademarkAnalysis analysis = requireOwned(analysisId, memberId);
         if (!analysis.getProject().getPublicId().equals(projectId)) throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
         return matchRepository.findByAnalysisIdOrderByRank(analysis.getId()).stream()
-                .map(this::toResponse).toList();
+                .map(match -> toResponse(match, projectId, analysisId)).toList();
     }
 
     private TrademarkAnalysis requireOwned(String analysisId, Long memberId) {
-        return analysisRepository.findByPublicIdAndProjectMemberId(analysisId, memberId)
+        return analysisRepository.findByPublicIdAndCandidateGenerationCiProjectMemberId(analysisId, memberId)
+                .or(() -> analysisRepository.findByPublicIdAndCandidateGenerationBiProjectMemberId(analysisId, memberId))
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    private void saveProject(ProjectLike project) {
+        if (project instanceof CiProject ci) ciProjectRepository.save(ci);
+        else if (project instanceof BiProject bi) biProjectRepository.save(bi);
     }
 
     public TrademarkAnalysisResponse toResponse(TrademarkAnalysis a) {
@@ -86,9 +100,11 @@ public class TrademarkAnalysisService {
                 a.getCompletedAt(), a.getCreatedAt());
     }
 
-    private TrademarkMatchResponse toResponse(TrademarkMatch m) {
+    private TrademarkMatchResponse toResponse(TrademarkMatch m, String projectId, String analysisId) {
+        String imageUrl = "/api/v1/projects/%s/trademark-analyses/%s/matches/%d/image"
+                .formatted(projectId, analysisId, m.getRank());
         return new TrademarkMatchResponse(m.getRank(), m.getApplicationNumber(), m.getName(), m.getCategory(),
-                m.getSimilarity(), m.getImagePath());
+                m.getSimilarity(), m.getImagePath(), imageUrl);
     }
 
     private void runAfterCommit(Runnable task) {

@@ -176,7 +176,7 @@ Authorization: Bearer {accessToken}
 |---|---|---|
 | `POST` | `/projects/{projectId}/logo-generations` | 로고 생성 작업 시작 |
 | `GET` | `/projects/{projectId}/logo-generations/{generationId}` | 생성 진행률 조회 |
-| `GET` | `/projects/{projectId}/logo-candidates` | 생성된 후보 4개 조회 |
+| `GET` | `/projects/{projectId}/logo-generations/{generationId}/logo-candidates` | 해당 생성 작업의 후보 4개 조회 |
 | `POST` | `/projects/{projectId}/logo-candidates/{candidateId}/select` | 최종 후보 선택 |
 | `POST` | `/projects/{projectId}/logo-candidates/{candidateId}/save` | 후보 저장/해제 |
 
@@ -594,7 +594,7 @@ CI/BI 선택 또는 프로젝트 기본 정보를 저장합니다.
 }
 ```
 
-### `GET /api/v1/projects/{projectId}/logo-candidates`
+### `GET /api/v1/projects/{projectId}/logo-generations/{generationId}/logo-candidates`
 
 결과 화면과 수정 화면에서 후보 목록을 조회합니다.
 
@@ -910,7 +910,7 @@ CI/BI 선택 또는 프로젝트 기본 정보를 저장합니다.
 | 상표 분석 선택 | 비슷한 상표 확인 | `POST /trademark-analyses` | 상표 분석 로딩 |
 | 로고 생성 로딩 | 진행률 확인 | `GET /logo-generations/{generationId}` | 완료 시 결과 |
 | 상표 분석 로딩 | 진행률 확인 | `GET /trademark-analyses/{analysisId}` | 완료 시 결과 |
-| 결과 | 후보 넘기기 | `GET /logo-candidates`에서 이미 받은 후보 사용 | 같은 화면 |
+| 결과 | 후보 넘기기 | `GET /logo-generations/{generationId}/logo-candidates`에서 이미 받은 후보 사용 | 같은 화면 |
 | 결과 | 이 로고 선택하기 | `POST /logo-candidates/{candidateId}/select` | 완료 상태 |
 | 결과 | 색상·글씨체 수정 | API 없음, 편집 화면 진입 | 로고 수정 |
 | 로고 수정 | 심볼/글자 선택 및 수정 | `POST /logo-edits` | 편집 상태 저장 |
@@ -1006,7 +1006,7 @@ QUEUED -> RUNNING -> SUCCEEDED
 ## 11. 프론트 연동 시 확인할 사항
 
 - 현재 프론트는 로딩 화면에서 임시 타이머로 결과 화면으로 이동합니다. 백엔드 연결 시 타이머 대신 `generationId`/`analysisId` 폴링으로 교체해야 합니다.
-- 현재 결과 후보와 최종 확인 요약 일부는 목업 데이터입니다. `GET /logo-candidates`와 프로젝트 상세 응답으로 교체해야 합니다.
+- 현재 결과 후보와 최종 확인 요약 일부는 목업 데이터입니다. `GET /logo-generations/{generationId}/logo-candidates`와 프로젝트 상세 응답으로 교체해야 합니다.
 - 현재 상표 분석 완료 후 상세 분석 전용 화면은 없고 결과 화면으로 돌아갑니다. 백엔드의 상세 결과 API는 먼저 제공하되, 프론트 상세 화면은 후속 작업으로 분리합니다.
 - `setup` 화면은 주소로 직접 열 수 있는 레거시 화면이지만 현재 주 흐름에서는 사용하지 않습니다. 백엔드의 필수 단계로 만들지 않습니다.
 - 브랜드 설명 화면의 `brandName`은 현재 프론트에서 최대 80자, 추가 요청은 최대 300자입니다. 서버도 동일한 제한을 적용합니다.
@@ -1025,7 +1025,7 @@ PUT    /projects/{id}/logo-style
 PUT    /projects/{id}/final-review
 POST   /projects/{id}/logo-generations        # 202, generationId 반환
 GET    /projects/{id}/logo-generations/{gid}  # 반복 조회
-GET    /projects/{id}/logo-candidates         # 완료 후 후보 4개
+GET    /projects/{id}/logo-generations/{gid}/logo-candidates # 완료된 해당 작업의 후보 4개
 POST   /projects/{id}/trademark-analyses      # 사용자가 분석 선택 시
 GET    /projects/{id}/trademark-analyses/{aid}
 POST   /projects/{id}/logo-candidates/{cid}/select
