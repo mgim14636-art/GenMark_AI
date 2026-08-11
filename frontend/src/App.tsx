@@ -343,7 +343,10 @@ function CustomerApp() {
         setRemainingCredits(result.creditBalance)
       }),
       meApi.getPins().then(setPinnedLogos),
-      meApi.getDownloads().then(setDownloadHistory),
+      Promise.all([
+        meApi.getDownloads('CI'),
+        meApi.getDownloads('BI'),
+      ]).then(([ciDownloads, biDownloads]) => setDownloadHistory([...ciDownloads, ...biDownloads].sort((a, b) => b.downloadedAt.localeCompare(a.downloadedAt)))),
     ])
   }, [loggedIn, mode])
 
@@ -427,11 +430,16 @@ function CustomerApp() {
       if (project.colors?.[0]) setManualColor(hexToRgb(project.colors[0]))
       if (project.logoStyle && logoStyleOptions.some((option) => option.id === project.logoStyle)) setLogoStyle(project.logoStyle as LogoStyle)
 
-      const step = (project.currentStep ?? '').toLowerCase().replace(/[-\s]/g, '_')
-      if (['tone', 'tone_color', 'tone_selection'].includes(step)) return 'tone'
-      if (['logo_style', 'style_combination', 'style_selection'].includes(step)) return 'style'
-      if (['final_review', 'final'].includes(step)) return 'final'
-      if (['candidate_generation', 'generating', 'result_ready', 'completed'].includes(step) || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED') return 'result'
+      const step = typeof project.currentStep === 'number' ? project.currentStep : Number(project.currentStep)
+      if (project.brandType === 'BI') {
+        if (step >= 5 || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED') return 'result'
+        if (step >= 4) return 'style'
+        if (step >= 3) return 'tone'
+        return 'brand-details'
+      }
+      if (step >= 4 || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED') return 'result'
+      if (step >= 3) return 'style'
+      if (step >= 2) return 'tone'
       return nextBrandKind === 'ci' ? 'company-details' : 'brand-details'
     } catch (error) {
       if (error instanceof AuthError && error.status === 404) {
@@ -524,9 +532,6 @@ function CustomerApp() {
       await onboardingApi.complete({
         usage: onboardingSelection,
         audience,
-        // The project type and detailed project fields are collected after this
-        // onboarding gate, so this first completion intentionally skips them.
-        detailsDecision: 'SKIPPED',
       })
       setOnboardingCompleted(true)
       window.localStorage.setItem('genmark-onboarding-completed', 'true')
@@ -665,7 +670,7 @@ function CustomerApp() {
       return
     }
     try {
-      await projectsApi.patch(projectId, { brandName: editorBrandName, colors: [editorColor] })
+      await projectsApi.patch(projectId, { brandType: brandKind === 'bi' ? 'BI' : 'CI', brandName: editorBrandName, colors: [editorColor] })
       setEditorSaved(true)
     } catch (error) {
       setProjectError(error instanceof Error ? error.message : '편집 내용을 저장하지 못했어요.')
@@ -809,11 +814,7 @@ function CustomerApp() {
   }
 
   const submitSurveyResponse = async () => {
-    const result = await meApi.submitSurvey({
-      rating: surveyRating,
-      improvements: surveyImprovements,
-      comment: surveyComment,
-    })
+    const result = await meApi.submitSurvey()
     setRemainingCredits(result.creditBalance)
     setSurveySubmitted(true)
   }
@@ -829,16 +830,20 @@ function CustomerApp() {
     if (!projectId) return
     setPinError('')
     try {
-      const pinned = candidate.pinnedAt
-        ? await projectsApi.unpinCandidate(projectId, candidate.id)
-        : await projectsApi.pinCandidate(projectId, candidate.id)
+      if (candidate.pinnedAt) {
+        await projectsApi.unpinCandidate(projectId, candidate.id)
+        setLogoCandidates((current) => current.map((item) => item.id === candidate.id ? { ...item, pinnedAt: null } : item))
+        setResultLiked(false)
+        setPinnedLogos((current) => current.filter((item) => item.candidateId !== candidate.id))
+        return
+      }
+
+      const pinned = await projectsApi.pinCandidate(projectId, candidate.id)
       setLogoCandidates((current) => current.map((item) => item.id === candidate.id
         ? { ...item, pinnedAt: pinned.pinnedAt ?? null }
         : item))
       setResultLiked(Boolean(pinned.pinnedAt))
-      setPinnedLogos((current) => candidate.pinnedAt
-        ? current.filter((item) => item.candidateId !== candidate.id)
-        : [{ ...pinned, projectId }, ...current.filter((item) => item.candidateId !== candidate.id)])
+      setPinnedLogos((current) => [{ ...pinned, projectId }, ...current.filter((item) => item.candidateId !== candidate.id)])
     } catch (error) {
       setPinError(error instanceof Error ? error.message : '찜 상태를 변경하지 못했어요.')
     }

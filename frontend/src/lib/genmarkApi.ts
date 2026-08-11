@@ -1,21 +1,15 @@
-import { apiRequest, apiRequestWithToken } from '../auth'
-
-export type OnboardingDetailsDecision = 'SUBMITTED' | 'SKIPPED'
+import { AuthError, apiRequest, apiRequestWithToken, downloadAuthenticatedFileWithToken } from '../auth'
 
 export type OnboardingResponse = {
   completed: boolean
   usage: string[]
   audience: string | null
-  detailsDecision: OnboardingDetailsDecision | null
   completedAt: string | null
-  schemaVersion: number
 }
 
 export type OnboardingInput = {
   usage: string[]
   audience: string
-  detailsDecision: OnboardingDetailsDecision
-  initialProject?: ProjectInput
 }
 
 export type ProjectInput = {
@@ -37,8 +31,9 @@ export type ProjectInput = {
 
 export type ProjectResponse = ProjectInput & {
   id: string
+  brandType: 'CI' | 'BI'
   status: 'DRAFT' | 'BRIEF_READY' | 'GENERATING' | 'RESULT_READY' | 'ANALYZING' | 'COMPLETED'
-  currentStep?: string | null
+  currentStep?: number | string | null
   createdAt: string
   updatedAt: string
 }
@@ -183,20 +178,132 @@ export const ciProjectsApi = {
   latestProfile: () => apiRequest<CiLatestProfile>('/ci-projects/latest-profile'),
 }
 
+type BackendProjectResponse = {
+  id: string
+  status: ProjectResponse['status']
+  currentStep: number
+  industry: string | null
+  companyName?: string | null
+  coreValues?: string | null
+  brandName?: string | null
+  valueCategories?: string[] | null
+  brandDescription?: string | null
+  targetAge?: string | null
+  tone: string | null
+  colors: string[] | null
+  logoStyle: string | null
+  additionalRequirements: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+const colorFields = (colors: string[] | undefined) => ({
+  color1: colors?.[0],
+  color2: colors?.[1],
+  color3: colors?.[2],
+  color4: colors?.[3],
+})
+
+const toCiProjectRequest = (input: ProjectInput) => ({
+  industry: input.industry,
+  companyName: input.companyName,
+  coreValues: input.brandValuesText ?? input.companyMotto ?? input.brandValues?.join(', '),
+  tone: input.tone,
+  ...colorFields(input.colors),
+  logoStyle: input.logoStyle,
+  additionalRequirements: input.additionalRequirements,
+})
+
+const toBiProjectRequest = (input: ProjectInput) => ({
+  industry: input.industry,
+  brandName: input.brandName,
+  valueCategory1: input.brandValues?.[0],
+  valueCategory2: input.brandValues?.[1],
+  valueCategory3: input.brandValues?.[2],
+  brandDescription: input.brandValuesText ?? input.companyMotto,
+  targetAge: input.targetAge,
+  tone: input.tone,
+  ...colorFields(input.colors),
+  logoStyle: input.logoStyle,
+  additionalRequirements: input.additionalRequirements,
+})
+
+const normalizeCiProject = (project: BackendProjectResponse): ProjectResponse => ({
+  id: project.id,
+  brandType: 'CI',
+  status: project.status,
+  currentStep: project.currentStep,
+  industry: project.industry ?? undefined,
+  companyName: project.companyName ?? undefined,
+  companyMotto: project.coreValues ?? undefined,
+  brandValuesText: project.coreValues ?? undefined,
+  tone: project.tone ?? undefined,
+  colors: project.colors ?? undefined,
+  logoStyle: project.logoStyle ?? undefined,
+  additionalRequirements: project.additionalRequirements ?? undefined,
+  createdAt: project.createdAt,
+  updatedAt: project.updatedAt,
+})
+
+const normalizeBiProject = (project: BackendProjectResponse): ProjectResponse => ({
+  id: project.id,
+  brandType: 'BI',
+  status: project.status,
+  currentStep: project.currentStep,
+  industry: project.industry ?? undefined,
+  brandName: project.brandName ?? undefined,
+  brandValues: project.valueCategories ?? undefined,
+  brandValuesText: project.brandDescription ?? undefined,
+  companyMotto: project.brandDescription ?? undefined,
+  targetAge: project.targetAge ?? undefined,
+  tone: project.tone ?? undefined,
+  colors: project.colors ?? undefined,
+  logoStyle: project.logoStyle ?? undefined,
+  additionalRequirements: project.additionalRequirements ?? undefined,
+  createdAt: project.createdAt,
+  updatedAt: project.updatedAt,
+})
+
+const projectPath = (brandType: 'CI' | 'BI') => brandType === 'BI' ? 'bi-projects' : 'ci-projects'
+
+const getProjectByType = async (projectId: string, brandType: 'CI' | 'BI') => {
+  const response = await apiRequest<BackendProjectResponse>(`/${projectPath(brandType)}/${projectId}`)
+  return brandType === 'BI' ? normalizeBiProject(response) : normalizeCiProject(response)
+}
+
 export const projectsApi = {
-  create: (input: ProjectInput) => apiRequest<ProjectResponse>('/projects', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  }),
-  get: (projectId: string) => apiRequest<ProjectResponse>(`/projects/${projectId}`),
-  patch: (projectId: string, input: ProjectInput) => apiRequest<ProjectResponse>(`/projects/${projectId}`, {
+  create: async (input: ProjectInput) => {
+    const brandType = input.brandType === 'BI' ? 'BI' : 'CI'
+    const response = await apiRequest<BackendProjectResponse>(`/${projectPath(brandType)}`, {
+      method: 'POST',
+      body: JSON.stringify(brandType === 'BI' ? toBiProjectRequest(input) : toCiProjectRequest(input)),
+    })
+    return brandType === 'BI' ? normalizeBiProject(response) : normalizeCiProject(response)
+  },
+  get: async (projectId: string) => {
+    try {
+      return await getProjectByType(projectId, 'CI')
+    } catch (error) {
+      if (!(error instanceof AuthError) || error.status !== 404) throw error
+      return getProjectByType(projectId, 'BI')
+    }
+  },
+  patch: async (projectId: string, input: ProjectInput) => {
+    const brandType = input.brandType === 'BI' ? 'BI' : 'CI'
+    const response = await apiRequest<BackendProjectResponse>(`/${projectPath(brandType)}/${projectId}`, {
     method: 'PATCH',
-    body: JSON.stringify(input),
-  }),
-  updateStep: (projectId: string, step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review', input: ProjectInput) => apiRequest<ProjectResponse>(`/projects/${projectId}/${step}`, {
-    method: 'PUT',
-    body: JSON.stringify(input),
-  }),
+      body: JSON.stringify(brandType === 'BI' ? toBiProjectRequest(input) : toCiProjectRequest(input)),
+    })
+    return brandType === 'BI' ? normalizeBiProject(response) : normalizeCiProject(response)
+  },
+  updateStep: async (projectId: string, step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review', input: ProjectInput) => {
+    const brandType = input.brandType === 'BI' ? 'BI' : 'CI'
+    const response = await apiRequest<BackendProjectResponse>(`/${projectPath(brandType)}/${projectId}/${step}`, {
+      method: 'PUT',
+      body: JSON.stringify(brandType === 'BI' ? toBiProjectRequest(input) : toCiProjectRequest(input)),
+    })
+    return brandType === 'BI' ? normalizeBiProject(response) : normalizeCiProject(response)
+  },
   createGeneration: (projectId: string, idempotencyKey: string) => apiRequest<LogoGeneration>(`/projects/${projectId}/logo-generations`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
@@ -209,7 +316,7 @@ export const projectsApi = {
   pinCandidate: (projectId: string, candidateId: string) => apiRequest<PinnedLogo>(`/projects/${projectId}/logo-candidates/${candidateId}/pin`, {
     method: 'POST',
   }),
-  unpinCandidate: (projectId: string, candidateId: string) => apiRequest<PinnedLogo>(`/projects/${projectId}/logo-candidates/${candidateId}/pin`, {
+  unpinCandidate: (projectId: string, candidateId: string) => apiRequest<void>(`/projects/${projectId}/logo-candidates/${candidateId}/pin`, {
     method: 'DELETE',
   }),
   downloadCandidate: (projectId: string, candidateId: string) => apiRequest<DownloadRecord>(`/projects/${projectId}/logo-candidates/${candidateId}/download`, {
@@ -229,9 +336,8 @@ export const projectsApi = {
 export const meApi = {
   getCredits: () => apiRequest<{ balance: number }>('/me/credits'),
   getSurvey: () => apiRequest<SurveyStatus>('/me/survey'),
-  submitSurvey: (input: { rating: number; improvements: string[]; comment: string }) => apiRequest<SurveyStatus>('/me/survey', {
+  submitSurvey: () => apiRequest<SurveyStatus>('/me/survey', {
     method: 'POST',
-    body: JSON.stringify(input),
   }),
   getPins: () => apiRequest<PinnedLogo[]>('/me/pins'),
   getDownloads: (type?: 'CI' | 'BI') => apiRequest<DownloadRecord[]>(`/me/downloads${type ? `?type=${type}` : ''}`),
@@ -245,7 +351,7 @@ export const adminApi = {
   dashboard: (token: string) => apiRequestWithToken<AdminDashboardStats>(token, '/admin/dashboard'),
   members: (token: string) => apiRequestWithToken<AdminMember[]>(token, '/admin/members'),
   memberDownloads: (token: string, memberId: number, type?: 'CI' | 'BI') => apiRequestWithToken<DownloadRecord[]>(token, `/admin/members/${memberId}/downloads${type ? `?type=${type}` : ''}`),
-  downloadImage: (token: string, downloadId: number) => apiRequestWithToken<{ imageUrl: string }>(token, `/admin/downloads/${downloadId}/image`),
+  downloadImage: (token: string, downloadId: number) => downloadAuthenticatedFileWithToken(token, `/admin/downloads/${downloadId}/image`),
 }
 
 export async function waitForLogoGeneration(projectId: string, generationId: string): Promise<LogoGeneration> {

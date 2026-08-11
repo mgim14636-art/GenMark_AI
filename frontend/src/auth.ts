@@ -188,15 +188,13 @@ export const apiRequestWithToken = async <T>(token: string, path: string, init: 
   return (payload as { data: T } | undefined)?.data as T
 }
 
-export const downloadAuthenticatedFile = async (path: string): Promise<Blob> => {
-  const doFetch = async () => {
-    const headers = new Headers()
-    if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
-    return fetch(`${API_BASE_URL}${path}`, { headers })
-  }
+const downloadFileWithToken = async (token: string | null, path: string, refresh = false): Promise<Blob> => {
+  const doFetch = async () => fetch(`${API_BASE_URL}${path}`, {
+    headers: (token ?? accessToken) ? { Authorization: `Bearer ${token ?? accessToken}` } : undefined,
+  })
 
   let response = await doFetch()
-  if (response.status === 401 && await refreshAccessToken()) response = await doFetch()
+  if (refresh && response.status === 401 && await refreshAccessToken()) response = await doFetch()
   if (!response.ok) {
     const payload = await response.json().catch(() => undefined) as ApiErrorPayload | undefined
     throw new AuthError(
@@ -209,3 +207,6 @@ export const downloadAuthenticatedFile = async (path: string): Promise<Blob> => 
   }
   return response.blob()
 }
+
+export const downloadAuthenticatedFile = (path: string) => downloadFileWithToken(accessToken, path, true)
+export const downloadAuthenticatedFileWithToken = (token: string, path: string) => downloadFileWithToken(token, path)
