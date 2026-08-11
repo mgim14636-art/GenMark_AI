@@ -64,13 +64,22 @@ public class CiProjectService {
         return toResponse(project);
     }
 
+    /**
+     * {@code current_step}에는 방금 제출을 마친 단계 번호가 아니라 <b>그다음에 보여줄 화면 번호</b>(제출한
+     * 단계 번호 + 1)를 저장한다.
+     *
+     * <p>예를 들어 {@code tone}(2) 단계를 제출하면 화면은 이미 {@code logo-style}(3) 화면으로 넘어가
+     * 있으므로, 이어쓰기 시 다시 봐야 할 화면도 3이어야 한다. 제출한 번호(2)를 그대로 저장하면 이어쓰기가
+     * 사용자가 이미 지나간 화면으로 한 단계 되돌아가는 문제가 생긴다.
+     */
     @Transactional
     public CiProjectResponse updateStep(String publicId, Long memberId, String step, CiProjectUpsertRequest request) {
         Integer stepNumber = STEP_ORDER.get(step);
         if (stepNumber == null) throw new ApiException(ErrorCode.VALIDATION_ERROR, "알 수 없는 온보딩 단계입니다: " + step);
         CiProject project = requireOwned(publicId, memberId);
         apply(project, request);
-        if (stepNumber > project.getCurrentStep()) project.setCurrentStep(stepNumber);
+        int nextScreenStep = stepNumber + 1;
+        if (nextScreenStep > project.getCurrentStep()) project.setCurrentStep(nextScreenStep);
         return toResponse(project);
     }
 

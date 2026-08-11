@@ -51,13 +51,18 @@ public class BiProjectService {
         return toResponse(project);
     }
 
+    /**
+     * {@code current_step}에는 방금 제출을 마친 단계 번호가 아니라 <b>그다음에 보여줄 화면 번호</b>(제출한
+     * 단계 번호 + 1)를 저장한다. CiProjectService.updateStep()과 같은 이유다.
+     */
     @Transactional
     public BiProjectResponse updateStep(String publicId, Long memberId, String step, BiProjectUpsertRequest request) {
         Integer stepNumber = STEP_ORDER.get(step);
         if (stepNumber == null) throw new ApiException(ErrorCode.VALIDATION_ERROR, "알 수 없는 온보딩 단계입니다: " + step);
         BiProject project = requireOwned(publicId, memberId);
         apply(project, request);
-        if (stepNumber > project.getCurrentStep()) project.setCurrentStep(stepNumber);
+        int nextScreenStep = stepNumber + 1;
+        if (nextScreenStep > project.getCurrentStep()) project.setCurrentStep(nextScreenStep);
         return toResponse(project);
     }
 
