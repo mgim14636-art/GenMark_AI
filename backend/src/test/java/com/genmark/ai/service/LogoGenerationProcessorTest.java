@@ -36,9 +36,14 @@ class LogoGenerationProcessorTest {
         when(generationRepository.findById(10L)).thenReturn(Optional.of(generation));
     }
 
+    private static LogoAiClient.GeneratedLogo logo(String imageBase64) {
+        return new LogoAiClient.GeneratedLogo(imageBase64, null, null);
+    }
+
     @Test
     void threeImagesFailWithoutCandidateRows() {
-        when(aiClient.generate(any())).thenReturn(new LogoAiClient.LogoAiResult(true, List.of("a", "b", "c")));
+        when(aiClient.generate(any())).thenReturn(
+                new LogoAiClient.LogoAiResult(true, List.of(logo("a"), logo("b"), logo("c"))));
 
         processor.process(10L);
 
@@ -50,7 +55,8 @@ class LogoGenerationProcessorTest {
 
     @Test
     void exactlyFourImagesSucceed() {
-        when(aiClient.generate(any())).thenReturn(new LogoAiClient.LogoAiResult(true, List.of("a", "b", "c", "d")));
+        when(aiClient.generate(any())).thenReturn(
+                new LogoAiClient.LogoAiResult(true, List.of(logo("a"), logo("b"), logo("c"), logo("d"))));
         when(storage.store(eq("g"), anyInt(), anyString()))
                 .thenReturn(new LogoFileStorage.StoredImage("logos/g/c.png", 512, 512));
 
