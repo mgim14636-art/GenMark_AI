@@ -1,8 +1,9 @@
 import { FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, LoaderCircle, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkle as LucideSparkle, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
+import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
+import { AiLoader } from './components/ui/ai-loader'
 import { AuthError, type AuthProvider, type AuthUser, downloadAuthenticatedFile, loginWithProvider, logout, restoreSession } from './auth'
 import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type DownloadRecord, type LogoCandidate, type PinnedLogo, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
 
@@ -14,7 +15,7 @@ type LoginReturnMode = 'hero' | 'home'
 type OnboardingOption = 'online' | 'social' | 'offline'
 type AudienceOption = 'company' | 'owner' | 'hobby' | 'sidejob'
 type IndustryOption = 'beauty' | 'fashion' | 'food' | 'health' | 'tech' | 'education' | 'pet' | 'other'
-type CoreValue = 'vegan' | 'crueltyFree' | 'lowIrritation' | 'derma' | 'cleanBeauty' | 'natural' | 'premium' | 'sustainable' | 'scientific' | 'reasonable' | 'emotional'
+type CoreValue = 'vegan' | 'lowIrritation' | 'derma' | 'cleanBeauty' | 'natural' | 'premium' | 'sustainable' | 'scientific' | 'reasonable'
 type ToneOption = 'friendly' | 'professional' | 'warm' | 'trendy' | 'minimal'
 type RgbColor = { r: number; g: number; b: number }
 type LogoStyle = 'symbol' | 'wordmark' | 'combination' | 'lettermark'
@@ -29,10 +30,9 @@ const toneOptions: Array<{ id: ToneOption; label: string; description: string; c
   { id: 'minimal', label: '미니멀하고 직관적인', description: '군더더기 없이 명확한 인상', colors: ['#396fc8', '#dde4ff'] },
 ]
 
-const coreValueIds = new Set<CoreValue>(['vegan', 'crueltyFree', 'lowIrritation', 'derma', 'cleanBeauty', 'natural', 'premium', 'sustainable', 'scientific', 'reasonable', 'emotional'])
+const coreValueIds = new Set<CoreValue>(['vegan', 'lowIrritation', 'derma', 'cleanBeauty', 'natural', 'premium', 'sustainable', 'scientific', 'reasonable'])
 const coreValueLabels: Record<CoreValue, string> = {
   vegan: '비건',
-  crueltyFree: '크루얼티 프리',
   lowIrritation: '저자극',
   derma: '더마',
   cleanBeauty: '클린뷰티',
@@ -41,7 +41,6 @@ const coreValueLabels: Record<CoreValue, string> = {
   sustainable: '지속가능성',
   scientific: '과학적 검증',
   reasonable: '합리적인 가격',
-  emotional: '감성적인 경험',
 }
 
 const industryOptions: Array<{ id: IndustryOption; title: string; description: string; apiValue: string; icon: LucideIcon }> = [
@@ -313,6 +312,7 @@ function CustomerApp() {
   const [generationId, setGenerationId] = useState<string | null>(null)
   const [generationError, setGenerationError] = useState('')
   const [generationLoading, setGenerationLoading] = useState(false)
+  const [loadingStep, setLoadingStep] = useState(0)
   const [projectSaving, setProjectSaving] = useState(false)
   const [projectError, setProjectError] = useState('')
   const [logoCandidates, setLogoCandidates] = useState<LogoCandidate[]>([])
@@ -432,6 +432,20 @@ function CustomerApp() {
   useEffect(() => {
     window.localStorage.setItem('genmark-company-profile', JSON.stringify({ name: companyName, motto: companyMotto }))
   }, [companyName, companyMotto])
+
+  useEffect(() => {
+    if (mode !== 'loading' || !generationLoading) {
+      setLoadingStep(0)
+      return undefined
+    }
+
+    setLoadingStep(0)
+    const timer = window.setInterval(() => {
+      setLoadingStep((current) => Math.min(current + 1, 4))
+    }, 1600)
+
+    return () => window.clearInterval(timer)
+  }, [generationLoading, mode])
 
   useEffect(() => {
     if (mode !== 'company-details' || !loggedIn || brandKind !== 'ci' || ciProfileLoaded.current) return undefined
@@ -1163,7 +1177,6 @@ function CustomerApp() {
   const renderBrandDetailsScreen = () => {
     const coreValueOptions: Array<{ id: CoreValue; label: string }> = [
       { id: 'vegan', label: '비건' },
-      { id: 'crueltyFree', label: '크루얼티프리' },
       { id: 'lowIrritation', label: '저자극' },
       { id: 'derma', label: '더마' },
       { id: 'cleanBeauty', label: '클린뷰티' },
@@ -1172,7 +1185,6 @@ function CustomerApp() {
       { id: 'sustainable', label: '지속가능성' },
       { id: 'scientific', label: '과학적 검증' },
       { id: 'reasonable', label: '합리적인 가격' },
-      { id: 'emotional', label: '감성적인 경험' },
     ]
 
     return (
@@ -1191,7 +1203,9 @@ function CustomerApp() {
             <div className="brand-details-input-wrap">
               <input
                 aria-label="상호명"
+                aria-required="true"
                 maxLength={80}
+                required
                 value={brandName}
                 onChange={(event) => setBrandName(event.target.value)}
                 placeholder="예: 루아 코스메틱"
@@ -1226,15 +1240,19 @@ function CustomerApp() {
               <div className="core-values-custom-input">
                 <textarea
                   aria-label="브랜드가 추구하는 가치 직접 입력"
+                  aria-describedby="brand-values-direct-hint"
                   value={brandValueDescription}
                   onChange={(event) => setBrandValueDescription(event.target.value)}
-                  placeholder="고객에게 어떤 브랜드로 기억되고 싶은지 작성해주세요. (예: 친근한, 전문적인, 혁신적인)"
+                  placeholder="예: 친환경 성분을 중시하는 비건 스킨케어 브랜드, 자연스럽고 믿음직한 인상"
                 />
+                <p id="brand-values-direct-hint" className="core-values-direct-hint">
+                  핵심 가치와 원하는 인상을 구체적으로 적을수록 AI가 더 정교한 로고 방향을 잡을 수 있어요.
+                </p>
               </div>
             )}
           </section>
 
-          <button className="brand-details-next" type="button" onClick={() => void saveProjectStep('brand-brief', 'tone')} disabled={projectSaving}>
+          <button className="brand-details-next" type="button" onClick={() => void saveProjectStep('brand-brief', 'tone')} disabled={projectSaving || !brandName.trim()}>
             {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
           </button>
           {projectError && <p className="project-error" role="alert">{projectError}</p>}
@@ -1803,17 +1821,14 @@ function CustomerApp() {
           </header>
 
           <div className="logo-loading-orb" aria-label="로고 생성 진행 중">
-            <div className="logo-loading-ring">
-              <Sparkles className="logo-loading-sparkle sparkle-one" aria-hidden="true" size={70} strokeWidth={1.6} />
-              <LucideSparkle className="logo-loading-sparkle sparkle-two" aria-hidden="true" size={40} strokeWidth={1.8} />
-            </div>
+            {!generationError && <AiLoader label="Generating" />}
           </div>
-          <div className="logo-loading-status">{generationError ? '로고 생성에 문제가 발생했어요' : '로고 생성 중...'}</div>
+          {generationError && <div className="logo-loading-status" role="status">로고 생성에 문제가 발생했어요</div>}
           {generationError && <div className="logo-loading-error" role="alert"><p>{generationError}</p><button type="button" onClick={() => void startLogoGeneration()}>다시 시도하기</button></div>}
 
-          <section className="logo-loading-steps" aria-label="로고 생성 단계">
+          <section className={`logo-loading-steps step-progress-${loadingStep}`} aria-label="로고 생성 단계">
             {loadingSteps.map((step, index) => (
-              <article className={index === 0 ? 'logo-loading-step active' : 'logo-loading-step'} key={step.number}>
+              <article className={`logo-loading-step ${index < loadingStep ? 'complete' : ''} ${index === loadingStep && !generationError ? 'active' : ''}`} key={step.number}>
                 <span className="logo-loading-step-number">{step.number}</span>
                 <span className={`logo-loading-step-icon icon-${step.icon}`} aria-hidden="true">
                   {step.icon === 'clipboard' ? <ClipboardCheck size={47} strokeWidth={1.8} />
@@ -1823,7 +1838,7 @@ function CustomerApp() {
                           : <FolderCheck size={47} strokeWidth={1.8} />}
                 </span>
                 <p>{step.text}</p>
-                {index === 0 && <LoaderCircle className="logo-loading-dots" aria-hidden="true" size={27} strokeWidth={2.6} />}
+                {index === loadingStep && !generationError && <span className="logo-loading-dots" aria-label="진행 중"><i /><i /><i /></span>}
               </article>
             ))}
           </section>
@@ -1832,7 +1847,7 @@ function CustomerApp() {
             <Clock3 className="logo-loading-side-icon clock-icon" aria-hidden="true" size={59} strokeWidth={1.8} />
             <div>
               <p>약 1~3분 정도 걸릴 수 있어요.</p>
-              <div className="logo-loading-progress" aria-hidden="true"><span /></div>
+              <div className={`logo-loading-progress step-progress-${loadingStep}`} aria-hidden="true"><span /></div>
             </div>
             <AlarmClock className="logo-loading-side-icon alarm-icon" aria-hidden="true" size={59} strokeWidth={1.8} />
           </section>
