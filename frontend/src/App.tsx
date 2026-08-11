@@ -1036,6 +1036,10 @@ function CustomerApp() {
                     <span className="tone-color-palette-preview" style={{ background: (customToneColors[tone.id] ?? tone.colors)[tonePaletteTarget.slot] }} />
                     <input type="color" value={(customToneColors[tone.id] ?? tone.colors)[tonePaletteTarget.slot]} onChange={(event) => updateToneColorFromHex(tone.id, tonePaletteTarget.slot, event.target.value)} />
                   </label>
+                  <div className="tone-inline-picker-footer">
+                    <span>두 색상 · {(customToneColors[tone.id] ?? tone.colors).join(' / ')}</span>
+                    <button type="button" onClick={() => setTonePaletteTarget(null)}>선택 완료</button>
+                  </div>
                 </div>
               )}
               </div>
