@@ -9,6 +9,8 @@ OpenRouter 이미지 API가 실제로 응답하는지, 폰트 합성까지 끝�
     python scripts/try_logo.py 4 --dry               # 호출 없이 프롬프트만 출력(무료)
     python scripts/try_logo.py 4 --tone 유니크하고 트렌디한 --motif 보석/빛
     python scripts/try_logo.py 2 --extra "물방울과 잎사귀가 겹친 형태"
+    python scripts/try_logo.py 4 --dry --v2          # 실험용 프롬프트 v2로 비교(무료)
+    python scripts/try_logo.py 4 --v2                # v2로 실제 생성
 
 설문 값은 백엔드 CiProject.toSurvey()가 실제로 보내는 키 구성과 동일하게 맞춰 두었다.
 스크립트 전용 키(brand_name/values/color 등)를 쓰면 prompt_service가 조용히 무시해
@@ -45,14 +47,16 @@ SURVEY = {
 }
 
 
-def parse_args(argv: list[str]) -> tuple[int, bool, dict]:
-    """개수 + --dry + 설문 덮어쓰기 옵션을 읽는다."""
-    n, dry, overrides = 1, False, {}
+def parse_args(argv: list[str]) -> tuple[int, bool, bool, dict]:
+    """개수 + --dry + --v2 + 설문 덮어쓰기 옵션을 읽는다."""
+    n, dry, v2, overrides = 1, False, False, {}
     i = 0
     while i < len(argv):
         a = argv[i]
         if a == "--dry":
             dry = True
+        elif a == "--v2":
+            v2 = True
         elif a == "--tone" and i + 1 < len(argv):
             overrides["tone"] = argv[i + 1]; i += 1
         elif a == "--style" and i + 1 < len(argv):
@@ -66,11 +70,11 @@ def parse_args(argv: list[str]) -> tuple[int, bool, dict]:
         elif a.isdigit():
             n = int(a)
         i += 1
-    return n, dry, overrides
+    return n, dry, v2, overrides
 
 
 def main() -> int:
-    n, dry, overrides = parse_args(sys.argv[1:])
+    n, dry, v2, overrides = parse_args(sys.argv[1:])
     survey = dict(SURVEY, **overrides)
 
     from app.services import flux_service, logo_composer
@@ -81,6 +85,15 @@ def main() -> int:
         _CURRENT_SURVEY_ALIASES,
         build_prompt_from_survey,
     )
+
+    if v2:
+        # 실험용 조립기. app/ 아래 서비스 코드는 건드리지 않는다.
+        from experimental_prompt import build_prompt_v2
+
+        build_prompt = build_prompt_v2
+        print("※ 실험용 프롬프트 v2 사용 (scripts/experimental_prompt.py)\n", flush=True)
+    else:
+        build_prompt = build_prompt_from_survey
 
     # 지원하지 않는 톤·모티프를 넣으면 prompt_service가 조용히 기본값으로 떨어진다.
     # 결과만 보고는 알 수 없어서, 요청 전에 여기서 짚어준다.
@@ -103,7 +116,7 @@ def main() -> int:
         print(f"  {k:24} {v}", flush=True)
     print("=" * 60, flush=True)
     for i in range(n):
-        prompt = build_prompt_from_survey(survey, variant_index=i)
+        prompt = build_prompt(survey, variant_index=i)
         print(f"\n▶ variantIndex={i}  프롬프트 ({len(prompt)}자)", flush=True)
         print(f"  {prompt}", flush=True)
     print()
@@ -129,8 +142,23 @@ def main() -> int:
     started = time.time()
 
     try:
-        variants = flux_service.generate_logo_variants(survey, num_variants=n)
-        symbols = [v["image"] for v in variants]
+        if v2:
+            # generate_logo_variants는 내부에서 v1 조립기를 부르므로, v2는 프롬프트를
+            # 직접 만들어 호출부를 우회한다(서비스 코드 수정 없이 비교하기 위함).
+            from concurrent.futures import ThreadPoolExecutor
+            import random as _random
+
+            prompts = [build_prompt(survey, variant_index=i) for i in range(n)]
+            seeds = [_random.randint(0, 2_147_483_647) for _ in range(n)]
+            with ThreadPoolExecutor(max_workers=n) as ex:
+                symbols = list(ex.map(flux_service._call_flux_pro, prompts, seeds))
+            variants = [
+                {"image": img, "seed": seeds[i], "variant_index": i}
+                for i, img in enumerate(symbols)
+            ]
+        else:
+            variants = flux_service.generate_logo_variants(survey, num_variants=n)
+            symbols = [v["image"] for v in variants]
     except KeyboardInterrupt:
         print(f"\n사용자가 중단했습니다 ({time.time() - started:.0f}초 경과).", flush=True)
         return 130
@@ -146,7 +174,7 @@ def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for i, symbol in enumerate(symbols, 1):
         logo = logo_composer.compose_final_logo(symbol, survey)
-        path = OUT_DIR / f"logo_try_{i}.png"
+        path = OUT_DIR / (f"logo_v2_{i}.png" if v2 else f"logo_try_{i}.png")
         logo.save(path)
         print(f"   저장: {path}  {logo.size}", flush=True)
 
