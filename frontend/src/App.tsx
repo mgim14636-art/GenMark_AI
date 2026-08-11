@@ -132,16 +132,23 @@ const ToneColorPalette = ({ value, onChange, ariaLabel }: { value: RgbColor; onC
   }
 
   return (
-    <div
-      className="tone-color-palette"
-      role="slider"
-      tabIndex={0}
-      aria-label={ariaLabel}
-      aria-valuetext={rgbToHex(value)}
-      onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); updateFromPointer(event) }}
-      onPointerMove={(event) => { if (event.buttons === 1) updateFromPointer(event) }}
-    >
-      <span className="tone-color-palette-preview" style={{ left: `${hsv.h / 3.6}%`, top: `${(1 - hsv.v) * 100}%`, background: rgbToHex(value) }} />
+    <div className="tone-palette-control">
+      <div
+        className="tone-color-palette"
+        role="slider"
+        tabIndex={0}
+        aria-label={ariaLabel}
+        aria-valuetext={rgbToHex(value)}
+        onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); updateFromPointer(event) }}
+        onPointerMove={(event) => { if (event.buttons === 1) updateFromPointer(event) }}
+      >
+        <span className="tone-color-palette-preview" style={{ left: `${hsv.h / 3.6}%`, top: `${(1 - hsv.v) * 100}%`, background: rgbToHex(value) }} />
+      </div>
+      <label className="tone-native-picker-button">
+        <span className="tone-native-picker-dot" style={{ background: rgbToHex(value) }} aria-hidden="true" />
+        <span>색상 세부 조정</span>
+        <input type="color" aria-label={`${ariaLabel} 세부 조정`} value={rgbToHex(value)} onChange={(event) => onChange(hexToRgb(event.target.value))} />
+      </label>
     </div>
   )
 }
