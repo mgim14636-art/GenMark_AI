@@ -41,7 +41,9 @@ class GenerationRequest(BaseModel):
     text_color: Optional[str] = Field(None, description="혼합형/워드마크/레터마크 텍스트 색상 직접 지정")
     include_brand_name_in_logo: Optional[bool] = None
 
-    num_variants: int = Field(4, ge=1, description="생성할 로고 시안 수")
+    # 상한이 없으면 한 번의 요청으로 수백 장이 생성돼 크레딧이 소진된다
+    # (docs/2026-08-11_로고생성_문제점-점검.md 2번). max_workers도 같이 묶인다.
+    num_variants: int = Field(4, ge=1, le=8, description="생성할 로고 시안 수")
 
     variant_offset: int = Field(
         0,
@@ -73,6 +75,11 @@ class GeneratedLogo(BaseModel):
     # 응답 본문에 추가만 된 것이라 기존 소비자는 영향받지 않는다.
     seed: Optional[int] = None
     variantIndex: Optional[int] = None
+
+    # 벡터 모델(recraft-*-vector)일 때만 채워진다. 배경 path를 제거한 투명 배경
+    # 원본으로, 프론트의 SVG 다운로드와 색 치환 편집이 이 값을 쓴다.
+    # imageBase64는 이 SVG를 래스터화해 브랜드명까지 합성한 최종본이라 서로 다르다.
+    svg: Optional[str] = None
 
 
 class GenerationResponse(BaseModel):

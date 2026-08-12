@@ -21,7 +21,7 @@ def generate_logo(req: GenerationRequest):
     survey = req.to_survey_dict()
     try:
         # logo_gen_service: 설문 -> prompt_service.build_prompt_from_survey로 프롬프트를
-        # 만든 뒤 OpenRouter flux.2-pro 호출까지 내부에서 처리해 심볼(도형) 이미지들을 얻는다.
+        # 만든 뒤 OpenRouter 이미지 API 호출까지 내부에서 처리해 심볼(도형) 이미지들을 얻는다.
         # variant_offset은 재생성 시 직전 회차와 다른 모티프를 배정받기 위한 값이다.
         variants = logo_gen_service.generate_logo_variants(
             survey,
@@ -41,6 +41,7 @@ def generate_logo(req: GenerationRequest):
                     ),
                     seed=v["seed"],
                     variantIndex=v["variant_index"],
+                    svg=v.get("svg"),
                 )
                 for v in variants
             ]

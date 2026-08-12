@@ -6,6 +6,7 @@ python-multipart
 requests==2.31.0
 python-dotenv==1.0.1
 pillow==10.2.0
+cairosvg==2.7.1          # Recraft 벡터 응답(SVG)을 래스터로 변환
 numpy==1.26.4
 pandas==3.0.5
 

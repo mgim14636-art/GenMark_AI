@@ -35,7 +35,8 @@ services:
     environment:
       FASTAPI_ENV: ${FASTAPI_ENV:-development}
       HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN:-}
-      NVIDIA_API_KEY: ${NVIDIA_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-recraft/recraft-v4-vector}
       KIPRIS_API_KEY: ${KIPRIS_API_KEY:-}
       EMBEDDINGS_PATH: /app/data/faiss/embeddings.npy
       IDS_PATH: /app/data/faiss/ids.csv
