@@ -6,7 +6,12 @@ python-multipart
 requests==2.31.0
 python-dotenv==1.0.1
 pillow==10.2.0
-cairosvg==2.7.1          # Recraft 벡터 응답(SVG)을 래스터로 변환
+# SVG(Recraft 벡터 응답) -> 래스터.
+# 컨테이너(리눅스)에서는 cairosvg가 정상 동작한다. Windows 로컬에서는 네이티브
+# Cairo(libcairo-2.dll)가 없어 import에 실패하는데, 그 경우 logo_gen_service가
+# 의존성 없는 PIL 구현(_rasterize_svg_pil)으로 자동 폴백하므로 설치가 필수는 아니다.
+cairosvg==2.7.1
+fonttools==4.51.0        # 브랜드명 글리프를 SVG path로 변환 (svg_composer)
 numpy==1.26.4
 pandas==3.0.5
 

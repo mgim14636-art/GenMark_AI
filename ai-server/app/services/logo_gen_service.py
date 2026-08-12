@@ -47,13 +47,163 @@ def rasterize_svg(svg: str, size: int = 1024) -> Image.Image:
 
     logo_composer(한글 폰트 합성)와 dino_service(유사도)는 둘 다 래스터를 다룬다.
     SVG 원본은 다운로드·편집용으로 따로 보관하고, 파이프라인에는 변환본을 태운다.
+
+    변환기가 두 가지인 이유
+        cairosvg가 품질이 좋지만 네이티브 Cairo(libcairo-2.dll)를 요구해서
+        Windows에서 자주 막힌다. svglib+reportlab도 결국 renderPM이 rlPyCairo를
+        찾아 같은 벽에 부딪힌다(실측). 팀원 환경마다 설치가 되고 안 되고 하면
+        측정 자체를 못 하므로, 의존성 없는 PIL 구현으로 떨어지게 해 둔다.
+        Docker(리눅스)에서는 cairosvg가 정상 동작하므로 서비스 품질에는 영향이 없다.
     """
-    import cairosvg  # 무거워서 함수 안에서 import (유사도 경로는 쓰지 않는다)
+    try:
+        import cairosvg
+    except (ImportError, OSError):
+        return _rasterize_svg_pil(svg, size)
 
     png = cairosvg.svg2png(
         bytestring=svg.encode("utf-8"), output_width=size, output_height=size
     )
     return Image.open(BytesIO(png)).convert("RGBA")
+
+
+_NUM = re.compile(r"[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?")
+_CMD = re.compile(r"([MmLlHhVvCcSsQqTtZz])([^MmLlHhVvCcSsQqTtZzAa]*)")
+
+
+def _flatten_path(d: str, steps: int = 16):
+    """SVG path의 d 속성을 다각형 목록으로 편다.
+
+    베지어 곡선을 직선 조각으로 근사한다. steps=16이면 1024px 캔버스에서
+    육안으로 곡선과 구분되지 않는다.
+
+    호(A/a) 명령은 지원하지 않는다 — Recraft 벡터 응답은 M/L/C/Z만 쓴다
+    (실측). 정규식에서 아예 제외해 조용히 틀린 도형이 나오는 것을 막는다.
+    """
+    polys, pts = [], []
+    cx = cy = sx = sy = 0.0
+    prev_ctrl = None
+
+    def cubic(p0, p1, p2, p3):
+        for i in range(1, steps + 1):
+            t = i / steps
+            u = 1 - t
+            yield (u**3 * p0[0] + 3 * u * u * t * p1[0]
+                   + 3 * u * t * t * p2[0] + t**3 * p3[0],
+                   u**3 * p0[1] + 3 * u * u * t * p1[1]
+                   + 3 * u * t * t * p2[1] + t**3 * p3[1])
+
+    for cmd, argstr in _CMD.findall(d):
+        nums = [float(v) for v in _NUM.findall(argstr)]
+        rel = cmd.islower()
+        c = cmd.upper()
+
+        if c == "Z":
+            if len(pts) > 2:
+                polys.append(pts)
+            pts = []
+            cx, cy = sx, sy
+            prev_ctrl = None
+            continue
+
+        step = {"M": 2, "L": 2, "H": 1, "V": 1, "C": 6, "S": 4, "Q": 4, "T": 2}[c]
+        for k in range(0, len(nums) - step + 1, step):
+            a = nums[k:k + step]
+            if c == "M":
+                x, y = (cx + a[0], cy + a[1]) if rel else (a[0], a[1])
+                if len(pts) > 2:
+                    polys.append(pts)
+                pts = [(x, y)]
+                cx = cy = None  # noqa — 아래에서 바로 채운다
+                cx, cy = x, y
+                sx, sy = x, y
+                c = "L"          # M 뒤에 좌표가 이어지면 L로 취급 (SVG 규약)
+                prev_ctrl = None
+            elif c == "L":
+                x, y = (cx + a[0], cy + a[1]) if rel else (a[0], a[1])
+                pts.append((x, y)); cx, cy = x, y; prev_ctrl = None
+            elif c == "H":
+                x = cx + a[0] if rel else a[0]
+                pts.append((x, cy)); cx = x; prev_ctrl = None
+            elif c == "V":
+                y = cy + a[0] if rel else a[0]
+                pts.append((cx, y)); cy = y; prev_ctrl = None
+            elif c in ("C", "S"):
+                if c == "C":
+                    p1 = (cx + a[0], cy + a[1]) if rel else (a[0], a[1])
+                    p2 = (cx + a[2], cy + a[3]) if rel else (a[2], a[3])
+                    p3 = (cx + a[4], cy + a[5]) if rel else (a[4], a[5])
+                else:
+                    p1 = (2 * cx - prev_ctrl[0], 2 * cy - prev_ctrl[1]) if prev_ctrl else (cx, cy)
+                    p2 = (cx + a[0], cy + a[1]) if rel else (a[0], a[1])
+                    p3 = (cx + a[2], cy + a[3]) if rel else (a[2], a[3])
+                pts.extend(cubic((cx, cy), p1, p2, p3))
+                prev_ctrl = p2; cx, cy = p3
+            elif c in ("Q", "T"):
+                if c == "Q":
+                    q = (cx + a[0], cy + a[1]) if rel else (a[0], a[1])
+                    p3 = (cx + a[2], cy + a[3]) if rel else (a[2], a[3])
+                else:
+                    q = (2 * cx - prev_ctrl[0], 2 * cy - prev_ctrl[1]) if prev_ctrl else (cx, cy)
+                    p3 = (cx + a[0], cy + a[1]) if rel else (a[0], a[1])
+                # 2차 -> 3차 베지어로 승격해서 같은 코드로 처리
+                p1 = (cx + 2 / 3 * (q[0] - cx), cy + 2 / 3 * (q[1] - cy))
+                p2 = (p3[0] + 2 / 3 * (q[0] - p3[0]), p3[1] + 2 / 3 * (q[1] - p3[1]))
+                pts.extend(cubic((cx, cy), p1, p2, p3))
+                prev_ctrl = q; cx, cy = p3
+
+    if len(pts) > 2:
+        polys.append(pts)
+    return polys
+
+
+def _rasterize_svg_pil(svg: str, size: int) -> Image.Image:
+    """cairosvg를 못 쓸 때의 대체 경로. 외부 의존성이 전혀 없다.
+
+    Windows에서 SVG 래스터화는 대부분 네이티브 Cairo를 요구한다
+    (cairosvg -> libcairo, reportlab renderPM -> rlPyCairo). 팀원 환경마다
+    설치가 막히는 걸 겪어서, Recraft가 실제로 내보내는 범위만 직접 그린다.
+
+    지원 범위: <path d fill transform="translate(x,y)">.
+    Recraft 벡터 응답은 이 형태만 쓴다. 그 외 요소가 섞이면 조용히 빠지므로,
+    품질이 중요한 곳에서는 cairosvg가 있는 환경을 쓰는 편이 낫다.
+    """
+    from PIL import ImageDraw
+
+    m = re.search(r'viewBox="\s*([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)', svg)
+    vx, vy, vw, vh = (float(m.group(i)) for i in (1, 2, 3, 4)) if m else (0, 0, 1024, 1024)
+    sx, sy = size / (vw or 1), size / (vh or 1)
+
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    for tag in re.findall(r"<path\b[^>]*/?>", svg):
+        dm = re.search(r'\sd="([^"]+)"', tag)
+        if not dm:
+            continue
+        fm = re.search(r'fill="rgb\((\d+),\s*(\d+),\s*(\d+)\)"', tag)
+        if fm:
+            fill = (int(fm.group(1)), int(fm.group(2)), int(fm.group(3)), 255)
+        else:
+            hm = re.search(r'fill="#([0-9A-Fa-f]{6})"', tag)
+            if hm:
+                h = hm.group(1)
+                fill = (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), 255)
+            elif re.search(r'fill="none"', tag):
+                continue
+            else:
+                fill = (0, 0, 0, 255)
+
+        tm = re.search(r'transform="translate\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)', tag)
+        tdx, tdy = (float(tm.group(1)), float(tm.group(2))) if tm else (0.0, 0.0)
+
+        for poly in _flatten_path(dm.group(1)):
+            if len(poly) < 3:
+                continue
+            draw.polygon(
+                [((x + tdx - vx) * sx, (y + tdy - vy) * sy) for x, y in poly],
+                fill=fill,
+            )
+    return img
 
 
 def strip_background(svg: str) -> str:

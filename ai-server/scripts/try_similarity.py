@@ -30,9 +30,48 @@ sys.path.insert(0, str(ROOT))
 OUT_DIR = ROOT / "data" / "outputs"
 
 
+RASTER_DIR = OUT_DIR / "_svg_raster"
+
+
+def _to_png(path: Path) -> Path:
+    """SVG면 PNG로 변환해서 그 경로를 돌려준다.
+
+    Recraft 벡터 모델로 바꾼 뒤로 생성 결과가 SVG로 온다. DINOv2는 래스터만
+    다루므로 여기서 한 번 변환한다. KIPRIS 상표 도면이 전부 흰 배경이라
+    변환본도 흰 배경으로 깔아준다 — 투명 배경을 그대로 넣으면 알파가 검정으로
+    합성되어 실제와 다른 임베딩이 나온다.
+    """
+    if path.suffix.lower() != ".svg":
+        return path
+
+    from PIL import Image
+
+    # 서비스 코드와 같은 변환기를 쓴다. 실험에서만 다른 경로로 변환하면
+    # 실제 서비스와 다른 이미지를 재게 된다.
+    from app.services.logo_gen_service import rasterize_svg
+
+    RASTER_DIR.mkdir(parents=True, exist_ok=True)
+    dst = RASTER_DIR / f"{path.parent.name}_{path.stem}.png"
+    img = rasterize_svg(path.read_text(encoding="utf-8"), 1024)
+    flat = Image.new("RGB", img.size, (255, 255, 255))
+    flat.paste(img, mask=img.split()[-1])
+    flat.save(dst)
+    return dst
+
+
 def collect_targets() -> list[Path]:
     if len(sys.argv) > 1:
-        return [Path(p) for p in sys.argv[1:]]
+        found = []
+        for arg in sys.argv[1:]:
+            p = Path(arg)
+            # 폴더를 주면 그 안의 로고를 전부 훑는다. 생성 결과가 시안별로
+            # 폴더에 나뉘어 저장되므로 파일을 하나씩 적는 건 번거롭다.
+            if p.is_dir():
+                found += sorted(p.glob("*.svg")) + sorted(p.glob("*.png"))
+            else:
+                found.append(p)
+        return [_to_png(f) for f in found]
+
     # v1(logo_try_*)과 v2(logo_v2_*) 결과를 모두 훑는다. 프롬프트 방식이 바뀌면
     # 유사도 점수가 어떻게 움직이는지 같은 실행에서 비교해야 하기 때문이다.
     found = sorted(OUT_DIR.glob("logo_try_*.png")) + sorted(OUT_DIR.glob("logo_v2_*.png"))
