@@ -69,16 +69,15 @@ const targetAgeOptions: Array<{ id: string; label: string; description: string }
   { id: '전 연령층', label: '전 연령층', description: '폭넓은 고객을 위한 브랜드' },
 ]
 
+const toTargetAgeApiValue = (value: string) => targetAgeOptions.find((option) => option.label === value)?.id ?? '전 연령층'
+const toTargetAgeLabel = (value: string | null | undefined) => targetAgeOptions.find((option) => option.id === value)?.label ?? ''
+
 const logoShapeRequirementPrefix = '로고 형태:'
 
 const extractLogoShapeRequirement = (requirements: string | null | undefined) => {
   const match = requirements?.match(new RegExp(`(?:^|\\n)${logoShapeRequirementPrefix}\\s*([^\\n]*)`))
   return match?.[1]?.trim() ?? ''
 }
-
-const removeLogoShapeRequirement = (requirements: string | null | undefined) => requirements
-  ?.replace(new RegExp(`(?:^|\\n)${logoShapeRequirementPrefix}\\s*[^\\n]*`), '')
-  .trim() ?? ''
 
 const galleryItems = [
   { id: 'luna', name: 'LUNA', category: '미니멀', meta: '뷰티 · 워드마크', likes: '2.8k', position: '20% 72%', tone: 'luna' },
@@ -290,20 +289,20 @@ function CustomerApp() {
   const [brandKind, setBrandKind] = useState<'ci' | 'bi' | null>(() => getModeFromUrl() === 'company-details' ? 'ci' : null)
   const [choiceBackMode, setChoiceBackMode] = useState<'home' | 'onboarding' | 'industry'>('home')
   const [industryBackMode, setIndustryBackMode] = useState<'home' | 'onboarding'>('home')
-  const [additionalRequest, setAdditionalRequest] = useState('')
   const [brandName, setBrandName] = useState('')
-  const [targetAge, setTargetAge] = useState('전 연령층')
+  const [targetAge, setTargetAge] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [companyMotto, setCompanyMotto] = useState('')
   const [coreValues, setCoreValues] = useState<CoreValue[]>([])
   const [coreValueInputMode, setCoreValueInputMode] = useState<'category' | 'direct'>('category')
   const [brandValueDescription, setBrandValueDescription] = useState('')
-  const [toneSelection, setToneSelection] = useState<ToneOption>('friendly')
+  const [toneSelection, setToneSelection] = useState<ToneOption | null>(null)
   const [toneMode, setToneMode] = useState<'recommended' | 'direct'>('recommended')
   const [tonePaletteTarget, setTonePaletteTarget] = useState<{ toneId: ToneOption; slot: number } | null>(null)
   const [tonePaletteDraft, setTonePaletteDraft] = useState<{ toneId: ToneOption; colors: string[] } | null>(null)
   const [customToneColors, setCustomToneColors] = useState<Partial<Record<ToneOption, string[]>>>({})
-  const [manualColors, setManualColors] = useState<string[]>(['#9765e9', '#dcaff5'])
+  const [manualColors, setManualColors] = useState<string[]>([])
+  const [manualColorsSelected, setManualColorsSelected] = useState(false)
   const [manualColorSlot, setManualColorSlot] = useState(0)
   const [colorSelectionMode, setColorSelectionMode] = useState<'tone' | 'manual'>('tone')
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
@@ -611,16 +610,17 @@ function CustomerApp() {
       setBrandValueDescription(project.brandValuesText ?? '')
       setCoreValues((project.brandValues ?? []).filter((value): value is CoreValue => coreValueIds.has(value as CoreValue)))
       setCoreValueInputMode(project.brandValues?.length ? 'category' : 'direct')
-      setTargetAge(project.targetAge ?? '전 연령층')
+      setTargetAge(project.targetAge ? toTargetAgeLabel(project.targetAge) : '')
       setLogoShapePrompt(extractLogoShapeRequirement(project.additionalRequirements))
-      setAdditionalRequest(removeLogoShapeRequirement(project.additionalRequirements))
       if (project.tone && toneOptions.some((option) => option.id === project.tone)) setToneSelection(project.tone as ToneOption)
+      else setToneSelection(null)
       if (project.colors?.length) {
         setManualColors(project.colors.slice(0, 4))
         const matchingTone = project.colors.length >= 2
           ? toneOptions.find((option) => option.colors[0].toLowerCase() === project.colors?.[0]?.toLowerCase() && option.colors[1].toLowerCase() === project.colors?.[1]?.toLowerCase())
           : undefined
         setColorSelectionMode(matchingTone ? 'tone' : 'manual')
+        setManualColorsSelected(Boolean(!matchingTone && project.colors.length >= 2))
         if (matchingTone) setToneSelection(matchingTone.id)
       }
       if (project.logoStyle && logoStyleOptions.some((option) => option.id === project.logoStyle)) setLogoStyle(project.logoStyle as LogoStyle)
@@ -811,6 +811,7 @@ function CustomerApp() {
   const resetManualColors = () => {
     setManualColors(['#9765e9', '#dcaff5'])
     setManualColorSlot(0)
+    setManualColorsSelected(false)
   }
 
   const updateToneColorFromHex = (toneId: ToneOption, slot: number, hex: string) => {
@@ -836,7 +837,7 @@ function CustomerApp() {
   }
 
   const getSelectedColors = () => {
-    if (colorSelectionMode === 'tone') {
+    if (colorSelectionMode === 'tone' && toneSelection) {
       return customToneColors[toneSelection]
         ?? toneOptions.find((option) => option.id === toneSelection)?.colors
         ?? toneOptions[0].colors
@@ -845,12 +846,9 @@ function CustomerApp() {
     return manualColors
   }
 
-  const buildAdditionalRequirements = (includeFinalRequest: boolean) => {
+  const buildAdditionalRequirements = () => {
     const shapeRequirement = logoShapePrompt.trim() ? `${logoShapeRequirementPrefix} ${logoShapePrompt.trim()}` : ''
-    const finalRequest = includeFinalRequest ? additionalRequest.trim() : ''
-    const availableRequestLength = Math.max(0, 300 - shapeRequirement.length - (shapeRequirement && finalRequest ? 1 : 0))
-    const combined = [shapeRequirement, finalRequest.slice(0, availableRequestLength)].filter(Boolean).join('\n')
-    return combined || undefined
+    return shapeRequirement || undefined
   }
 
   const buildProjectInput = (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review'): ProjectInput => {
@@ -866,20 +864,20 @@ function CustomerApp() {
       input.brandName = brandName.trim() || undefined
       input.brandValues = coreValueInputMode === 'category' ? coreValues : undefined
       input.brandValuesText = coreValueInputMode === 'direct' ? brandValueDescription.trim() || undefined : undefined
-      input.targetAge = targetAge || '전 연령층'
+      input.targetAge = toTargetAgeApiValue(targetAge || '전 연령층')
     }
 
     if (step === 'tone') {
-      input.tone = toneSelection
+      input.tone = toneSelection ?? undefined
       input.colorMode = colorSelectionMode === 'manual' ? 'MANUAL' : 'TONE'
       input.colors = getSelectedColors()
     }
 
     if (step === 'logo-style') {
       input.logoStyle = logoStyle ?? undefined
-      input.additionalRequirements = buildAdditionalRequirements(false)
+      input.additionalRequirements = buildAdditionalRequirements()
     }
-    if (step === 'final-review') input.additionalRequirements = buildAdditionalRequirements(true)
+    if (step === 'final-review') input.additionalRequirements = buildAdditionalRequirements()
 
     return input
   }
@@ -1327,11 +1325,11 @@ function CustomerApp() {
                 const selected = targetAge === option.id
                 return (
                   <button
-                    key={option.id}
+                    key={option.label}
                     type="button"
                     className={selected ? 'target-audience-card selected' : 'target-audience-card'}
                     aria-pressed={selected}
-                    onClick={() => setTargetAge((current) => current === option.id ? '' : option.id)}
+                    onClick={() => setTargetAge((current) => current === option.label ? '' : option.label)}
                   >
                     <span className="target-audience-card-copy">
                       <strong>{option.label}</strong>
@@ -1344,7 +1342,7 @@ function CustomerApp() {
             </div>
           </section>
 
-          <button className="brand-details-next" type="button" onClick={() => void saveProjectStep('brand-brief', 'tone')} disabled={projectSaving || !brandName.trim()}>
+          <button className="brand-details-next" type="button" onClick={() => void saveProjectStep('brand-brief', 'tone')} disabled={projectSaving || !brandName.trim() || !targetAge}>
             {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
           </button>
           {projectError && <p className="project-error" role="alert">{projectError}</p>}
@@ -1402,7 +1400,7 @@ function CustomerApp() {
           </div>
         </section>
 
-        <button className="brand-details-next" type="button" onClick={handleCompanyDetailsNext} disabled={projectSaving}>
+        <button className="brand-details-next" type="button" onClick={handleCompanyDetailsNext} disabled={projectSaving || !companyName.trim()}>
           {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
         </button>
         {projectError && <p className="project-error" role="alert">{projectError}</p>}
@@ -1431,7 +1429,7 @@ function CustomerApp() {
               role="tab"
               aria-selected={toneMode === 'direct'}
               className={toneMode === 'direct' ? 'tone-mode-tab active' : 'tone-mode-tab'}
-              onClick={() => { setToneMode('direct'); setColorSelectionMode('manual'); setColorPickerOpen(true); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
+              onClick={() => { setToneMode('direct'); setColorSelectionMode('manual'); setManualColors((current) => current.length >= 2 ? current : ['#9765e9', '#dcaff5']); setManualColorsSelected(false); setColorPickerOpen(true); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
             >직접 지정</button>
           </div>
           <h1 id="tone-selection-title">톤앤매너와<br />색상을 골라주세요</h1>
@@ -1450,7 +1448,7 @@ function CustomerApp() {
                 type="button"
                 className={selected ? 'tone-option selected' : 'tone-option'}
                 aria-pressed={selected}
-                onClick={() => { setToneSelection(tone.id); setColorSelectionMode('tone') }}
+                 onClick={() => { setToneSelection((current) => current === tone.id ? null : tone.id); setColorSelectionMode('tone') }}
               >
                 <span className="tone-swatches" aria-hidden="true">
                   {toneColors.map((color, index) => <i key={`${tone.id}-${index}-${color}`} style={{ background: color }} />)}
@@ -1567,7 +1565,7 @@ function CustomerApp() {
               </div>
               <ToneColorPalette
                 value={hexToRgb(manualColors[manualColorSlot] ?? manualColors[0])}
-                onChange={(color) => updateManualColorFromHex(rgbToHex(color))}
+              onChange={(color) => { updateManualColorFromHex(rgbToHex(color)); setManualColorsSelected(true) }}
                 onComplete={() => setColorPickerOpen(false)}
                 ariaLabel="색상 팔레트"
               />
@@ -1579,7 +1577,7 @@ function CustomerApp() {
           )}
         </section>)}
 
-        <button className="tone-next" type="button" onClick={() => void saveProjectStep('tone', 'style')} disabled={projectSaving}>
+        <button className="tone-next" type="button" onClick={() => void saveProjectStep('tone', 'style')} disabled={projectSaving || (toneMode === 'recommended' ? !toneSelection : !manualColorsSelected)}>
           {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
         </button>
         {projectError && <p className="project-error" role="alert">{projectError}</p>}
@@ -1862,20 +1860,6 @@ function CustomerApp() {
             <h1 id="final-request-title">마지막으로 꼭 반영할 내용을 알려주세요</h1>
             <p>원하는 요소뿐 아니라 피하고 싶은 형태도 작성할 수 있어요.</p>
           </header>
-
-          <section className="final-request-section" aria-labelledby="additional-request-title">
-            <h2 id="additional-request-title">추가 요청사항</h2>
-            <div className="final-textarea-wrap">
-              <textarea
-                aria-label="추가 요청사항"
-                maxLength={300}
-                value={additionalRequest}
-                onChange={(event) => setAdditionalRequest(event.target.value)}
-                placeholder={'예: 꽃이나 잎 모양은 피하고,\n얇고 고급스러운 영문 글씨체를 사용해주세요.'}
-              />
-              <span className="final-character-count">{additionalRequest.length} / 300</span>
-            </div>
-          </section>
 
           <section className="final-summary-section" aria-labelledby="summary-title">
             <h2 id="summary-title">이 내용으로 로고를 만들게요</h2>
