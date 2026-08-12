@@ -1,5 +1,5 @@
 import { FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
+import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, CircleGauge, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Gem, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
@@ -61,6 +61,13 @@ const logoStyleOptions: Array<{ id: LogoStyle; label: string; description: strin
   { id: 'lettermark', label: '레터마크', description: '브랜드 이름의 첫 글자나 이니셜을 활용한 로고', fit: '브랜드 이름이 길거나 간결한 이미지를 원할 때 좋아요.' },
 ]
 
+const finalSummaryIconMap: Record<string, LucideIcon> = {
+  name: Building2,
+  audience: UsersRound,
+  value: Gem,
+  mood: CircleGauge,
+}
+
 // id는 백엔드/DB(chk_bi_target_age)가 허용하는 값 그대로, label만 화면에 보여주는 표기.
 const targetAgeOptions: Array<{ id: string; label: string; description: string }> = [
   { id: '10~20', label: '10-20대', description: '트렌드와 개성을 중시하는 고객' },
@@ -69,8 +76,7 @@ const targetAgeOptions: Array<{ id: string; label: string; description: string }
   { id: '전 연령층', label: '전 연령층', description: '폭넓은 고객을 위한 브랜드' },
 ]
 
-const toTargetAgeApiValue = (value: string) => targetAgeOptions.find((option) => option.label === value)?.id ?? '전 연령층'
-const toTargetAgeLabel = (value: string | null | undefined) => targetAgeOptions.find((option) => option.id === value)?.label ?? ''
+const toTargetAgeApiValue = (value: string) => targetAgeOptions.find((option) => option.id === value || option.label === value)?.id ?? '전 연령층'
 
 const logoShapeRequirementPrefix = '로고 형태:'
 
@@ -306,7 +312,7 @@ function CustomerApp() {
   const [manualColorSlot, setManualColorSlot] = useState(0)
   const [colorSelectionMode, setColorSelectionMode] = useState<'tone' | 'manual'>('tone')
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
-  const [logoStyle, setLogoStyle] = useState<LogoStyle | null>('combination')
+  const [logoStyle, setLogoStyle] = useState<LogoStyle | null>(null)
   const [logoShapePrompt, setLogoShapePrompt] = useState('')
   const [logoShapeAccordionOpen, setLogoShapeAccordionOpen] = useState(false)
   const [resultCandidate, setResultCandidate] = useState(0)
@@ -610,7 +616,9 @@ function CustomerApp() {
       setBrandValueDescription(project.brandValuesText ?? '')
       setCoreValues((project.brandValues ?? []).filter((value): value is CoreValue => coreValueIds.has(value as CoreValue)))
       setCoreValueInputMode(project.brandValues?.length ? 'category' : 'direct')
-      setTargetAge(project.targetAge ? toTargetAgeLabel(project.targetAge) : '')
+      setTargetAge(project.targetAge
+        ? targetAgeOptions.find((option) => option.id === project.targetAge || option.label === project.targetAge)?.id ?? ''
+        : '')
       setLogoShapePrompt(extractLogoShapeRequirement(project.additionalRequirements))
       if (project.tone && toneOptions.some((option) => option.id === project.tone)) setToneSelection(project.tone as ToneOption)
       else setToneSelection(null)
@@ -1329,7 +1337,7 @@ function CustomerApp() {
                     type="button"
                     className={selected ? 'target-audience-card selected' : 'target-audience-card'}
                     aria-pressed={selected}
-                    onClick={() => setTargetAge((current) => current === option.label ? '' : option.label)}
+                    onClick={() => setTargetAge((current) => current === option.id ? '' : option.id)}
                   >
                     <span className="target-audience-card-copy">
                       <strong>{option.label}</strong>
@@ -1866,14 +1874,17 @@ function CustomerApp() {
             <div className="final-summary-card">
               {summaryRows.map((row) => (
                 <div className="final-summary-row" key={row.key}>
-                  <span className={`final-detail-icon icon-${row.icon}`} aria-hidden="true" />
+                  {(() => {
+                    const SummaryIcon = finalSummaryIconMap[row.icon] ?? Shapes
+                    return <SummaryIcon className="final-detail-icon" aria-hidden="true" size={22} strokeWidth={1.8} />
+                  })()}
                   <span className="final-summary-label">{row.label}</span>
                   <span className="final-summary-value">{row.value}</span>
                   <button className="final-edit-button" type="button" onClick={() => setMode(row.editMode)}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
                 </div>
               ))}
               <div className="final-summary-row">
-                <span className="final-detail-icon icon-color" aria-hidden="true" />
+                <Palette className="final-detail-icon" aria-hidden="true" size={22} strokeWidth={1.8} />
                 <span className="final-summary-label">선호 색상</span>
                 <span className="final-color-swatches" aria-label="선호 색상 4개">
                   {getSelectedColors().map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
@@ -1881,9 +1892,15 @@ function CustomerApp() {
                   <button className="final-edit-button" type="button" onClick={() => setMode('tone')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
               <div className="final-summary-row">
-                <span className="final-detail-icon icon-logo" aria-hidden="true" />
-                <span className="final-summary-label">로고 형태</span>
+                <TypeIcon className="final-detail-icon" aria-hidden="true" size={22} strokeWidth={1.8} />
+                <span className="final-summary-label">로고 타입</span>
                 <span className="final-summary-value">{selectedLogoStyle}{logoStyle === 'combination' && <em>추천</em>}</span>
+                <button className="final-edit-button" type="button" onClick={() => setMode('style')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+              </div>
+              <div className="final-summary-row">
+                <Shapes className="final-detail-icon" aria-hidden="true" size={22} strokeWidth={1.8} />
+                <span className="final-summary-label">원하는 로고 모양</span>
+                <span className="final-summary-value">{displayValue(logoShapePrompt)}</span>
                 <button className="final-edit-button" type="button" onClick={() => setMode('style')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
             </div>
