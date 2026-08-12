@@ -61,6 +61,14 @@ const logoStyleOptions: Array<{ id: LogoStyle; label: string; description: strin
   { id: 'lettermark', label: '레터마크', description: '브랜드 이름의 첫 글자나 이니셜을 활용한 로고', fit: '브랜드 이름이 길거나 간결한 이미지를 원할 때 좋아요.' },
 ]
 
+// id는 백엔드/DB(chk_bi_target_age)가 허용하는 값 그대로, label만 화면에 보여주는 표기.
+const targetAgeOptions: Array<{ id: string; label: string; description: string }> = [
+  { id: '10~20', label: '10-20대', description: '트렌드와 개성을 중시하는 고객' },
+  { id: '30~40', label: '30-40대', description: '일상과 균형을 중시하는 고객' },
+  { id: '50~60', label: '50-60대', description: '편안함과 신뢰를 중시하는 고객' },
+  { id: '전 연령층', label: '전 연령층', description: '폭넓은 고객을 위한 브랜드' },
+]
+
 const logoShapeRequirementPrefix = '로고 형태:'
 
 const extractLogoShapeRequirement = (requirements: string | null | undefined) => {
@@ -285,20 +293,8 @@ function CustomerApp() {
   const [additionalRequest, setAdditionalRequest] = useState('')
   const [brandName, setBrandName] = useState('')
   const [targetAge, setTargetAge] = useState('전 연령층')
-  const [companyName, setCompanyName] = useState(() => {
-    try {
-      return JSON.parse(window.localStorage.getItem('genmark-company-profile') ?? '{}').name ?? ''
-    } catch {
-      return ''
-    }
-  })
-  const [companyMotto, setCompanyMotto] = useState(() => {
-    try {
-      return JSON.parse(window.localStorage.getItem('genmark-company-profile') ?? '{}').motto ?? ''
-    } catch {
-      return ''
-    }
-  })
+  const [companyName, setCompanyName] = useState('')
+  const [companyMotto, setCompanyMotto] = useState('')
   const [coreValues, setCoreValues] = useState<CoreValue[]>([])
   const [coreValueInputMode, setCoreValueInputMode] = useState<'category' | 'direct'>('category')
   const [brandValueDescription, setBrandValueDescription] = useState('')
@@ -448,10 +444,6 @@ function CustomerApp() {
     url.searchParams.set('view', 'home')
     window.history.replaceState({ view: 'home' }, '', `${url.pathname}${url.search}${url.hash}`)
   }, [])
-
-  useEffect(() => {
-    window.localStorage.setItem('genmark-company-profile', JSON.stringify({ name: companyName, motto: companyMotto }))
-  }, [companyName, companyMotto])
 
   useEffect(() => {
     if (mode !== 'loading' || !generationLoading) {
@@ -635,12 +627,14 @@ function CustomerApp() {
 
       const step = typeof project.currentStep === 'number' ? project.currentStep : Number(project.currentStep)
       if (project.brandType === 'BI') {
-        if (step >= 5 || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED') return 'result'
+        if (step >= 6 || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED') return 'result'
+        if (step >= 5) return 'final'
         if (step >= 4) return 'style'
         if (step >= 3) return 'tone'
         return 'brand-details'
       }
-      if (step >= 4 || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED') return 'result'
+      if (step >= 5 || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED') return 'result'
+      if (step >= 4) return 'final'
       if (step >= 3) return 'style'
       if (step >= 2) return 'tone'
       return nextBrandKind === 'ci' ? 'company-details' : 'brand-details'
@@ -674,9 +668,9 @@ function CustomerApp() {
        setIndustryBackMode(session.user.onboardingCompleted ? 'home' : 'onboarding')
        if (!session.user.onboardingCompleted) {
          setMode('onboarding')
-       } else if (loginDestination === 'industry' && session.resumeProjectId) {
+       } else if (session.resumeProjectId) {
          const resumedMode = await restoreProjectState(session.resumeProjectId)
-         setMode(resumedMode ?? 'industry')
+         setMode(resumedMode ?? loginDestination)
        } else {
          setMode(loginDestination)
        }
@@ -913,8 +907,6 @@ function CustomerApp() {
       }
     }
 
-    if (step === 'brand-brief') return null
-
     const project = await projectsApi.create(buildProjectCreateInput(step))
     setProjectId(project.id)
     window.localStorage.setItem('genmark-project-id', project.id)
@@ -928,9 +920,10 @@ function CustomerApp() {
     setProjectSaving(true)
     setProjectError('')
     try {
-      // Company/brand details are collected locally. The first backend write
-      // happens on the tone step, where the required color1/color2 values exist.
-      if (step !== 'brand-brief') await ensureProject(step)
+      // brand-brief 단계부터 서버에 저장한다. color1/color2가 nullable로 바뀌어서
+      // 색상을 고르기 전에도(=이 단계에서) 프로젝트를 만들 수 있다 — 이어야
+      // 2번 화면(tone)을 보다가 이탈해도 그 화면으로 이어쓰기가 된다.
+      await ensureProject(step)
       setMode(nextMode)
     } catch (error) {
       setProjectError(error instanceof Error ? error.message : '프로젝트 정보를 저장하지 못했어요.')
@@ -1330,12 +1323,7 @@ function CustomerApp() {
               <span className="target-audience-caption">하나를 선택해 주세요</span>
             </div>
             <div className="target-audience-grid" role="group" aria-label="주요 타겟 선택">
-              {[
-                { id: '10-20대', description: '트렌드와 개성을 중시하는 고객' },
-                { id: '30-40대', description: '일상과 균형을 중시하는 고객' },
-                { id: '50-60대', description: '편안함과 신뢰를 중시하는 고객' },
-                { id: '전 연령층', description: '폭넓은 고객을 위한 브랜드' },
-              ].map((option) => {
+              {targetAgeOptions.map((option) => {
                 const selected = targetAge === option.id
                 return (
                   <button
@@ -1346,7 +1334,7 @@ function CustomerApp() {
                     onClick={() => setTargetAge((current) => current === option.id ? '' : option.id)}
                   >
                     <span className="target-audience-card-copy">
-                      <strong>{option.id}</strong>
+                      <strong>{option.label}</strong>
                       <small>{option.description}</small>
                     </span>
                     <span className="target-audience-check" aria-hidden="true">{selected && <Check size={16} strokeWidth={2.5} />}</span>
@@ -1859,7 +1847,7 @@ function CustomerApp() {
         ]
       : [
           { key: 'brand-name', label: '브랜드명', value: displayValue(brandName), icon: 'name', editMode: 'brand-details' as ViewMode },
-          { key: 'audience', label: '주요 고객', value: displayValue(targetAge), icon: 'audience', editMode: 'brand-details' as ViewMode },
+          { key: 'audience', label: '주요 고객', value: displayValue(targetAgeOptions.find((option) => option.id === targetAge)?.label), icon: 'audience', editMode: 'brand-details' as ViewMode },
           { key: 'value', label: '핵심 가치', value: selectedBrandValues, icon: 'value', editMode: 'brand-details' as ViewMode },
           { key: 'mood', label: '분위기', value: selectedToneLabel, icon: 'mood', editMode: 'tone' as ViewMode },
         ]
@@ -2546,7 +2534,11 @@ function CustomerApp() {
             <BrandLogo />
             <span>GenMark AI</span>
           </a>
-          <button className="outline-login" type="button" disabled={authRestoring} onClick={() => loggedIn ? void handleLogout() : setMode('login')}>
+          <button className="outline-login" type="button" disabled={authRestoring} onClick={() => {
+            if (loggedIn) { void handleLogout(); return }
+            setLoginDestination('home')
+            setMode('login')
+          }}>
             {authRestoring ? '확인 중…' : loggedIn ? '로그아웃' : '로그인'}
           </button>
         </header>
