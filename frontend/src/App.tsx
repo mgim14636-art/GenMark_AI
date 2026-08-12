@@ -125,6 +125,16 @@ const getModeFromUrl = (): ViewMode => {
   return 'hero'
 }
 
+// TEMP_RESULT_PREVIEW: 결과 후보가 없을 때 결과 화면 레이아웃을 생성 API 없이
+// 검토하기 위한 로컬 목업 데이터입니다. 실제 생성·저장 흐름에는 사용하지 않습니다.
+const resultPreviewCandidates: LogoCandidate[] = [
+  { id: 'preview-candidate-1', order: 1, storageKey: 'preview-candidate-1', mimeType: 'image/svg+xml', width: 760, height: 760, selected: true, pinnedAt: null, createdAt: '' },
+  { id: 'preview-candidate-2', order: 2, storageKey: 'preview-candidate-2', mimeType: 'image/svg+xml', width: 760, height: 760, selected: false, pinnedAt: null, createdAt: '' },
+  { id: 'preview-candidate-3', order: 3, storageKey: 'preview-candidate-3', mimeType: 'image/svg+xml', width: 760, height: 760, selected: false, pinnedAt: null, createdAt: '' },
+  { id: 'preview-candidate-4', order: 4, storageKey: 'preview-candidate-4', mimeType: 'image/svg+xml', width: 760, height: 760, selected: false, pinnedAt: null, createdAt: '' },
+]
+const resultPreviewImageUrl = '/logo-result-preview.svg'
+
 const clampColorChannel = (value: number) => Math.max(0, Math.min(255, Math.round(value)))
 const rgbToHex = ({ r, g, b }: RgbColor) => `#${[r, g, b].map((channel) => clampColorChannel(channel).toString(16).padStart(2, '0')).join('')}`
 const mixRgb = (source: RgbColor, target: RgbColor, amount: number): RgbColor => ({
@@ -2179,13 +2189,15 @@ function CustomerApp() {
   }
 
   const renderLogoResultScreen = () => {
+    const isResultPreview = logoCandidates.length === 0
     const candidateProfiles = [
       { name: '후보 1', subtitle: 'GENMARK AI', style: 'lavender', direction: '미니멀 · 내추럴' },
       { name: '후보 2', subtitle: 'GENMARK AI', style: 'rose', direction: '우아한 · 감성적' },
       { name: '후보 3', subtitle: 'GENMARK AI', style: 'sage', direction: '깨끗한 · 프리미엄' },
       { name: '후보 4', subtitle: 'GENMARK AI', style: 'pearl', direction: '현대적 · 세련된' },
     ]
-    const candidates = logoCandidates.map((candidate, index) => ({ ...candidate, ...candidateProfiles[index] }))
+    const sourceCandidates = isResultPreview && logoCandidates.length === 0 ? resultPreviewCandidates : logoCandidates
+    const candidates = sourceCandidates.map((candidate, index) => ({ ...candidate, ...candidateProfiles[index] }))
     const candidate = candidates[resultCandidate] ?? candidates[0]
 
     if (!candidate) {
@@ -2215,28 +2227,28 @@ function CustomerApp() {
           <div className="logo-result-counter" aria-label={`로고 ${resultCandidate + 1} / 4`}>{resultCandidate + 1} / 4</div>
 
           <section className="logo-candidate-panel" aria-label="로고 후보 미리보기">
-            <button className={resultLiked ? 'logo-candidate-action like liked' : 'logo-candidate-action like'} type="button" aria-label={resultLiked ? '찜 취소' : '찜'} aria-pressed={resultLiked} onClick={() => void toggleCandidatePin(candidate)}>
+            <button className={resultLiked ? 'logo-candidate-action like liked' : 'logo-candidate-action like'} type="button" aria-label={resultLiked ? '찜 취소' : '찜'} aria-pressed={resultLiked} onClick={() => isResultPreview ? setResultLiked((current) => !current) : void toggleCandidatePin(candidate)}>
               <Heart size={22} strokeWidth={1.9} fill={resultLiked ? 'currentColor' : 'none'} />
             </button>
-            <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => { const next = (resultCandidate + candidates.length - 1) % candidates.length; void selectLogoCandidate(candidates[next], next) }}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>
+            <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => { const next = (resultCandidate + candidates.length - 1) % candidates.length; if (isResultPreview) setResultCandidate(next); else void selectLogoCandidate(candidates[next], next) }}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>
             <div className="logo-candidate-art">
               <img
                 className="logo-candidate-image"
-                src={getLogoCandidateImageUrl(candidate.storageKey)}
+                src={isResultPreview ? resultPreviewImageUrl : getLogoCandidateImageUrl(candidate.storageKey)}
                 alt={`${candidate.name} AI 생성 로고`}
               />
               <strong>{candidate.name}</strong>
               <small>{candidate.subtitle}</small>
             </div>
-            <button className="logo-candidate-arrow next" type="button" aria-label="다음 후보" onClick={() => { const next = (resultCandidate + 1) % candidates.length; void selectLogoCandidate(candidates[next], next) }}><ChevronRight aria-hidden="true" size={26} strokeWidth={1.8} /></button>
-              <button className="logo-candidate-action download" type="button" aria-label="로고 파일 다운로드" onClick={() => requestLogoDownload({ ...candidate, candidateId: candidate.id })}>
+            <button className="logo-candidate-arrow next" type="button" aria-label="다음 후보" onClick={() => { const next = (resultCandidate + 1) % candidates.length; if (isResultPreview) setResultCandidate(next); else void selectLogoCandidate(candidates[next], next) }}><ChevronRight aria-hidden="true" size={26} strokeWidth={1.8} /></button>
+              <button className="logo-candidate-action download" type="button" aria-label="로고 파일 다운로드" disabled={isResultPreview} onClick={() => requestLogoDownload({ ...candidate, candidateId: candidate.id })}>
               <Download size={21} strokeWidth={1.9} />
             </button>
           </section>
           {candidate.pinnedAt ? <p className="logo-pin-expiry">찜한 로고예요. 3일 뒤 자동으로 사라져요.</p> : null}
           {pinError && <p className="project-error" role="alert">{pinError}</p>}
           <div className="logo-result-dots" aria-label="후보 선택">
-            {candidates.map((item, index) => <button key={item.id} className={index === resultCandidate ? 'active' : ''} type="button" aria-label={`후보 ${index + 1}`} aria-pressed={index === resultCandidate} onClick={() => void selectLogoCandidate(item, index)} />)}
+            {candidates.map((item, index) => <button key={item.id} className={index === resultCandidate ? 'active' : ''} type="button" aria-label={`후보 ${index + 1}`} aria-pressed={index === resultCandidate} onClick={() => isResultPreview ? setResultCandidate(index) : void selectLogoCandidate(item, index)} />)}
           </div>
 
           <section className="logo-result-details" aria-label="로고 디자인 상세">
