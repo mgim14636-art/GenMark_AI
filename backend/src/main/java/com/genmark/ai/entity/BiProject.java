@@ -69,10 +69,15 @@ public class BiProject implements ProjectLike {
     @Builder.Default
     private String tone = "friendly";
 
-    @Column(name = "color_1", nullable = false, length = 7)
+    /**
+     * brand-brief 단계만 제출한 상태에서는 아직 색상을 고르지 않아 null일 수 있다
+     * (F9 이어쓰기가 이 단계부터도 동작하도록 하기 위함). 실제 로고 생성은 항상 tone
+     * 단계를 지난 뒤에만 시작되므로, 그 시점엔 이미 채워져 있다.
+     */
+    @Column(name = "color_1", length = 7)
     private String color1;
 
-    @Column(name = "color_2", nullable = false, length = 7)
+    @Column(name = "color_2", length = 7)
     private String color2;
 
     @Column(name = "color_3", length = 7)

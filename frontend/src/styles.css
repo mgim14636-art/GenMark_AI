@@ -2533,33 +2533,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   line-height: 1;
 }
 
-.final-detail-icon::before,
-.final-detail-icon::after {
-  position: absolute;
-  content: '';
-}
-
-.icon-name::before { width: 18px; height: 20px; border: 2px solid currentColor; border-radius: 2px; }
-.icon-name::after { top: 4px; width: 12px; height: 6px; border-top: 2px solid currentColor; border-bottom: 2px solid currentColor; }
-.icon-product::before { width: 20px; height: 17px; border: 2px solid currentColor; border-radius: 4px; }
-.icon-product::after { top: 3px; width: 10px; height: 5px; border: 2px solid currentColor; border-bottom: 0; border-radius: 4px 4px 0 0; }
-.icon-description::before { width: 18px; height: 22px; border: 2px solid currentColor; border-radius: 2px; }
-.icon-description::after { width: 11px; height: 2px; background: currentColor; box-shadow: 0 -5px currentColor, 0 5px currentColor; }
-.icon-audience::before { width: 10px; height: 10px; border: 2px solid currentColor; border-radius: 50%; transform: translateY(-5px); box-shadow: 8px 3px 0 -2px #fff, 8px 3px 0 0 currentColor; }
-.icon-audience::after { bottom: 1px; width: 22px; height: 10px; border: 2px solid currentColor; border-radius: 12px 12px 3px 3px; }
-.icon-value::before { width: 14px; height: 18px; border: 2px solid currentColor; border-radius: 0 100% 0 100%; transform: rotate(45deg); }
-.icon-value::after { width: 2px; height: 22px; background: currentColor; }
-.icon-mood::before { width: 22px; height: 22px; border: 2px solid currentColor; border-radius: 50%; }
-.icon-mood::after { width: 8px; height: 8px; border-top: 2px solid currentColor; border-right: 2px solid currentColor; transform: translate(2px, -2px) rotate(45deg); }
-.icon-color::before { width: 22px; height: 22px; border: 2px solid currentColor; border-radius: 50%; }
-.icon-color::after { width: 8px; height: 8px; border: 2px solid currentColor; border-radius: 50%; }
-.icon-logo::before { width: 20px; height: 22px; border: 2px solid currentColor; border-radius: 4px; }
-.icon-logo::after { width: 8px; height: 8px; border: 2px solid currentColor; border-radius: 50%; transform: translateY(-4px); }
-
-.icon-question { border: 2px solid currentColor; border-radius: 50%; }
-.icon-question::before { content: none; }
-.icon-question::after { content: none; }
-
 .final-summary-label {
   color: #202535;
   font-size: 21px;
@@ -7721,6 +7694,20 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   background: linear-gradient(100deg, #b5a0ff, #dc80e9 54%, #ff98c9);
   box-shadow: 0 12px 28px rgb(204 122 227 / .25), inset 0 1px 0 rgb(255 255 255 / .58);
   font-size: 20px;
+}
+
+.tone-next:disabled,
+.tone-next:disabled:hover,
+.logo-style-next:disabled,
+.logo-style-next:disabled:hover {
+  cursor: not-allowed;
+  color: #9a90aa;
+  background: linear-gradient(100deg, #eeeaff, #eee9f3 54%, #f3eaf1);
+  border: 1px solid #e4dcef;
+  opacity: 1;
+  transform: none;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .82);
+  filter: saturate(.58);
 }
 
 @media (max-width: 720px) {
