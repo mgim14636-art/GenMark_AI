@@ -1,7 +1,7 @@
 """브랜드킷(F14) 합성 서비스.
 
 설계 전제 — 로고를 이미지 생성 모델에 통째로 넣지 않는다.
-현재 FLUX 호출부(flux_service._call_flux_pro)는 프롬프트만 보내는 text-to-image
+현재 이미지 생성 호출부(logo_gen_service._call_image_api)는 프롬프트만 보내는 text-to-image
 경로다. OpenRouter Image API에 input_references(image-to-image)가 있긴 하지만,
 디퓨전 모델은 입력 로고를 그대로 재현하지 못한다. 브랜드 아이덴티티 산출물에서 사용자의 로고가 변형돼 나오면
 기능 자체가 무의미해지므로, 배경만 생성하고 로고는 PIL로 정확히 얹는다.
@@ -11,7 +11,7 @@
 현재 구현 상태:
     BUSINESS_CARD      템플릿 합성으로 최종 품질까지 구현 (외부 API 불필요)
     PRODUCT_THUMBNAIL  톤 기반 그라데이션 배경 + 로고 합성까지 구현.
-                       FLUX 연출 배경 생성은 미구현이며 응답에 preliminary=True로 표시한다.
+                       AI 연출 배경 생성은 미구현이며 응답에 preliminary=True로 표시한다.
 """
 import base64
 import binascii
@@ -234,7 +234,7 @@ def _compose_product_thumbnail(
     accent = _pick_accent(survey)
 
     # 강조색을 위쪽에 옅게 깔고 아래로 갈수록 밝아지는 세로 그라데이션.
-    # FLUX 연출 배경이 붙기 전까지의 임시 바탕이다.
+    # AI 연출 배경이 붙기 전까지의 임시 바탕이다.
     canvas = Image.new("RGB", (W, H))
     d = ImageDraw.Draw(canvas)
     top = tuple(int(c * 0.34 + 255 * 0.66) for c in accent)
@@ -279,7 +279,7 @@ def create_brand_kit(req: BrandKitRequest) -> BrandKitResponse:
             )
     else:
         image = _compose_product_thumbnail(logo, req.product_name, req.survey)
-        warnings.append("FLUX 연출 배경 미적용 — 톤 기반 그라데이션으로 대체했습니다.")
+        warnings.append("AI 연출 배경 미적용 — 톤 기반 그라데이션으로 대체했습니다.")
 
     encoded = _to_base64(image)
     return BrandKitResponse(

@@ -14,7 +14,6 @@ import re
 PROMPT_MAX_LEN = int(os.environ.get("PROMPT_MAX_LEN", "1400"))
 
 # 이전 이름을 참조하는 코드가 남아 있을 수 있어 별칭을 유지한다.
-NVIDIA_PROMPT_MAX_LEN = PROMPT_MAX_LEN
 
 TONE_MAP = {
     "친근하고 다정한": "a friendly, approachable feeling with gently rounded, soft shapes",
@@ -351,36 +350,62 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
 # 색이 프롬프트에서 사실상 무시되고 있었다. 가장 가까운 색 이름으로 바꿔서 넣는다.
 # 브랜딩에서 실제로 쓰이는 색 위주로, 명도 단계까지 구분해 뒀다.
 _COLOR_NAMES = (
+    # --- 무채·중성
     ((255, 255, 255), "white"),
+    ((250, 249, 246), "off-white"),
     ((248, 246, 240), "ivory"),
+    ((245, 239, 228), "cream ivory"),
     ((240, 234, 220), "soft beige"),
-    ((214, 196, 168), "warm sand"),
-    ((198, 168, 110), "gold"),
-    ((176, 141, 87), "bronze"),
+    ((216, 199, 172), "warm sand"),
+    ((190, 190, 192), "light grey"),
+    ((150, 150, 154), "mid grey"),
+    ((120, 120, 125), "cool grey"),
+    ((60, 60, 66), "charcoal"),
+    ((26, 26, 30), "charcoal black"),
+    ((15, 15, 18), "black"),
+    # --- 톤다운 그린 (2026 세이지·유칼립투스 계열). 채도가 낮아 회색으로
+    #     오분류되기 쉬워 명도별로 촘촘히 둔다.
+    ((168, 184, 154), "sage green"),
+    ((180, 191, 174), "pale sage"),
+    ((142, 160, 130), "muted olive green"),
+    ((122, 142, 118), "deep sage"),
+    ((160, 190, 110), "fresh olive green"),
+    ((110, 170, 140), "soft jade green"),
+    ((60, 130, 85), "forest green"),
+    ((70, 160, 160), "teal"),
+    # --- 어씨 웜 (테라코타·클레이·러스트)
+    ((201, 123, 90), "terracotta"),
+    ((186, 118, 88), "clay"),
+    ((176, 104, 70), "rust"),
+    ((139, 115, 85), "clay brown"),
     ((139, 105, 70), "warm brown"),
     ((94, 70, 52), "deep coffee brown"),
-    ((205, 127, 90), "terracotta"),
-    ((224, 122, 95), "coral"),
-    ((219, 88, 86), "warm red"),
+    ((176, 141, 87), "bronze"),
+    ((198, 168, 110), "gold"),
+    # --- 레드·핑크 (버건디 포함)
+    ((122, 59, 74), "burgundy"),
+    ((150, 45, 60), "deep wine red"),
     ((190, 40, 55), "crimson red"),
+    ((219, 88, 86), "warm red"),
+    ((224, 122, 95), "coral"),
     ((236, 72, 153), "vivid pink"),
+    ((240, 169, 188), "soft rose pink"),
     ((244, 168, 195), "soft pink"),
+    ((158, 107, 118), "dusty rose"),
+    # --- 옐로
+    ((247, 227, 161), "butter yellow"),
+    ((250, 220, 110), "soft yellow"),
+    ((245, 166, 60), "warm amber"),
+    ((205, 160, 60), "mustard"),
+    # --- 퍼플·블루
     ((226, 190, 214), "pale lilac"),
+    ((181, 123, 224), "vivid lilac"),
     ((150, 100, 190), "violet"),
     ((79, 70, 229), "indigo blue"),
     ((59, 110, 200), "cobalt blue"),
     ((120, 175, 220), "sky blue"),
-    ((30, 58, 95), "deep navy"),
-    ((70, 160, 160), "teal"),
-    ((110, 170, 140), "sage green"),
-    ((60, 130, 85), "forest green"),
-    ((160, 190, 110), "fresh olive green"),
-    ((250, 220, 110), "soft yellow"),
-    ((245, 166, 60), "warm amber"),
-    ((190, 190, 190), "light grey"),
-    ((120, 120, 125), "cool grey"),
-    ((45, 45, 50), "charcoal black"),
-    ((15, 15, 18), "black"),
+    ((191, 216, 236), "pale sky blue"),
+    ((30, 51, 80), "deep navy"),
 )
 
 
@@ -497,7 +522,7 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     시안마다 다른 비주얼 모티프가 배정되어, 랜덤 시드 차이에만 의존하지 않고 실제
     형태 아이디어가 달라진 다양한 시안을 얻을 수 있다.
 
-    프롬프트는 FLUX.2 Klein(Qwen 텍스트 인코더)에 맞춰 완전한 문장으로 조립한다.
+    프롬프트는 이미지 생성 모델의 텍스트 인코더에 맞춰 완전한 문장으로 조립한다.
     콤마로 나열하는 키워드 태그 방식(SD1.5/SDXL 스타일)이나 "no gradient / no text"
     같은 부정문 나열은 이 모델에서 잘 작동하지 않거나 역효과를 낼 수 있어 사용하지 않는다.
     """

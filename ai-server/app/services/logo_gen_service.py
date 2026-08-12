@@ -23,7 +23,7 @@ MAX_RETRIES = 1
 _session = requests.Session()
 
 
-def _call_flux_pro(prompt: str, seed: int | None = None) -> Image.Image:
+def _call_image_api(prompt: str, seed: int | None = None) -> Image.Image:
     if not OPENROUTER_API_KEY:
         raise RuntimeError(
             "OPENROUTER_API_KEY가 설정되지 않았습니다. .env 파일에 OPENROUTER_API_KEY를 추가하세요."
@@ -69,7 +69,7 @@ def _call_flux_pro(prompt: str, seed: int | None = None) -> Image.Image:
             last_error = RuntimeError(f"OpenRouter API 응답에 이미지가 없습니다: {response.text}")
             continue
 
-        print(f"[flux_service]   단일 이미지 {time.monotonic() - call_started:.1f}s")
+        print(f"[logo_gen_service]   단일 이미지 {time.monotonic() - call_started:.1f}s")
 
         image_bytes = base64.b64decode(data[0]["b64_json"])
         return Image.open(BytesIO(image_bytes)).convert("RGBA")
@@ -117,7 +117,7 @@ def generate_logo_variants(
 
     with ThreadPoolExecutor(max_workers=num_variants) as executor:
         future_to_idx = {
-            executor.submit(_call_flux_pro, prompts[i], seeds[i]): i
+            executor.submit(_call_image_api, prompts[i], seeds[i]): i
             for i in range(num_variants)
         }
         for future in as_completed(future_to_idx):
@@ -133,7 +133,7 @@ def generate_logo_variants(
         if img is not None
     ]
     elapsed = time.monotonic() - started
-    print(f"[flux_service] {len(variants)}/{num_variants} variants in {elapsed:.1f}s")
+    print(f"[logo_gen_service] {len(variants)}/{num_variants} variants in {elapsed:.1f}s")
 
     if not variants:
         raise RuntimeError(

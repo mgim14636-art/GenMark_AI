@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 from app.core.config import settings
 from app.core.logging import logger
 
-# 유사도 경로는 flux_service를 import하지 않으므로 .env가 로드되지 않은 채로
+# 유사도 경로는 logo_gen_service를 import하지 않으므로 .env가 로드되지 않은 채로
 # 여기까지 올 수 있다. 그 상태에서 키를 읽으면 항상 비어 있어 note가 조용히 꺼진다.
 load_dotenv()
 

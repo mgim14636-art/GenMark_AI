@@ -275,7 +275,7 @@ def _flatten_background(logo: Image.Image, thresh: int = 40):
     """네 모서리에 닿아있는 배경 영역을 찾아, 그 배경의 실제 평균색으로 균일하게
     정리한다. 반환값은 (정리된 이미지, 배경색 RGB 튜플).
 
-    FLUX가 그리는 배경은 완전히 균일하지 않고 미세한 노이즈/텍스처(픽셀별 밝기
+    생성 모델이 그리는 배경은 완전히 균일하지 않고 미세한 노이즈/텍스처(픽셀별 밝기
     편차)가 섞여 있는 경우가 많다(실측 확인됨). floodfill은 4방향으로 연결된
     픽셀만 번져나가므로, 노이즈 알갱이 하나가 seed 색과의 거리(thresh)를 살짝
     넘기면 그 지점에서 연결이 끊겨 바깥쪽 배경 일부가 사각형/얼룩 모양으로 안
@@ -554,7 +554,7 @@ def _wants_text_overlay(survey: dict, style_key: str, brand_name: str) -> bool:
 def compose_final_logo(
     symbol: Image.Image, survey: dict, variant_index: Optional[int] = None
 ) -> Image.Image:
-    """FLUX가 생성한 심볼과 설문 응답을 받아 최종 로고 1장을 만든다.
+    """생성 모델이 만든 심볼과 설문 응답을 받아 최종 로고 1장을 만든다.
 
     라우트(app/api/routes/generation.py)의 단일 진입점 — 텍스트 합성 여부 판단부터
     배경 정리, compose_logo 호출까지 이 함수 하나로 처리한다.

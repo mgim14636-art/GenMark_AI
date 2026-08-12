@@ -12,6 +12,7 @@ OpenRouter 이미지 API가 실제로 응답하는지, 폰트 합성까지 끝�
     python scripts/try_logo.py 4 --dry --v2          # 실험용 프롬프트 v2로 비교(무료)
     python scripts/try_logo.py 4 --v2                # v2로 실제 생성
     python scripts/try_logo.py 4 --v2 --tone warm    # 다른 톤으로 v2 검증
+    python scripts/try_logo.py 4 --v2 --typography   # 모델이 브랜드명까지 그리게
 
 설문 값은 백엔드 CiProject.toSurvey()가 실제로 보내는 키 구성과 동일하게 맞춰 두었다.
 스크립트 전용 키(brand_name/values/color 등)를 쓰면 prompt_service가 조용히 무시해
@@ -62,6 +63,8 @@ def parse_args(argv: list[str]) -> tuple[int, bool, bool, dict]:
             dry = True
         elif a == "--v2":
             v2 = True
+        elif a == "--typography":
+            overrides["_typography"] = True
         elif a == "--tone" and i + 1 < len(argv):
             overrides["tone"] = argv[i + 1]; i += 1
         elif a == "--style" and i + 1 < len(argv):
@@ -95,9 +98,18 @@ def main() -> int:
         # 실험용 조립기. app/ 아래 서비스 코드는 건드리지 않는다.
         from experimental_prompt import build_prompt_v2
 
-        build_prompt = build_prompt_v2
+        typo = bool(survey.pop("_typography", False))
+        if typo:
+            # 모델이 브랜드명을 직접 그리므로 logo_composer의 텍스트 합성을 끈다.
+            # 안 그러면 "젠마크"가 두 번 들어간다.
+            survey["include_brand_name_in_logo"] = False
+            print("※ --typography: 모델이 브랜드명을 그립니다 (폰트 합성 생략)\n", flush=True)
+        build_prompt = lambda sv, variant_index: build_prompt_v2(
+            sv, variant_index=variant_index, typography=typo
+        )
         print("※ 실험용 프롬프트 v2 사용 (scripts/experimental_prompt.py)\n", flush=True)
     else:
+        survey.pop("_typography", None)
         build_prompt = build_prompt_from_survey
 
     # 지원하지 않는 톤·모티프를 넣으면 prompt_service가 조용히 기본값으로 떨어진다.

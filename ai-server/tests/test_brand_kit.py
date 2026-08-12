@@ -138,9 +138,9 @@ def test_product_thumbnail_is_1000x1000_and_flagged_preliminary():
     assert response.status_code == 200
     body = response.json()
     assert body["kitType"] == "PRODUCT_THUMBNAIL"
-    # FLUX 연출 배경이 붙기 전까지는 임시 결과임을 백엔드가 구분할 수 있어야 한다
+    # AI 연출 배경이 붙기 전까지는 임시 결과임을 백엔드가 구분할 수 있어야 한다
     assert body["preliminary"] is True
-    assert any("FLUX" in w for w in body["warnings"])
+    assert any("AI 연출 배경" in w for w in body["warnings"])
     image = body["images"][0]
     assert (image["width"], image["height"]) == (1000, 1000)
 

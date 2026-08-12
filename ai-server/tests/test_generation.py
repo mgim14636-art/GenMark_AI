@@ -40,7 +40,7 @@ def _fake_variants(monkeypatch, captured=None):
             for i in range(num_variants)
         ]
 
-    monkeypatch.setattr(generation.flux_service, "generate_logo_variants", fake)
+    monkeypatch.setattr(generation.logo_gen_service, "generate_logo_variants", fake)
     monkeypatch.setattr(
         generation.logo_composer,
         "compose_final_logo",

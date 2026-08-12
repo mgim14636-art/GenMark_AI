@@ -39,7 +39,7 @@ def test_current_survey_contract_prioritizes_explicit_flower_motif_in_all_varian
         assert "a friendly, approachable feeling" in prompt
         # 텍스트 인코더는 헥사 코드를 색으로 해석하지 못해 색 이름으로 바꿔 넣는다
         assert "#9765e9" not in prompt
-        assert "violet color palette" in prompt
+        assert "vivid lilac color palette" in prompt
         assert "combines a graphic symbol with an abstract letterform-like silhouette" in prompt
         assert "세련된 꽃 모양의 이미지를 꼭 추가해 줬으면 좋겠어" in prompt
         assert "finished and complete rather than a sketch." in prompt

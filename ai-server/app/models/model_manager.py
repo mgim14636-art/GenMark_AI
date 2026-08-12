@@ -1,4 +1,4 @@
-from app.models.flux_model import flux_loader
+from app.models.openrouter_model import openrouter_loader
 from app.models.dino_model import dino_loader
 from app.core.logging import logger
 
@@ -7,7 +7,7 @@ class ModelManager:
     @staticmethod
     def preload_all_models():
         logger.info("Preloading all AI models...")
-        for name, loader in (("FLUX", flux_loader), ("DINOv2", dino_loader)):
+        for name, loader in (("OpenRouter", openrouter_loader), ("DINOv2", dino_loader)):
             try:
                 loader.load_model()
                 logger.info(f"{name} loaded.")
