@@ -2608,6 +2608,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 .final-generate-button {
   display: flex;
+  position: relative;
   align-items: center;
   justify-content: center;
   gap: 19px;
@@ -2665,8 +2666,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 }
 
 .final-generate-arrow {
-  margin-left: auto;
-  padding-right: 28px;
+  position: absolute;
+  right: 28px;
+  margin: 0;
+  padding: 0;
   font-family: Arial, sans-serif;
   font-size: 42px;
   font-weight: 300;
@@ -2868,7 +2871,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   }
 
   .final-generate-arrow {
-    padding-right: 17px;
+    right: 17px;
     font-size: 32px;
   }
 
@@ -7977,6 +7980,54 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .survey-section:nth-of-type(3) { animation-delay: 380ms; }
 
 .mypage-section:nth-of-type(4) { animation-delay: 460ms; }
+
+/* These screens should render immediately without the shared entrance reveal.
+   Functional loading motion (the orb, dots, and trademark spinner) remains
+   active; only the initial slide/fade treatment is disabled here. */
+.main-home,
+.main-home .featured-art,
+.main-home .featured-lockup,
+.main-home .featured-dots,
+.main-home .hero-create-bar,
+.main-home .curation-section,
+.main-home .gallery-card,
+.brand-choice-card,
+.brand-choice-art-wrap,
+.brand-choice-copy,
+.brand-choice-cta,
+.logo-loading-screen,
+.logo-loading-content,
+.logo-loading-heading,
+.logo-loading-orb,
+.logo-loading-status,
+.logo-loading-steps,
+.logo-loading-steps .logo-loading-step,
+.trademark-loading-screen,
+.trademark-loading-content,
+.trademark-loading-heading,
+.trademark-loading-content > .trademark-progress,
+.trademark-loading-content > .trademark-loading-steps,
+.trademark-selection-screen,
+.trademark-selection-content,
+.trademark-selection-screen > .screen-back-button,
+.trademark-selection-header,
+.trademark-selection-heading,
+.trademark-selection-actions,
+.trademark-result-screen,
+.trademark-result-content,
+.trademark-result-header,
+.trademark-result-summary,
+.trademark-result-actions,
+.logo-editor-screen,
+.logo-editor-content,
+.logo-editor-header,
+.logo-editor-preview-card,
+.logo-editor-panel,
+.mypage-screen,
+.mypage-content,
+.mypage-section {
+  animation: none !important;
+}
 /* Logo shape prompt accordion for symbol and combination marks. */
 .logo-style-option-group {
   display: grid;
