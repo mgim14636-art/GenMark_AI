@@ -1,5 +1,5 @@
 import { FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, CircleGauge, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Gem, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
+import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Gem, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
@@ -65,7 +65,7 @@ const finalSummaryIconMap: Record<string, LucideIcon> = {
   name: Building2,
   audience: UsersRound,
   value: Gem,
-  mood: CircleGauge,
+  mood: Sparkles,
 }
 
 // id는 백엔드/DB(chk_bi_target_age)가 허용하는 값 그대로, label만 화면에 보여주는 표기.
@@ -695,11 +695,12 @@ function CustomerApp() {
     }
   }
 
-  const handleLogout = async () => {
-    await logout()
+  const handleLogout = () => {
+    const returnMode = mode === 'login' ? 'home' : mode
     setAuthUser(null)
     setLoggedIn(false)
-    setMode('login')
+    setMode(returnMode, { replace: true })
+    void logout()
   }
 
   const startOnboarding = () => {
@@ -740,8 +741,8 @@ function CustomerApp() {
       })
       setOnboardingCompleted(true)
       window.localStorage.setItem('genmark-onboarding-completed', 'true')
-      setIndustryBackMode('onboarding')
-      setMode('industry')
+      setIndustryBackMode('home')
+      setMode('home')
     } catch (error) {
       const message = error instanceof AuthError ? error.message : '온보딩 정보를 저장하지 못했어요. 잠시 후 다시 시도해주세요.'
       setOnboardingError(message)

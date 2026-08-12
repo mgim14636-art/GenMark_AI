@@ -155,6 +155,10 @@ export const restoreSession = async () => {
 
 export const logout = async () => {
   const refreshToken = getRefreshToken()
+  clearTokens()
+
+  // Local logout is completed immediately. The server request is only
+  // best-effort cleanup and must not delay the UI transition.
   try {
     if (refreshToken) {
       await requestRaw('/auth/logout', {
@@ -162,8 +166,9 @@ export const logout = async () => {
         body: JSON.stringify({ refreshToken }),
       })
     }
-  } finally {
-    clearTokens()
+  } catch {
+    // The session is already cleared locally, so a server-side failure does
+    // not keep the user signed in or block the return to the current screen.
   }
 }
 
