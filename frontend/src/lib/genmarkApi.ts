@@ -95,7 +95,7 @@ export type SurveyStatus = {
 
 export type BrandKit = {
   id: string
-  kitType: 'BUSINESS_CARD' | 'BOTTLE'
+  kitType: 'BUSINESS_CARD' | 'THUMBNAIL'
   status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
   storageKey: string | null
   errorCode: string | null
