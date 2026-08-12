@@ -44,6 +44,19 @@ public class BiProjectService {
         return toResponse(requireOwned(publicId, memberId));
     }
 
+    /**
+     * 이어쓰기 확인창에서 "아니오"를 선택했을 때 초안을 지운다. 이미 로고 생성이 시작된
+     * 프로젝트(GENERATING 이후)는 생성 이력·후보 이미지까지 함께 사라지므로 지우지 않는다.
+     */
+    @Transactional
+    public void delete(String publicId, Long memberId) {
+        BiProject project = requireOwned(publicId, memberId);
+        if (project.getStatus() != ProjectStatus.DRAFT && project.getStatus() != ProjectStatus.BRIEF_READY) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "이미 생성이 시작된 프로젝트는 삭제할 수 없습니다.");
+        }
+        biProjectRepository.delete(project);
+    }
+
     @Transactional
     public BiProjectResponse update(String publicId, Long memberId, BiProjectUpsertRequest request) {
         BiProject project = requireOwned(publicId, memberId);
