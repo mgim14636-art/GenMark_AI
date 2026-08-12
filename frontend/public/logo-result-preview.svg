@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="760" viewBox="0 0 760 760" role="img" aria-labelledby="title desc">
+  <title id="title">로고 결과 화면 미리보기</title>
+  <desc id="desc">결과 화면 레이아웃 확인을 위한 임시 럭셔리 뷰티 로고 목업</desc>
+  <defs>
+    <radialGradient id="background" cx="50%" cy="35%" r="80%">
+      <stop offset="0" stop-color="#FDF7FF"/>
+      <stop offset="0.58" stop-color="#F1E7FF"/>
+      <stop offset="1" stop-color="#D7C4EF"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" x2="1" y1="0" y2="1">
+      <stop stop-color="#B87A2F"/>
+      <stop offset="0.55" stop-color="#F5DEA3"/>
+      <stop offset="1" stop-color="#A96822"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#7652A8" flood-opacity=".18"/>
+    </filter>
+  </defs>
+  <rect width="760" height="760" fill="url(#background)"/>
+  <circle cx="380" cy="380" r="256" fill="#FFFDF9" opacity=".76" filter="url(#shadow)"/>
+  <circle cx="380" cy="380" r="214" fill="none" stroke="url(#gold)" stroke-width="7"/>
+  <circle cx="380" cy="380" r="192" fill="none" stroke="#DCC58C" stroke-width="2" stroke-dasharray="3 10"/>
+  <path d="M421 225c-80 26-124 111-98 190 19 58 74 101 137 106-79 31-170-8-201-87-35-90 9-192 99-228 21-8 43-12 63-11Z" fill="url(#gold)"/>
+  <path d="M381 324c-9 62-38 108-83 139m84-139c20 58 48 101 87 126m-87-126c-24 11-49 13-74 4m75-4c22 5 44 1 65-12" fill="none" stroke="#B87A2F" stroke-width="6" stroke-linecap="round"/>
+  <path d="M290 493c44-10 136-10 181 0" fill="none" stroke="#D3B875" stroke-width="3"/>
+  <text x="380" y="577" text-anchor="middle" fill="#3D2A52" font-family="Georgia, serif" font-size="58" letter-spacing="8">LUNERIA</text>
+  <text x="380" y="614" text-anchor="middle" fill="#84689A" font-family="Arial, sans-serif" font-size="15" letter-spacing="7">RADIANCE SKINCARE</text>
+</svg>
