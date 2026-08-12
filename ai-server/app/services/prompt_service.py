@@ -57,6 +57,7 @@ _CURRENT_SURVEY_ALIASES = {
         "FASHION": "기타",
         "FOOD": "기타",
         "TECH": "기타",
+        "HEALTH_WELLNESS": "기타",
         "OTHER": "기타",
     },
     "tone": {
@@ -80,7 +81,41 @@ _CURRENT_SURVEY_ALIASES = {
         "50-60": "50-60대",
         "ALL": "전 연령",
         "ALL_AGES": "전 연령",
+        # 화면(App.tsx)과 DB 기본값(bi_project.target_age)이 쓰는 실제 문자열은
+        # "전 연령층"이다. TARGET_AGE_MODIFIER 키가 "전 연령"이라 여태 매칭되지
+        # 않아, 이 값을 고른 사용자는 타겟 정보가 프롬프트에서 통째로 빠졌다.
+        "전 연령층": "전 연령",
     },
+}
+
+# 브랜드 가치 칩 — 프론트가 보내는 값과 우리 사전 키가 서로 다르다.
+#
+#   App.tsx      type CoreValue = 'vegan' | 'lowIrritation' | ...   (영문 id)
+#   genmarkApi   valueCategory1 = input.brandValues[0]              (그대로 전달)
+#   BiProject    survey["brand_values"]                             (그대로 전달)
+#   여기         VALUE_KEYWORD_MAP = { "비건": ..., "클린뷰티": ... }  (한글 키)
+#
+# 그래서 9개 칩이 전부 매칭에 실패했고, VALUE_KEYWORD_MAP.get(v, v)가 원본을
+# 돌려주는 바람에 "The brand values are vegan, lowIrritation." 처럼 영문 id가
+# 그대로 프롬프트에 실렸다. VALUE_MOTIF_BIAS도 같은 이유로 한 건도 잡히지 않았다.
+#
+# 화면 라벨(한글)로 들어오는 경우도 함께 받아둔다 — 프론트가 라벨을 보내도록
+# 바뀌어도 깨지지 않게 하기 위함이다.
+_VALUE_ALIASES = {
+    "vegan": "비건",
+    "lowIrritation": "더마·저자극",
+    "derma": "더마·저자극",
+    "cleanBeauty": "클린뷰티",
+    "natural": "자연주의",
+    "premium": "프리미엄",
+    "sustainable": "지속가능",
+    "scientific": "과학적 검증",
+    "reasonable": "가성비",
+    # 화면 라벨 그대로 들어오는 경우 (사전 키와 표기가 다른 것만)
+    "저자극": "더마·저자극",
+    "더마": "더마·저자극",
+    "지속가능성": "지속가능",
+    "합리적인 가격": "가성비",
 }
 
 
@@ -205,6 +240,11 @@ VALUE_MOTIF_BIAS = {
     "트렌디": ["a star burst shape", "an orbiting ring shape"],
     "감성적": ["a crescent moon curve", "a feather silhouette"],
     "지속가능": ["a single botanical leaf silhouette", "an infinity loop shape"],
+    # 화면의 9개 칩 중 아래 셋은 대응 모티프가 없어 가치를 골라도 모티프가
+    # 비었다. 나머지 칩과 결이 맞는 후보를 채운다.
+    "더마·저자극": ["a water droplet shape", "a soft wave curve"],
+    "과학적 검증": ["an abstract gem facet shape", "a star burst shape"],
+    "가성비": ["a soft wave curve", "an orbiting ring shape"],
 }
 
 # CI 화면(FR-08)의 "기업 가치·방향성" 키워드 칩 (뷰티 업종, 최대 3개 선택)
@@ -504,6 +544,16 @@ def _normalize_survey(survey: dict) -> dict:
         value = survey.get(field)
         if value in aliases:
             survey[field] = aliases[value]
+
+    # 가치 칩을 사전 키로 맞춘다. 같은 칩이 두 개 매핑되는 경우가 있어
+    # (저자극·더마 → 더마·저자극) 순서를 지키며 중복을 제거한다.
+    raw_values = survey.get("brand_values")
+    if isinstance(raw_values, str):
+        raw_values = [raw_values]
+    if raw_values:
+        survey["brand_values"] = list(
+            dict.fromkeys(_VALUE_ALIASES.get(v, v) for v in raw_values if v)
+        )
 
     color_mode = survey.get("color_mode")
     if isinstance(color_mode, str):

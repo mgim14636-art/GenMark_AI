@@ -2,7 +2,12 @@ import pytest
 
 from app.services.prompt_service import (
     MOTIF_MAP,
+    TARGET_AGE_MODIFIER,
+    VALUE_KEYWORD_MAP,
+    VALUE_MOTIF_BIAS,
     _normalize_survey,
+    _raw_value_keys,
+    _resolve_values,
     build_prompt_from_survey,
 )
 
@@ -119,3 +124,42 @@ def test_default_variants_do_not_force_fixed_fallback_shapes():
     assert len(set(prompts)) == 4
     assert all("an original brand-specific subject" in prompt for prompt in prompts)
     assert all(not any(motif in prompt for motif in FALLBACK_MOTIFS) for prompt in prompts)
+
+
+# --- 프론트 → AI서버 값 정합성 -------------------------------------------
+# 프론트(App.tsx)가 보내는 값과 prompt_service의 사전 키가 어긋나면 조용히
+# 정보가 누락된다(에러가 안 난다). 실제로 가치 칩 9개와 "전 연령층"이 이 방식으로
+# 통째로 빠져 있었다. 화면 목록이 바뀌면 여기서 먼저 깨지도록 못 박아 둔다.
+
+# App.tsx: type CoreValue
+FRONTEND_VALUE_IDS = [
+    "vegan", "lowIrritation", "derma", "cleanBeauty", "natural",
+    "premium", "sustainable", "scientific", "reasonable",
+]
+# App.tsx: target-audience-grid
+FRONTEND_TARGET_AGES = ["10-20대", "30-40대", "50-60대", "전 연령층"]
+
+
+@pytest.mark.parametrize("value_id", FRONTEND_VALUE_IDS)
+def test_frontend_value_chip_maps_to_english_and_motif(value_id):
+    survey = _normalize_survey(
+        {"ci_bi": "BI", "industry": "COSMETICS", "brand_values": [value_id]}
+    )
+    key = _raw_value_keys(survey)[0]
+
+    # 한글 사전 키로 치환됐는가 (영문 id가 그대로 남으면 실패)
+    assert key in VALUE_KEYWORD_MAP, f"{value_id} → {key} 가 VALUE_KEYWORD_MAP에 없음"
+
+    # 프롬프트 문장에 영문으로 실리는가
+    assert _resolve_values(survey).startswith("The brand values are")
+
+    # 모티프 후보가 잡히는가 (가치 기반 모티프 선정의 전제)
+    assert VALUE_MOTIF_BIAS.get(key), f"{key} 에 대응 모티프가 없음"
+
+
+@pytest.mark.parametrize("target_age", FRONTEND_TARGET_AGES)
+def test_frontend_target_age_maps_to_modifier(target_age):
+    survey = _normalize_survey({"ci_bi": "BI", "target_age": target_age})
+    assert TARGET_AGE_MODIFIER.get(survey["target_age"]), (
+        f"{target_age} → {survey['target_age']} 에 대응 문구가 없음"
+    )

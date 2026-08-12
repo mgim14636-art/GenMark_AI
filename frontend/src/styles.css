@@ -2533,33 +2533,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   line-height: 1;
 }
 
-.final-detail-icon::before,
-.final-detail-icon::after {
-  position: absolute;
-  content: '';
-}
-
-.icon-name::before { width: 18px; height: 20px; border: 2px solid currentColor; border-radius: 2px; }
-.icon-name::after { top: 4px; width: 12px; height: 6px; border-top: 2px solid currentColor; border-bottom: 2px solid currentColor; }
-.icon-product::before { width: 20px; height: 17px; border: 2px solid currentColor; border-radius: 4px; }
-.icon-product::after { top: 3px; width: 10px; height: 5px; border: 2px solid currentColor; border-bottom: 0; border-radius: 4px 4px 0 0; }
-.icon-description::before { width: 18px; height: 22px; border: 2px solid currentColor; border-radius: 2px; }
-.icon-description::after { width: 11px; height: 2px; background: currentColor; box-shadow: 0 -5px currentColor, 0 5px currentColor; }
-.icon-audience::before { width: 10px; height: 10px; border: 2px solid currentColor; border-radius: 50%; transform: translateY(-5px); box-shadow: 8px 3px 0 -2px #fff, 8px 3px 0 0 currentColor; }
-.icon-audience::after { bottom: 1px; width: 22px; height: 10px; border: 2px solid currentColor; border-radius: 12px 12px 3px 3px; }
-.icon-value::before { width: 14px; height: 18px; border: 2px solid currentColor; border-radius: 0 100% 0 100%; transform: rotate(45deg); }
-.icon-value::after { width: 2px; height: 22px; background: currentColor; }
-.icon-mood::before { width: 22px; height: 22px; border: 2px solid currentColor; border-radius: 50%; }
-.icon-mood::after { width: 8px; height: 8px; border-top: 2px solid currentColor; border-right: 2px solid currentColor; transform: translate(2px, -2px) rotate(45deg); }
-.icon-color::before { width: 22px; height: 22px; border: 2px solid currentColor; border-radius: 50%; }
-.icon-color::after { width: 8px; height: 8px; border: 2px solid currentColor; border-radius: 50%; }
-.icon-logo::before { width: 20px; height: 22px; border: 2px solid currentColor; border-radius: 4px; }
-.icon-logo::after { width: 8px; height: 8px; border: 2px solid currentColor; border-radius: 50%; transform: translateY(-4px); }
-
-.icon-question { border: 2px solid currentColor; border-radius: 50%; }
-.icon-question::before { content: none; }
-.icon-question::after { content: none; }
-
 .final-summary-label {
   color: #202535;
   font-size: 21px;
@@ -2635,6 +2608,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 .final-generate-button {
   display: flex;
+  position: relative;
   align-items: center;
   justify-content: center;
   gap: 19px;
@@ -2692,8 +2666,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 }
 
 .final-generate-arrow {
-  margin-left: auto;
-  padding-right: 28px;
+  position: absolute;
+  right: 28px;
+  margin: 0;
+  padding: 0;
   font-family: Arial, sans-serif;
   font-size: 42px;
   font-weight: 300;
@@ -2895,7 +2871,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   }
 
   .final-generate-arrow {
-    padding-right: 17px;
+    right: 17px;
     font-size: 32px;
   }
 
@@ -7723,6 +7699,20 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   font-size: 20px;
 }
 
+.tone-next:disabled,
+.tone-next:disabled:hover,
+.logo-style-next:disabled,
+.logo-style-next:disabled:hover {
+  cursor: not-allowed;
+  color: #9a90aa;
+  background: linear-gradient(100deg, #eeeaff, #eee9f3 54%, #f3eaf1);
+  border: 1px solid #e4dcef;
+  opacity: 1;
+  transform: none;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .82);
+  filter: saturate(.58);
+}
+
 @media (max-width: 720px) {
   .tone-selection-content,
   .logo-style-content {
@@ -7990,6 +7980,54 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .survey-section:nth-of-type(3) { animation-delay: 380ms; }
 
 .mypage-section:nth-of-type(4) { animation-delay: 460ms; }
+
+/* These screens should render immediately without the shared entrance reveal.
+   Functional loading motion (the orb, dots, and trademark spinner) remains
+   active; only the initial slide/fade treatment is disabled here. */
+.main-home,
+.main-home .featured-art,
+.main-home .featured-lockup,
+.main-home .featured-dots,
+.main-home .hero-create-bar,
+.main-home .curation-section,
+.main-home .gallery-card,
+.brand-choice-card,
+.brand-choice-art-wrap,
+.brand-choice-copy,
+.brand-choice-cta,
+.logo-loading-screen,
+.logo-loading-content,
+.logo-loading-heading,
+.logo-loading-orb,
+.logo-loading-status,
+.logo-loading-steps,
+.logo-loading-steps .logo-loading-step,
+.trademark-loading-screen,
+.trademark-loading-content,
+.trademark-loading-heading,
+.trademark-loading-content > .trademark-progress,
+.trademark-loading-content > .trademark-loading-steps,
+.trademark-selection-screen,
+.trademark-selection-content,
+.trademark-selection-screen > .screen-back-button,
+.trademark-selection-header,
+.trademark-selection-heading,
+.trademark-selection-actions,
+.trademark-result-screen,
+.trademark-result-content,
+.trademark-result-header,
+.trademark-result-summary,
+.trademark-result-actions,
+.logo-editor-screen,
+.logo-editor-content,
+.logo-editor-header,
+.logo-editor-preview-card,
+.logo-editor-panel,
+.mypage-screen,
+.mypage-content,
+.mypage-section {
+  animation: none !important;
+}
 /* Logo shape prompt accordion for symbol and combination marks. */
 .logo-style-option-group {
   display: grid;
