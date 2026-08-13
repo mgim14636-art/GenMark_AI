@@ -68,4 +68,11 @@ public class CiProjectApiController {
         return ResponseEntity.ok(ApiSuccessResponse.of(
                 ciProjectService.updateStep(projectId, principal.id(), step, request)));
     }
+
+    @DeleteMapping("/{projectId}")
+    public ResponseEntity<Void> delete(
+            @AuthenticationPrincipal MemberPrincipal principal, @PathVariable String projectId) {
+        ciProjectService.delete(projectId, principal.id());
+        return ResponseEntity.noContent().build();
+    }
 }

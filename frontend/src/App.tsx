@@ -1,5 +1,5 @@
 import { FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, Download, Droplets, FileCheck2, FolderCheck, Gem, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
+import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
@@ -9,7 +9,7 @@ import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projects
 
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
 
-type ViewMode = 'home' | 'hero' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'edit' | 'login' | 'mypage' | 'survey'
+type ViewMode = 'home' | 'hero' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'brand-kit' | 'edit' | 'login' | 'mypage' | 'survey'
 type LoginDestination = 'home' | 'industry' | 'choice'
 type LoginReturnMode = 'hero' | 'home'
 type OnboardingOption = 'online' | 'social' | 'offline'
@@ -119,6 +119,7 @@ const getModeFromUrl = (): ViewMode => {
   if (requestedView === 'trademark-selection' || requestedView === 'trademark-choice' || requestedView === 'trademark-select') return 'trademark-selection'
   if (requestedView === 'trademark-result' || requestedView === 'trademark-analysis-result' || requestedView === 'similarity-result') return 'trademark-result'
   if (requestedView === 'result' || requestedView === 'logo-result' || requestedView === 'generated-logo') return 'result'
+  if (requestedView === 'brand-kit' || requestedView === 'brand-kit-selection') return 'brand-kit'
   if (requestedView === 'edit' || requestedView === 'logo-edit' || requestedView === 'logo-editor') return 'edit'
   if (requestedView === 'mypage' || requestedView === 'my-page' || requestedView === 'profile') return 'mypage'
   if (requestedView === 'survey' || requestedView === 'feedback' || requestedView === 'satisfaction') return 'survey'
@@ -291,6 +292,9 @@ function CustomerApp() {
   const [authError, setAuthError] = useState('')
   const [loginDestination, setLoginDestination] = useState<LoginDestination>('home')
   const [loginReturnMode, setLoginReturnMode] = useState<LoginReturnMode>('home')
+  const [resumePromptProject, setResumePromptProject] = useState<{ id: string; brandType: 'CI' | 'BI' } | null>(null)
+  const [resumePromptBusy, setResumePromptBusy] = useState(false)
+  const [resumePromptError, setResumePromptError] = useState('')
   const [onboardingCompleted, setOnboardingCompleted] = useState(false)
   const [onboardingSaving, setOnboardingSaving] = useState(false)
   const [onboardingError, setOnboardingError] = useState('')
@@ -328,7 +332,7 @@ function CustomerApp() {
   const [resultCandidate, setResultCandidate] = useState(0)
   const [resultLiked, setResultLiked] = useState(false)
   const [trademarkAnalysisSkipped, setTrademarkAnalysisSkipped] = useState(false)
-  const [editTarget, setEditTarget] = useState<'symbol' | 'text'>('text')
+  const [editTarget, setEditTarget] = useState<'symbol' | 'text'>('symbol')
   const [editorBrandName, setEditorBrandName] = useState('LUVÉRA')
   const [editorSymbol, setEditorSymbol] = useState(0)
   const [editorScale, setEditorScale] = useState(100)
@@ -353,6 +357,7 @@ function CustomerApp() {
   const [pinError, setPinError] = useState('')
   const [brandKit, setBrandKit] = useState<BrandKit | null>(null)
   const [brandKitError, setBrandKitError] = useState('')
+  const [brandKitType, setBrandKitType] = useState<BrandKit['kitType'] | null>(null)
   const [ciProfileLoading, setCiProfileLoading] = useState(false)
   const ciProfileLoaded = useRef(false)
   const [analysisId, setAnalysisId] = useState<string | null>(null)
@@ -666,6 +671,72 @@ function CustomerApp() {
     }
   }
 
+  /** 이어쓸 만한 초안이 있을 때, 곧장 이어쓰지 않고 "이어서 작성하시겠습니까?" 확인창부터 보여준다. */
+  const presentResumePrompt = async (resumeId: string, fallback: () => void) => {
+    try {
+      const project = await projectsApi.get(resumeId)
+      if (project.status === 'COMPLETED') {
+        // 완전히 끝난 프로젝트는 더 이상 이어쓰기 대상이 아니다 — 새로고침 없이도 새 프로젝트를 시작할 수 있게 비워준다.
+        setProjectId(null)
+        window.localStorage.removeItem('genmark-project-id')
+        fallback()
+        return
+      }
+      if (project.status !== 'DRAFT' && project.status !== 'BRIEF_READY') {
+        // 아직 진행 중인(GENERATING 등) 프로젝트는 "이어서 작성"할 내용이 없으므로 묻지 않고 바로 이동한다.
+        const next = await restoreProjectState(resumeId)
+        setMode(next ?? 'industry')
+        return
+      }
+      setProjectId(project.id)
+      window.localStorage.setItem('genmark-project-id', project.id)
+      setResumePromptProject({ id: project.id, brandType: project.brandType })
+      setResumePromptError('')
+    } catch (error) {
+      if (error instanceof AuthError && error.status === 404) {
+        setProjectId(null)
+        window.localStorage.removeItem('genmark-project-id')
+        fallback()
+        return
+      }
+      throw error
+    }
+  }
+
+  const confirmResumeProject = async () => {
+    if (!resumePromptProject || resumePromptBusy) return
+    setResumePromptBusy(true)
+    setResumePromptError('')
+    try {
+      const next = await restoreProjectState(resumePromptProject.id)
+      setResumePromptProject(null)
+      setMode(next ?? 'industry')
+    } catch {
+      setResumePromptError('이어쓰기 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setResumePromptBusy(false)
+    }
+  }
+
+  const discardResumeProject = async () => {
+    if (!resumePromptProject || resumePromptBusy) return
+    setResumePromptBusy(true)
+    setResumePromptError('')
+    try {
+      await projectsApi.discard(resumePromptProject.id, resumePromptProject.brandType)
+      setProjectId(null)
+      window.localStorage.removeItem('genmark-project-id')
+      setResumePromptProject(null)
+      setIndustryBackMode('home')
+      setMode('industry')
+    } catch (error) {
+      const message = error instanceof AuthError ? error.message : '삭제하지 못했어요. 잠시 후 다시 시도해주세요.'
+      setResumePromptError(message)
+    } finally {
+      setResumePromptBusy(false)
+    }
+  }
+
   const completeLogin = async (provider: AuthProvider) => {
     if (authLoading) return
     setAuthLoading(true)
@@ -687,12 +758,14 @@ function CustomerApp() {
        if (!session.user.onboardingCompleted) {
          setMode('onboarding')
        } else if (session.resumeProjectId) {
-         const resumedMode = await restoreProjectState(session.resumeProjectId)
-         setMode(resumedMode ?? loginDestination)
+         const destination = loginDestination
+         setMode('home')
+         await presentResumePrompt(session.resumeProjectId, () => setMode(destination))
+         setLoginDestination('home')
        } else {
          setMode(loginDestination)
+         setLoginDestination('home')
        }
-       setLoginDestination('home')
     } catch (error) {
       const message = error instanceof AuthError
         ? `${error.message}${error.code ? ` (${error.code}${error.requestId ? `, requestId: ${error.requestId}` : ''})` : ''}`
@@ -713,21 +786,25 @@ function CustomerApp() {
     void logout()
   }
 
-  const startOnboarding = () => {
+  const startOnboarding = async () => {
+    setLoginDestination('industry')
     if (!loggedIn) {
-      setLoginDestination('industry')
       setLoginReturnMode('home')
       setMode('login')
       return
     }
 
     setOnboardingStep(1)
-    if (onboardingCompleted) {
-      setIndustryBackMode('home')
-      setMode('industry')
-    } else {
+    if (!onboardingCompleted) {
       setMode('onboarding')
+      return
     }
+    if (projectId) {
+      await presentResumePrompt(projectId, () => { setIndustryBackMode('home'); setMode('industry') })
+      return
+    }
+    setIndustryBackMode('home')
+    setMode('industry')
   }
 
   const completeOnboarding = async () => {
@@ -752,7 +829,8 @@ function CustomerApp() {
       setOnboardingCompleted(true)
       window.localStorage.setItem('genmark-onboarding-completed', 'true')
       setIndustryBackMode('home')
-      setMode('home')
+      setMode(loginDestination)
+      setLoginDestination('home')
     } catch (error) {
       const message = error instanceof AuthError ? error.message : '온보딩 정보를 저장하지 못했어요. 잠시 후 다시 시도해주세요.'
       setOnboardingError(message)
@@ -1057,6 +1135,20 @@ function CustomerApp() {
     }
   }
 
+  const openBrandKitSelection = () => {
+    setBrandKitError('')
+    setMode('brand-kit')
+  }
+
+  const createSelectedBrandKit = () => {
+    if (!brandKitType) return
+    if (!projectId || !selectedCandidateId) {
+      setBrandKitError('로고 후보를 선택한 뒤 브랜드 키트를 만들 수 있어요.')
+      return
+    }
+    void requestBrandKit()
+  }
+
   const downloadLogo = async (candidate: { name: string; subtitle?: string; candidateId?: string; storageKey?: string }): Promise<boolean> => {
     if (!candidate.storageKey) return false
 
@@ -1204,11 +1296,30 @@ function CustomerApp() {
           </div>
           {onboardingError && <p className="onboarding-error" role="alert">{onboardingError}</p>}
           <button className="onboarding-next" type="button" onClick={advanceOnboarding}>
-            {onboardingSaving ? '저장 중...' : onboardingStep === 1 ? '다음' : '시작하기'}
+            {onboardingSaving ? '저장 중...' : onboardingStep === 1 ? '다음' : '제출하기'}
           </button>
         </div>
       </section>
     </main>
+  )
+
+  const renderResumePromptModal = () => (
+    <div className="modal-backdrop" role="presentation">
+      <section className="credit-modal resume-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="resume-prompt-title">
+        <p className="resume-prompt-brand">GenMark</p>
+        <h2 id="resume-prompt-title">기존에 작성된<br /><strong>내용이 있습니다</strong></h2>
+        <p>이어서 작성하시겠습니까?</p>
+        {resumePromptError && <p className="project-error" role="alert">{resumePromptError}</p>}
+        <div className="credit-modal-actions">
+          <button className="gradient-button" type="button" onClick={() => void confirmResumeProject()} disabled={resumePromptBusy}>
+            {resumePromptBusy ? '처리 중...' : '예, 이어서 작성할게요'}
+          </button>
+          <button className="modal-secondary-button" type="button" onClick={() => void discardResumeProject()} disabled={resumePromptBusy}>
+            아니오, 새로 시작할게요
+          </button>
+        </div>
+      </section>
+    </div>
   )
 
   const renderIndustrySelectionScreen = () => (
@@ -1693,7 +1804,7 @@ function CustomerApp() {
           <strong>5분 만에 완성하는</strong>
           <span>프리미엄 브랜드 로고</span>
         </div>
-        <button className="gradient-button hero-create-button" type="button" onClick={startOnboarding}>
+        <button className="gradient-button hero-create-button" type="button" onClick={startOnboarding} disabled={authRestoring}>
           <Sparkle /> 로고 생성 시작
         </button>
       </div>
@@ -2277,7 +2388,7 @@ function CustomerApp() {
 
           <div className="logo-result-utility-grid">
             <button className="utility-primary" type="button" onClick={() => void startLogoGeneration()}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />조건을 바꿔<br />다시 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
-            <button className="utility-secondary" type="button" onClick={() => void requestBrandKit()}><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />{brandKit?.status === 'SUCCEEDED' ? '브랜드 키트 확인하기' : '브랜드 키트 만들기'}<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+            <button className="utility-secondary" type="button" onClick={openBrandKitSelection}><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />{brandKit?.status === 'SUCCEEDED' ? '브랜드 키트 확인하기' : '브랜드 키트 만들기'}<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
           </div>
           {brandKit && <p className="project-error" role="status">브랜드 키트 상태: {brandKit.status === 'QUEUED' || brandKit.status === 'RUNNING' ? '생성 중' : brandKit.status === 'SUCCEEDED' ? '완료' : '실패'}</p>}
           {brandKitError && <p className="project-error" role="alert">{brandKitError}</p>}
@@ -2286,8 +2397,60 @@ function CustomerApp() {
     )
   }
 
+  const renderBrandKitSelectionScreen = () => {
+    const options: Array<{ type: BrandKit['kitType']; title: string; caption: string; description: string; icon: typeof CreditCard }> = [
+      { type: 'BUSINESS_CARD', title: '명함', caption: '첫 인사를 더 또렷하게', description: '브랜드의 인상을 담은 명함 시안을 만들어요.', icon: CreditCard },
+      { type: 'THUMBNAIL', title: '제품 썸네일', caption: '제품을 한눈에 보여주기', description: '상품 페이지와 SNS에 쓸 썸네일 시안을 만들어요.', icon: ImageIcon },
+    ]
+    const selectedOption = options.find((option) => option.type === brandKitType)
+
+    return (
+      <main className="brand-kit-selection-screen" aria-labelledby="brand-kit-selection-title">
+        <ScreenBackButton label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')} />
+        <section className="brand-kit-selection-content">
+          <header className="brand-kit-selection-header">
+            <div className="brand-kit-selection-mark" aria-hidden="true"><BrandLogo /></div>
+            <p>브랜드 키트 만들기</p>
+            <h1 id="brand-kit-selection-title">로고를 어디에<br />먼저 써볼까요?</h1>
+            <span>필요한 활용처를 골라 주세요.</span>
+          </header>
+
+          <div className="brand-kit-choice-grid" role="radiogroup" aria-label="브랜드 키트 종류 선택">
+            {options.map((option) => {
+              const Icon = option.icon
+              const selected = option.type === brandKitType
+              return (
+                <button
+                  key={option.type}
+                  className={selected ? 'brand-kit-choice selected' : 'brand-kit-choice'}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setBrandKitType(option.type)}
+                >
+                  <span className="brand-kit-choice-visual" aria-hidden="true"><Icon size={40} strokeWidth={1.6} /></span>
+                  <span className="brand-kit-choice-copy"><strong>{option.title}</strong><em>{option.caption}</em><small>{option.description}</small></span>
+                  <span className="brand-kit-choice-radio" aria-hidden="true">{selected ? <Check size={18} strokeWidth={2.6} /> : null}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="brand-kit-selection-footer">
+            <p aria-live="polite">{selectedOption ? `${selectedOption.title} 키트를 만들 준비가 됐어요.` : '원하는 브랜드 키트를 선택해 주세요.'}</p>
+            <button className="brand-kit-create-button" type="button" disabled={!brandKitType} onClick={createSelectedBrandKit}>
+              {selectedOption ? `${selectedOption.title} 키트 만들기` : '브랜드 키트 선택하기'}
+              <ChevronRight aria-hidden="true" size={23} strokeWidth={1.9} />
+            </button>
+            {brandKit && <p className="brand-kit-status" role="status">{brandKit.status === 'QUEUED' || brandKit.status === 'RUNNING' ? '브랜드 키트를 만들고 있어요.' : brandKit.status === 'SUCCEEDED' ? '브랜드 키트가 준비됐어요.' : '브랜드 키트 생성에 문제가 생겼어요.'}</p>}
+            {brandKitError && <p className="brand-kit-error" role="alert">{brandKitError}</p>}
+          </div>
+        </section>
+      </main>
+    )
+  }
+
   const renderLogoEditScreen = () => {
-    const symbolOptions = ['leaf', 'heart', 'flower', 'lotus']
     const fontOptions = ['LUVÉRA', 'LUVÉRA', 'LUVÉRA', 'LUVÉRA']
 
     return (
@@ -2307,19 +2470,14 @@ function CustomerApp() {
 
           <section className="logo-editor-preview-card" aria-label="로고 편집 캔버스">
             <div className="logo-editor-artboard">
-              <button className={editTarget === 'symbol' ? 'editor-symbol-target selected' : 'editor-symbol-target'} type="button" aria-label="로고 그림 수정" onClick={() => setEditTarget('symbol')}>
-                <span className={`editor-symbol-graphic symbol-${symbolOptions[editorSymbol]}`} style={{ transform: `scale(${editorScale / 100}) rotate(${editorRotation}deg)`, opacity: editorOpacity / 100 }}><i /><b /><em /></span>
+              <button className={editTarget === 'symbol' ? 'editor-uploaded-logo-target selected' : 'editor-uploaded-logo-target'} type="button" aria-label="루네리아 로고 수정" onClick={() => setEditTarget('symbol')}>
+                <img className="editor-uploaded-logo" src="/luneria-edit-logo.png" alt="Luneria 로고" style={{ transform: `scale(${editorScale / 100}) rotate(${editorRotation}deg)`, opacity: editorOpacity / 100 }} />
                 {editTarget === 'symbol' && <span className="editor-selection-trash" aria-hidden="true" />}
-              </button>
-              <button className={editTarget === 'text' ? 'editor-wordmark-target selected' : 'editor-wordmark-target'} type="button" aria-label="로고 글자 수정" onClick={() => setEditTarget('text')}>
-                <strong style={{ letterSpacing: `${editorLetterSpacing}px` }}>{editorBrandName}</strong>
-                <small>C O S M E T I C S</small>
               </button>
               {editTarget === 'symbol' && <span className="editor-rotate-handle" aria-hidden="true"><RefreshCw size={22} strokeWidth={1.8} /></span>}
             </div>
             <div className="logo-editor-preview-footer">
               <div className="editor-history"><button type="button" aria-label="실행 취소"><ArrowLeft size={20} strokeWidth={1.8} /></button><button type="button" aria-label="다시 실행"><ArrowRight size={20} strokeWidth={1.8} /></button></div>
-              <div className="editor-mini-preview"><span className="mini-mark">L<em>V</em></span><small>❧</small></div>
             </div>
           </section>
 
@@ -2347,16 +2505,10 @@ function CustomerApp() {
               </div>
             ) : (
               <div className="editor-control-section symbol-controls">
-                <div className="editor-control-heading"><strong>심볼 변경</strong><button type="button">다른 심볼 보기 ›</button></div>
-                <div className="editor-symbol-grid">
-                  {symbolOptions.map((symbol, index) => <button key={symbol} type="button" className={editorSymbol === index ? 'selected' : ''} onClick={() => setEditorSymbol(index)}><span className={`editor-symbol-thumb symbol-${symbol}`}><i /><b /><em /></span></button>)}
-                </div>
-                <div className="editor-control-heading"><strong>심볼 설정</strong><button type="button" onClick={() => { setEditorScale(100); setEditorRotation(0); setEditorOpacity(100) }}>초기화</button></div>
+                <div className="editor-control-heading"><strong>로고 설정</strong><button type="button" onClick={() => { setEditorScale(100); setEditorRotation(0); setEditorOpacity(100) }}>초기화</button></div>
                 <label className="editor-slider-row"><span>크기</span><input type="range" min="70" max="140" value={editorScale} onChange={(event) => setEditorScale(Number(event.target.value))} /><output>{editorScale}%</output></label>
                 <label className="editor-slider-row"><span>회전</span><input type="range" min="-180" max="180" value={editorRotation} onChange={(event) => setEditorRotation(Number(event.target.value))} /><output>{editorRotation}°</output></label>
-                <label className="editor-color-row"><span>색상</span><select value={editorColor} onChange={(event) => setEditorColor(event.target.value)}><option value="#7B5CDF">●  #7B5CDF</option><option value="#E36BAE">●  #E36BAE</option><option value="#2D3047">●  #2D3047</option></select></label>
                 <label className="editor-slider-row"><span>투명도</span><input type="range" min="30" max="100" value={editorOpacity} onChange={(event) => setEditorOpacity(Number(event.target.value))} /><output>{editorOpacity}%</output></label>
-                <button className="editor-regenerate" type="button" onClick={() => setEditorSymbol((current) => (current + 1) % symbolOptions.length)}><Sparkles aria-hidden="true" size={18} strokeWidth={1.8} />심볼 다시 생성하기</button>
               </div>
             )}
           </section>
@@ -2390,17 +2542,6 @@ function CustomerApp() {
             <p>작성 중인 프로젝트와 완성된 로고를 한곳에서 확인하세요.</p>
           </header>
 
-          <section className="mypage-section" aria-labelledby="continue-title">
-            <div className="section-title-row">
-              <div><h2 id="continue-title">이어서 만들기</h2><p>이전에 입력한 내용부터 계속 진행할 수 있어요.</p></div>
-              <PenLine aria-hidden="true" size={26} strokeWidth={1.8} />
-            </div>
-            <div className="continue-project-card">
-              <div className="project-art-placeholder" aria-hidden="true"><Sparkles size={30} strokeWidth={1.6} /></div>
-              <div className="project-card-copy"><strong>{brandKind === 'ci' ? '기업 로고 프로젝트' : '새 브랜드 프로젝트'}</strong><span>브랜드 설명 단계에서 작성 중</span></div>
-               <button className="gradient-button" type="button" onClick={() => void (projectId ? restoreProjectState(projectId).then((next) => setMode(next ?? (brandKind === 'ci' ? 'company-details' : 'brand-details'))) : setMode(brandKind === 'ci' ? 'company-details' : 'brand-details'))}>이어서 작성하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
-            </div>
-          </section>
 
           <section className="mypage-section" aria-labelledby="completed-title">
             <div className="section-title-row"><div><h2 id="completed-title">완성한 브랜드</h2><p>생성한 로고와 분석 결과를 다시 확인할 수 있어요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
@@ -2417,7 +2558,7 @@ function CustomerApp() {
                 </div>
               </article>
             )) : (
-              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 만든 브랜드가 없어요</h3><p>첫 번째 화장품 브랜드 로고를 만들어보세요.</p><button className="gradient-button" type="button" onClick={startOnboarding}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 만든 브랜드가 없어요</h3><p>첫 번째 화장품 브랜드 로고를 만들어보세요.</p><button className="gradient-button" type="button" onClick={startOnboarding} disabled={authRestoring}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
             )}
           </section>
 
@@ -2514,7 +2655,7 @@ function CustomerApp() {
           <span>GenMark AI</span>
         </div>
         <div className="login-hero-mark">
-          <img className="login-stamp-art" src="/stamp-sharp.svg" alt="선명하게 보정된 도장 이미지" />
+          <img className="login-stamp-art" src="/login-hero-bubbles-wide.png" alt="빛나는 거품과 잎사귀를 담은 브랜드 이미지" />
         </div>
         <h1 id="login-title">만들던 브랜드를<br /><strong>안전하게 저장하세요</strong></h1>
         <p className="login-description">로그인하면 작성 중인 내용과 생성한 로고,<br className="login-break" /> 상표 이미지 분석 결과를 나중에도 확인할 수 있어요.</p>
@@ -2542,7 +2683,7 @@ function CustomerApp() {
           <button className="login-back" type="button" onClick={() => setMode(loginReturnMode)}>‹ <span>{loginReturnMode === 'hero' ? '랜딩' : '홈'}</span></button>
           <span className="login-header-state">안전하게 저장하기</span>
         </header>
-      ) : mode === 'onboarding' || mode === 'industry' || mode === 'brand-details' || mode === 'company-details' || mode === 'hero' || mode === 'choice' || mode === 'tone' || mode === 'style' || mode === 'final' || mode === 'loading' || mode === 'trademark-loading' || mode === 'trademark-selection' || mode === 'trademark-result' || mode === 'result' || mode === 'edit' || mode === 'mypage' || mode === 'survey' ? null : (
+      ) : mode === 'onboarding' || mode === 'industry' || mode === 'brand-details' || mode === 'company-details' || mode === 'hero' || mode === 'choice' || mode === 'tone' || mode === 'style' || mode === 'final' || mode === 'loading' || mode === 'trademark-loading' || mode === 'trademark-selection' || mode === 'trademark-result' || mode === 'result' || mode === 'brand-kit' || mode === 'edit' || mode === 'mypage' || mode === 'survey' ? null : (
         <header className="main-header">
           <a className="main-brand" href="#home" aria-label="GenMark AI 홈" onClick={() => setMode('home')}>
             <BrandLogo />
@@ -2558,7 +2699,7 @@ function CustomerApp() {
         </header>
       )}
 
-      {mode === 'login' ? renderLoginScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'industry' ? renderIndustrySelectionScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'company-details' ? renderCompanyDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'trademark-result' ? renderTrademarkResultScreen() : mode === 'result' ? renderLogoResultScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'mypage' ? renderMypageScreen() : mode === 'survey' ? renderSurveyScreen() : mode === 'hero' ? (
+      {mode === 'login' ? renderLoginScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'industry' ? renderIndustrySelectionScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'company-details' ? renderCompanyDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'trademark-result' ? renderTrademarkResultScreen() : mode === 'result' ? renderLogoResultScreen() : mode === 'brand-kit' ? renderBrandKitSelectionScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'mypage' ? renderMypageScreen() : mode === 'survey' ? renderSurveyScreen() : mode === 'hero' ? (
         renderAnimatedGalleryHeroScreen()
       ) : mode === 'home' ? (
         <main id="home" className="main-home">
@@ -2673,6 +2814,7 @@ function CustomerApp() {
       </nav>}
 
       {creditModal === 'credit' ? renderCreditModal() : creditModal === 'survey' ? renderCreditSurveyModal() : null}
+      {resumePromptProject && renderResumePromptModal()}
     </div>
   )
 }

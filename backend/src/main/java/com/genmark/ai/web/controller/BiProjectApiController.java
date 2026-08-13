@@ -50,4 +50,11 @@ public class BiProjectApiController {
         return ResponseEntity.ok(ApiSuccessResponse.of(
                 biProjectService.updateStep(projectId, principal.id(), step, request)));
     }
+
+    @DeleteMapping("/{projectId}")
+    public ResponseEntity<Void> delete(
+            @AuthenticationPrincipal MemberPrincipal principal, @PathVariable String projectId) {
+        biProjectService.delete(projectId, principal.id());
+        return ResponseEntity.noContent().build();
+    }
 }

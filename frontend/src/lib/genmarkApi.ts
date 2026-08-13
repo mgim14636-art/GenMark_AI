@@ -304,6 +304,9 @@ export const projectsApi = {
     })
     return brandType === 'BI' ? normalizeBiProject(response) : normalizeCiProject(response)
   },
+  discard: (projectId: string, brandType: 'CI' | 'BI') => apiRequest<void>(`/${projectPath(brandType)}/${projectId}`, {
+    method: 'DELETE',
+  }),
   createGeneration: (projectId: string, idempotencyKey: string) => apiRequest<LogoGeneration>(`/projects/${projectId}/logo-generations`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },

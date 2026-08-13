@@ -6,45 +6,10 @@ business_card.py가 만드는 건 인쇄용 평면 앞/뒷면(정면, 기울어�
 보여줄지"만 다루므로, business_card.py의 결과물을 그대로 입력으로 받는다.
 """
 
-from typing import Optional, Tuple
+from typing import Tuple
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
-
-
-def _darken(rgb: Tuple[int, int, int], factor: float) -> Tuple[int, int, int]:
-    return tuple(round(c * factor) for c in rgb)
-
-
-def _mute(
-    rgb: Tuple[int, int, int], neutral: Tuple[int, int, int], ratio: float
-) -> Tuple[int, int, int]:
-    return tuple(round(c * (1 - ratio) + n * ratio) for c, n in zip(rgb, neutral))
-
-
-def _card_bg_color(card_img: Image.Image) -> Tuple[int, int, int]:
-    """카드 이미지의 배경색을 알아낸다. business_card.compose_card_front/back는
-    항상 지정된 bg_color로 캔버스를 통째로 채운 뒤 그 위에 로고/텍스트를 그리므로,
-    로고·텍스트가 닿지 않는 좌상단 모서리 픽셀이 곧 배경색이다."""
-    return card_img.convert("RGB").getpixel((0, 0))
-
-
-def _derive_showcase_colors(
-    front_img: Image.Image, back_img: Image.Image
-) -> Tuple[Tuple[int, int, int], Tuple[int, int, int]]:
-    """쇼케이스 배경색을 카드 자체의 배경색에서 자동으로 유도한다.
-
-    호출부가 bg_color_left/right를 직접 안 넘겼을 때만 쓰인다. 카드 색과 무관한
-    고정값(예전 기본값: 그린/그레이)을 쓰면 프롬프트에서 명함 색을 바꿔도 쇼케이스
-    배경은 그대로라 화면이 어긋나 보이는 문제가 있었다(실측 확인됨) — 그래서
-    앞면/뒷면 배경색을 그대로 물려받되, 왼쪽(앞면 쪽)은 살짝 어둡게 눌러 카드와
-    구분되게 하고, 오른쪽(뒷면 쪽)은 무채색 쪽으로 낮춰 은은한 표면 톤으로 만든다.
-    """
-    front_bg = _card_bg_color(front_img)
-    back_bg = _card_bg_color(back_img)
-    bg_left = _darken(front_bg, 0.85)
-    bg_right = _mute(back_bg, (150, 140, 145), 0.55)
-    return bg_left, bg_right
+from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 
 
 def _make_diagonal_background(
@@ -98,12 +63,79 @@ def _prepare_tilted_card(card_img: Image.Image, target_width: int, angle_deg: fl
     return rotated, shadow, card_offset_in_shadow
 
 
+def _add_stack_effect(
+    card_rgba: Image.Image, layers: int = 4, offset_step: int = 4, darken_step: float = 0.05
+) -> Tuple[Image.Image, Tuple[int, int]]:
+    """카드 뒤에 살짝 어긋나게 여러 겹을 겹쳐서, 카드 여러 장이 쌓인 듯한 두께감을 만든다.
+    각 레이어를 아주 조금씩 더 어둡게 해서 실제 종이 여러 장이 겹친 그림자 느낌을 낸다.
+    반환값은 (스택 이미지, 원본 카드가 그 안에서 놓일 오프셋)."""
+    w, h = card_rgba.size
+    pad = offset_step * layers
+    canvas = Image.new("RGBA", (w + pad, h + pad), (0, 0, 0, 0))
+    alpha = card_rgba.split()[-1]
+
+    for i in range(layers, 0, -1):
+        brightness = max(1.0 - darken_step * i, 0.5)
+        layer_rgb = ImageEnhance.Brightness(card_rgba.convert("RGB")).enhance(brightness)
+        layer = layer_rgb.convert("RGBA")
+        layer.putalpha(alpha)
+        offset = (pad - i * offset_step, pad - i * offset_step)
+        canvas.alpha_composite(layer, offset)
+
+    canvas.alpha_composite(card_rgba, (pad, pad))
+    return canvas, (pad, pad)
+
+
+def compose_card_showcase_v2(
+    front_img: Image.Image,
+    back_img: Image.Image,
+    canvas_size: Tuple[int, int] = (900, 620),
+    bg_color: Tuple[int, int, int] = (150, 150, 150),
+    front_width: int = 560,
+    back_width: int = 420,
+    front_angle_deg: float = -13.0,
+    back_angle_deg: float = 12.0,
+    stack_effect: bool = True,
+) -> Image.Image:
+    """참고 레퍼런스 스타일: 단색 배경, 앞면은 크게 전경(좌하단)에, 뒷면은 작게
+    배경(우상단)에 배치해 원근감을 준다. 뒷면에는 카드 여러 장이 쌓인 듯한 스택
+    효과를 적용해 "명함 뭉치" 느낌을 낸다.
+
+    compose_card_showcase(기존, 대각선 두 톤 배경 + 앞뒤 겹침 구도)와는 별개의
+    연출 스타일이다. 어느 쪽을 쓸지는 호출부가 고르면 된다.
+    """
+    bg = Image.new("RGB", canvas_size, bg_color).convert("RGBA")
+    canvas = bg.copy()
+
+    # 뒷면(작게, 배경) 먼저 그린다 — 앞면이 그 위에 겹쳐 보이도록.
+    back_rot, back_shadow, back_off = _prepare_tilted_card(back_img, back_width, back_angle_deg)
+    if stack_effect:
+        back_rot, stack_off = _add_stack_effect(back_rot)
+        # 그림자도 스택 두께만큼 함께 커진 것으로 다시 계산 (근사치로 충분)
+        back_shadow, back_off = _add_drop_shadow(back_rot)
+    back_x = canvas_size[0] - back_rot.width - round(canvas_size[0] * 0.06)
+    back_y = round(canvas_size[1] * 0.06)
+
+    canvas.alpha_composite(back_shadow, (back_x - back_off[0], back_y - back_off[1]))
+    canvas.alpha_composite(back_rot, (back_x, back_y))
+
+    # 앞면(크게, 전경)을 그 위에 겹쳐 그린다.
+    front_rot, front_shadow, front_off = _prepare_tilted_card(front_img, front_width, front_angle_deg)
+    front_x = round(canvas_size[0] * 0.04)
+    front_y = canvas_size[1] - front_rot.height - round(canvas_size[1] * 0.05)
+
+    canvas.alpha_composite(front_shadow, (front_x - front_off[0], front_y - front_off[1]))
+    canvas.alpha_composite(front_rot, (front_x, front_y))
+
+    return canvas.convert("RGB")
+
+
 def compose_card_showcase(
     front_img: Image.Image,
     back_img: Image.Image,
     canvas_size: Tuple[int, int] = (760, 760),
-    bg_color_left: Optional[Tuple[int, int, int]] = None,
-    bg_color_right: Optional[Tuple[int, int, int]] = None,
+    bg_color_left: Tuple[int, int, int] = (58, 98, 84),
+    bg_color_right: Tuple[int, int, int] = (150, 150, 148),
     card_width: int = 430,
     angle_deg: float = -9.0,
     overlap_ratio: float = 0.5,
@@ -111,16 +143,8 @@ def compose_card_showcase(
     """명함 앞면(위)과 뒷면(아래, 겹침)을 기울여서 두 톤 배경 위에 연출한 쇼케이스 이미지.
 
     front_img/back_img: business_card.compose_card_front/back가 만든 평면 이미지.
-    bg_color_left/right: 생략하면(None) front_img/back_img의 실제 배경색에서 자동
-        유도한다(_derive_showcase_colors) — 명함 배경색이 바뀌면 쇼케이스 배경도
-        같이 바뀌게 하기 위함이다. 특정 톤을 강제로 고정하고 싶을 때만 직접 넘긴다.
     overlap_ratio: 뒷면이 앞면과 얼마나 겹치게 내려올지(카드 높이 대비 비율).
     """
-    if bg_color_left is None or bg_color_right is None:
-        derived_left, derived_right = _derive_showcase_colors(front_img, back_img)
-        bg_color_left = bg_color_left or derived_left
-        bg_color_right = bg_color_right or derived_right
-
     bg = _make_diagonal_background(canvas_size, bg_color_left, bg_color_right)
     canvas = bg.convert("RGBA")
 

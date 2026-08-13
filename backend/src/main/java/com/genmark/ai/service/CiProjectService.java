@@ -43,6 +43,19 @@ public class CiProjectService {
     }
 
     /**
+     * 이어쓰기 확인창에서 "아니오"를 선택했을 때 초안을 지운다. 이미 로고 생성이 시작된
+     * 프로젝트(GENERATING 이후)는 생성 이력·후보 이미지까지 함께 사라지므로 지우지 않는다.
+     */
+    @Transactional
+    public void delete(String publicId, Long memberId) {
+        CiProject project = requireOwned(publicId, memberId);
+        if (project.getStatus() != ProjectStatus.DRAFT && project.getStatus() != ProjectStatus.BRIEF_READY) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "이미 생성이 시작된 프로젝트는 삭제할 수 없습니다.");
+        }
+        ciProjectRepository.delete(project);
+    }
+
+    /**
      * 두 번째 CI부터 회사명·핵심가치를 자동으로 채워주기 위한 조회 (F7-1).
      *
      * <p>새 컬럼 없이 "가장 최근 CI 한 건"을 읽는 것만으로 해결된다. BI는 이 규칙이 없어
