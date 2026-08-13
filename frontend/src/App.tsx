@@ -292,6 +292,9 @@ function CustomerApp() {
   const [authError, setAuthError] = useState('')
   const [loginDestination, setLoginDestination] = useState<LoginDestination>('home')
   const [loginReturnMode, setLoginReturnMode] = useState<LoginReturnMode>('home')
+  const [resumePromptProject, setResumePromptProject] = useState<{ id: string; brandType: 'CI' | 'BI' } | null>(null)
+  const [resumePromptBusy, setResumePromptBusy] = useState(false)
+  const [resumePromptError, setResumePromptError] = useState('')
   const [onboardingCompleted, setOnboardingCompleted] = useState(false)
   const [onboardingSaving, setOnboardingSaving] = useState(false)
   const [onboardingError, setOnboardingError] = useState('')
@@ -668,6 +671,72 @@ function CustomerApp() {
     }
   }
 
+  /** 이어쓸 만한 초안이 있을 때, 곧장 이어쓰지 않고 "이어서 작성하시겠습니까?" 확인창부터 보여준다. */
+  const presentResumePrompt = async (resumeId: string, fallback: () => void) => {
+    try {
+      const project = await projectsApi.get(resumeId)
+      if (project.status === 'COMPLETED') {
+        // 완전히 끝난 프로젝트는 더 이상 이어쓰기 대상이 아니다 — 새로고침 없이도 새 프로젝트를 시작할 수 있게 비워준다.
+        setProjectId(null)
+        window.localStorage.removeItem('genmark-project-id')
+        fallback()
+        return
+      }
+      if (project.status !== 'DRAFT' && project.status !== 'BRIEF_READY') {
+        // 아직 진행 중인(GENERATING 등) 프로젝트는 "이어서 작성"할 내용이 없으므로 묻지 않고 바로 이동한다.
+        const next = await restoreProjectState(resumeId)
+        setMode(next ?? 'industry')
+        return
+      }
+      setProjectId(project.id)
+      window.localStorage.setItem('genmark-project-id', project.id)
+      setResumePromptProject({ id: project.id, brandType: project.brandType })
+      setResumePromptError('')
+    } catch (error) {
+      if (error instanceof AuthError && error.status === 404) {
+        setProjectId(null)
+        window.localStorage.removeItem('genmark-project-id')
+        fallback()
+        return
+      }
+      throw error
+    }
+  }
+
+  const confirmResumeProject = async () => {
+    if (!resumePromptProject || resumePromptBusy) return
+    setResumePromptBusy(true)
+    setResumePromptError('')
+    try {
+      const next = await restoreProjectState(resumePromptProject.id)
+      setResumePromptProject(null)
+      setMode(next ?? 'industry')
+    } catch {
+      setResumePromptError('이어쓰기 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setResumePromptBusy(false)
+    }
+  }
+
+  const discardResumeProject = async () => {
+    if (!resumePromptProject || resumePromptBusy) return
+    setResumePromptBusy(true)
+    setResumePromptError('')
+    try {
+      await projectsApi.discard(resumePromptProject.id, resumePromptProject.brandType)
+      setProjectId(null)
+      window.localStorage.removeItem('genmark-project-id')
+      setResumePromptProject(null)
+      setIndustryBackMode('home')
+      setMode('industry')
+    } catch (error) {
+      const message = error instanceof AuthError ? error.message : '삭제하지 못했어요. 잠시 후 다시 시도해주세요.'
+      setResumePromptError(message)
+    } finally {
+      setResumePromptBusy(false)
+    }
+  }
+
   const completeLogin = async (provider: AuthProvider) => {
     if (authLoading) return
     setAuthLoading(true)
@@ -689,12 +758,14 @@ function CustomerApp() {
        if (!session.user.onboardingCompleted) {
          setMode('onboarding')
        } else if (session.resumeProjectId) {
-         const resumedMode = await restoreProjectState(session.resumeProjectId)
-         setMode(resumedMode ?? loginDestination)
+         const destination = loginDestination
+         setMode('home')
+         await presentResumePrompt(session.resumeProjectId, () => setMode(destination))
+         setLoginDestination('home')
        } else {
          setMode(loginDestination)
+         setLoginDestination('home')
        }
-       setLoginDestination('home')
     } catch (error) {
       const message = error instanceof AuthError
         ? `${error.message}${error.code ? ` (${error.code}${error.requestId ? `, requestId: ${error.requestId}` : ''})` : ''}`
@@ -715,21 +786,25 @@ function CustomerApp() {
     void logout()
   }
 
-  const startOnboarding = () => {
+  const startOnboarding = async () => {
+    setLoginDestination('industry')
     if (!loggedIn) {
-      setLoginDestination('industry')
       setLoginReturnMode('home')
       setMode('login')
       return
     }
 
     setOnboardingStep(1)
-    if (onboardingCompleted) {
-      setIndustryBackMode('home')
-      setMode('industry')
-    } else {
+    if (!onboardingCompleted) {
       setMode('onboarding')
+      return
     }
+    if (projectId) {
+      await presentResumePrompt(projectId, () => { setIndustryBackMode('home'); setMode('industry') })
+      return
+    }
+    setIndustryBackMode('home')
+    setMode('industry')
   }
 
   const completeOnboarding = async () => {
@@ -754,7 +829,8 @@ function CustomerApp() {
       setOnboardingCompleted(true)
       window.localStorage.setItem('genmark-onboarding-completed', 'true')
       setIndustryBackMode('home')
-      setMode('home')
+      setMode(loginDestination)
+      setLoginDestination('home')
     } catch (error) {
       const message = error instanceof AuthError ? error.message : '온보딩 정보를 저장하지 못했어요. 잠시 후 다시 시도해주세요.'
       setOnboardingError(message)
@@ -1220,11 +1296,30 @@ function CustomerApp() {
           </div>
           {onboardingError && <p className="onboarding-error" role="alert">{onboardingError}</p>}
           <button className="onboarding-next" type="button" onClick={advanceOnboarding}>
-            {onboardingSaving ? '저장 중...' : onboardingStep === 1 ? '다음' : '시작하기'}
+            {onboardingSaving ? '저장 중...' : onboardingStep === 1 ? '다음' : '제출하기'}
           </button>
         </div>
       </section>
     </main>
+  )
+
+  const renderResumePromptModal = () => (
+    <div className="modal-backdrop" role="presentation">
+      <section className="credit-modal resume-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="resume-prompt-title">
+        <p className="resume-prompt-brand">GenMark</p>
+        <h2 id="resume-prompt-title">기존에 작성된<br /><strong>내용이 있습니다</strong></h2>
+        <p>이어서 작성하시겠습니까?</p>
+        {resumePromptError && <p className="project-error" role="alert">{resumePromptError}</p>}
+        <div className="credit-modal-actions">
+          <button className="gradient-button" type="button" onClick={() => void confirmResumeProject()} disabled={resumePromptBusy}>
+            {resumePromptBusy ? '처리 중...' : '예, 이어서 작성할게요'}
+          </button>
+          <button className="modal-secondary-button" type="button" onClick={() => void discardResumeProject()} disabled={resumePromptBusy}>
+            아니오, 새로 시작할게요
+          </button>
+        </div>
+      </section>
+    </div>
   )
 
   const renderIndustrySelectionScreen = () => (
@@ -1709,7 +1804,7 @@ function CustomerApp() {
           <strong>5분 만에 완성하는</strong>
           <span>프리미엄 브랜드 로고</span>
         </div>
-        <button className="gradient-button hero-create-button" type="button" onClick={startOnboarding}>
+        <button className="gradient-button hero-create-button" type="button" onClick={startOnboarding} disabled={authRestoring}>
           <Sparkle /> 로고 생성 시작
         </button>
       </div>
@@ -2447,17 +2542,6 @@ function CustomerApp() {
             <p>작성 중인 프로젝트와 완성된 로고를 한곳에서 확인하세요.</p>
           </header>
 
-          <section className="mypage-section" aria-labelledby="continue-title">
-            <div className="section-title-row">
-              <div><h2 id="continue-title">이어서 만들기</h2><p>이전에 입력한 내용부터 계속 진행할 수 있어요.</p></div>
-              <PenLine aria-hidden="true" size={26} strokeWidth={1.8} />
-            </div>
-            <div className="continue-project-card">
-              <div className="project-art-placeholder" aria-hidden="true"><Sparkles size={30} strokeWidth={1.6} /></div>
-              <div className="project-card-copy"><strong>{brandKind === 'ci' ? '기업 로고 프로젝트' : '새 브랜드 프로젝트'}</strong><span>브랜드 설명 단계에서 작성 중</span></div>
-               <button className="gradient-button" type="button" onClick={() => void (projectId ? restoreProjectState(projectId).then((next) => setMode(next ?? (brandKind === 'ci' ? 'company-details' : 'brand-details'))) : setMode(brandKind === 'ci' ? 'company-details' : 'brand-details'))}>이어서 작성하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
-            </div>
-          </section>
 
           <section className="mypage-section" aria-labelledby="completed-title">
             <div className="section-title-row"><div><h2 id="completed-title">완성한 브랜드</h2><p>생성한 로고와 분석 결과를 다시 확인할 수 있어요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
@@ -2474,7 +2558,7 @@ function CustomerApp() {
                 </div>
               </article>
             )) : (
-              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 만든 브랜드가 없어요</h3><p>첫 번째 화장품 브랜드 로고를 만들어보세요.</p><button className="gradient-button" type="button" onClick={startOnboarding}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 만든 브랜드가 없어요</h3><p>첫 번째 화장품 브랜드 로고를 만들어보세요.</p><button className="gradient-button" type="button" onClick={startOnboarding} disabled={authRestoring}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
             )}
           </section>
 
@@ -2730,6 +2814,7 @@ function CustomerApp() {
       </nav>}
 
       {creditModal === 'credit' ? renderCreditModal() : creditModal === 'survey' ? renderCreditSurveyModal() : null}
+      {resumePromptProject && renderResumePromptModal()}
     </div>
   )
 }
