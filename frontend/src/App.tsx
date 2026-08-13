@@ -313,6 +313,9 @@ function CustomerApp() {
   const [targetAge, setTargetAge] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [companyMotto, setCompanyMotto] = useState('')
+  const [profileEditing, setProfileEditing] = useState(false)
+  const [profileCompanyNameDraft, setProfileCompanyNameDraft] = useState('')
+  const [profileCompanyMottoDraft, setProfileCompanyMottoDraft] = useState('')
   const [coreValues, setCoreValues] = useState<CoreValue[]>([])
   const [coreValueInputMode, setCoreValueInputMode] = useState<'category' | 'direct'>('category')
   const [brandValueDescription, setBrandValueDescription] = useState('')
@@ -2524,8 +2527,49 @@ function CustomerApp() {
   }
 
   const renderMypageScreen = () => {
-    const displayUserName = brandName.trim() || '사용자'
-    const completedProjects = [{ id: 'luvera', name: 'LUVÉRA', detail: '스킨케어 · 콤비네이션', status: '로고 생성 완료' }]
+    const displayUserName = authUser?.name?.trim() || '사용자'
+    const displayEmail = authUser?.email?.trim() || '연결된 이메일 정보가 없어요.'
+    const selectedLogo = logoCandidates.find((candidate) => candidate.id === selectedCandidateId)
+      ?? logoCandidates.find((candidate) => candidate.selected)
+    const projectName = (brandKind === 'ci' ? companyName : brandName).trim()
+    const projectDescription = (brandKind === 'ci' ? companyMotto : brandValueDescription).trim()
+    const selectedIndustry = industryOptions.find((option) => option.id === industrySelection)?.title ?? '업종 미입력'
+    const selectedStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? '스타일 미입력'
+    const completedProjects = projectId && selectedLogo && projectName
+      ? [{
+          id: projectId,
+          name: projectName,
+          detail: `${selectedIndustry} · ${selectedStyle}`,
+          description: projectDescription,
+          candidate: selectedLogo,
+        }]
+      : []
+    const remainingPinDays = (expiresAt: string) => Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000))
+    const beginProfileEdit = () => {
+      setProfileCompanyNameDraft(companyName)
+      setProfileCompanyMottoDraft(companyMotto)
+      setProfileEditing(true)
+    }
+    const saveProfileEdit = (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      setCompanyName(profileCompanyNameDraft.trim())
+      setCompanyMotto(profileCompanyMottoDraft.trim())
+      setProfileEditing(false)
+    }
+    const downloadHistoryItem = async (item: DownloadRecord) => {
+      try {
+        const blob = await downloadAuthenticatedFile(item.imageUrl)
+        const link = document.createElement('a')
+        link.href = URL.createObjectURL(blob)
+        link.download = `genmark-${item.projectType.toLowerCase()}-${item.candidateId}.png`
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        URL.revokeObjectURL(link.href)
+      } catch (error) {
+        setProjectError(error instanceof Error ? error.message : '다운로드 파일을 불러오지 못했어요.')
+      }
+    }
 
     return (
       <main className="mypage-screen" aria-labelledby="mypage-title">
@@ -2537,50 +2581,96 @@ function CustomerApp() {
 
         <section className="mypage-content">
           <header className="mypage-heading">
-            <p className="mypage-eyebrow">마이페이지</p>
             <h1 id="mypage-title">{displayUserName}님의 브랜드 작업</h1>
-            <p>작성 중인 프로젝트와 완성된 로고를 한곳에서 확인하세요.</p>
+            <p>프로필과 저장된 브랜드 자산을 한곳에서 확인하세요.</p>
           </header>
 
+          <section className="mypage-profile-panel" aria-labelledby="profile-title">
+            <div className="profile-identity">
+              <span className="profile-avatar" aria-hidden="true">{displayUserName.slice(0, 1)}</span>
+              <div><h2 id="profile-title">{displayUserName}</h2><p>{displayEmail}</p></div>
+            </div>
+            <form className="profile-details" onSubmit={saveProfileEdit}>
+              <div className="profile-edit-actions">
+                {profileEditing ? (
+                  <><button type="button" onClick={() => setProfileEditing(false)}>취소</button><button className="save" type="submit">저장</button></>
+                ) : (
+                  <button type="button" onClick={beginProfileEdit}><Pencil aria-hidden="true" size={13} strokeWidth={2} />수정</button>
+                )}
+              </div>
+              <dl className="profile-detail-list">
+                <div>
+                  <dt><Building2 size={17} strokeWidth={1.8} />회사명</dt>
+                  <dd>{profileEditing ? <input aria-label="회사명 수정" maxLength={80} value={profileCompanyNameDraft} onChange={(event) => setProfileCompanyNameDraft(event.target.value)} placeholder="회사명을 입력해주세요." /> : companyName.trim() || '아직 입력된 회사명이 없어요.'}</dd>
+                </div>
+                <div>
+                  <dt><Sparkles size={17} strokeWidth={1.8} />회사 모토</dt>
+                  <dd>{profileEditing ? <textarea aria-label="회사 모토 수정" maxLength={300} rows={2} value={profileCompanyMottoDraft} onChange={(event) => setProfileCompanyMottoDraft(event.target.value)} placeholder="회사 모토를 입력해주세요." /> : companyMotto.trim() || '브랜드 프로젝트에서 회사 모토를 입력해보세요.'}</dd>
+                </div>
+              </dl>
+            </form>
+          </section>
 
           <section className="mypage-section" aria-labelledby="completed-title">
             <div className="section-title-row"><div><h2 id="completed-title">완성한 브랜드</h2><p>생성한 로고와 분석 결과를 다시 확인할 수 있어요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
             {completedProjects.length > 0 ? completedProjects.map((project) => (
               <article className="completed-project-card" key={project.id}>
-                <div className="completed-project-preview" aria-hidden="true"><span><Sparkles size={22} strokeWidth={1.5} /></span><strong>{project.name}</strong><small>COSMETICS</small></div>
-                <div className="completed-project-info"><div className="project-info-heading"><strong>{project.name}</strong><span className="project-status"><Check size={14} strokeWidth={2.3} /> {project.status}</span></div><p>{project.detail}</p><div className="project-status-list"><span><Check size={14} strokeWidth={2} /> 로고 생성 완료</span><span><Check size={14} strokeWidth={2} /> 상표 이미지 분석 완료</span><span><Check size={14} strokeWidth={2} /> 브랜드 키트 완료</span></div></div>
+                <div className="completed-project-preview"><img src={getLogoCandidateImageUrl(project.candidate.storageKey)} alt={`${project.name} 선택 로고`} /></div>
+                <div className="completed-project-info"><div className="project-info-heading"><strong>{project.name}</strong><span className="project-status"><Check size={14} strokeWidth={2.3} /> 로고 선택 완료</span></div><p>{project.detail}</p>{project.description && <p className="project-description">{project.description}</p>}<div className="project-status-list"><span><Check size={14} strokeWidth={2} /> 로고 생성 완료</span><span className={trademarkAnalysisCompleted ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 상표 분석 {trademarkAnalysisCompleted ? '완료' : '미완료'}</span><span className={brandKit?.status === 'SUCCEEDED' ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 브랜드킷 {brandKit?.status === 'SUCCEEDED' ? '완료' : '미완료'}</span></div></div>
                 <div className="project-action-grid">
                   <button type="button" onClick={() => setMode('result')}><ImageIcon size={19} strokeWidth={1.8} />결과 보기</button>
-                  <button type="button" onClick={() => setMode('trademark-result')}><Search size={19} strokeWidth={1.8} />유사도 결과 보기</button>
-                  <button type="button" onClick={() => downloadLogo({ name: project.name, subtitle: 'COSMETICS' })}><Download size={19} strokeWidth={1.8} />로고 다운로드</button>
-                  <button type="button" onClick={() => setMode('result')}><FolderCheck size={19} strokeWidth={1.8} />브랜드 키트 만들기</button>
+                  <button type="button" disabled={!trademarkAnalysisCompleted} onClick={() => setMode('trademark-result')}><Search size={19} strokeWidth={1.8} />유사도 결과</button>
+                  <button type="button" onClick={() => requestLogoDownload({ name: project.name, subtitle: selectedIndustry, candidateId: project.candidate.id, storageKey: project.candidate.storageKey })}><Download size={19} strokeWidth={1.8} />로고 다운로드</button>
+                  <button type="button" onClick={openBrandKitSelection}><FolderCheck size={19} strokeWidth={1.8} />브랜드킷 만들기</button>
                   <button type="button" onClick={() => setMode('style')}><RefreshCw size={19} strokeWidth={1.8} />다시 생성하기</button>
                 </div>
               </article>
             )) : (
-              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 만든 브랜드가 없어요</h3><p>첫 번째 화장품 브랜드 로고를 만들어보세요.</p><button className="gradient-button" type="button" onClick={startOnboarding} disabled={authRestoring}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 완성한 브랜드가 없어요</h3><p>로고를 생성하고 최종 후보를 선택하면 이곳에 표시돼요.</p><button className="gradient-button" type="button" onClick={startOnboarding} disabled={authRestoring}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
             )}
           </section>
 
-          {pinnedLogos.length > 0 && (
-            <section className="mypage-section" aria-labelledby="pinned-title">
-              <div className="section-title-row"><div><h2 id="pinned-title">찜한 로고</h2><p>찜한 로고는 3일 동안 보관돼요.</p></div><Heart aria-hidden="true" size={27} strokeWidth={1.8} /></div>
+          <section className="mypage-section" aria-labelledby="download-history-title">
+            <div className="section-title-row"><div><h2 id="download-history-title">내 다운로드 목록</h2><p>CI·BI 유형별로 최근 20개까지 보관돼요. 한도를 넘으면 오래된 기록부터 자동으로 정리됩니다.</p></div><Download aria-hidden="true" size={27} strokeWidth={1.8} /></div>
+            {downloadHistory.length > 0 ? (
+              <div className="mypage-record-list">
+                {downloadHistory.map((item) => (
+                  <article className="mypage-record-row" key={item.downloadId}>
+                    <span className="record-icon"><Download size={19} strokeWidth={1.8} /></span>
+                    <div><strong>{item.projectType} 로고</strong><p>{new Date(item.downloadedAt).toLocaleString('ko-KR')}에 저장</p></div>
+                    <button type="button" onClick={() => void downloadHistoryItem(item)}>다시 받기</button>
+                  </article>
+                ))}
+              </div>
+            ) : <div className="mypage-inline-empty"><Download size={22} strokeWidth={1.6} /><span>아직 다운로드한 로고가 없어요.</span></div>}
+          </section>
+
+          <section className="mypage-section" aria-labelledby="pinned-title">
+              <div className="section-title-row"><div><h2 id="pinned-title">찜한 로고</h2><p>찜한 로고는 3일 동안 잠시 보관돼요. 기간이 지나면 목록에서 자동으로 사라집니다.</p></div><Heart aria-hidden="true" size={27} strokeWidth={1.8} /></div>
+            {pinnedLogos.length > 0 ? (
               <div className="pinned-logo-grid">
                 {pinnedLogos.map((item) => (
                   <article className="pinned-logo-card" key={item.candidateId}>
                     <img src={getLogoCandidateImageUrl(item.storageKey)} alt="찜한 로고" />
-                    <div><strong>{item.projectType ?? 'BRAND'} 로고</strong><span>{new Date(item.expiresAt).toLocaleDateString('ko-KR')}까지 보관</span></div>
+                    <div><strong>{item.projectType ?? '브랜드'} 로고</strong><span>{remainingPinDays(item.expiresAt)}일 후 목록에서 사라져요</span><small>{new Date(item.expiresAt).toLocaleDateString('ko-KR')}까지 보관</small></div>
                   </article>
                 ))}
               </div>
-            </section>
-          )}
-
-          <section className="mypage-section download-history-section" aria-labelledby="download-history-title">
-            <div className="section-title-row"><div><h2 id="download-history-title">다운로드 기록</h2><p>다운로드한 로고는 유형별로 최대 20개까지 보관돼요.</p></div><Download aria-hidden="true" size={27} strokeWidth={1.8} /></div>
-            <p className="download-history-count">현재 {downloadHistory.length}개의 다운로드 기록이 있어요.</p>
+            ) : <div className="mypage-inline-empty"><Heart size={22} strokeWidth={1.6} /><span>잠시 보관하고 싶은 로고를 찜해보세요.</span></div>}
           </section>
 
+          <section className="mypage-section" aria-labelledby="brand-kit-list-title">
+            <div className="section-title-row"><div><h2 id="brand-kit-list-title">내 브랜드킷</h2><p>선택한 로고로 만든 명함과 제품 썸네일을 확인하세요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
+            {brandKit ? (
+              <article className="brand-kit-summary-row">
+                <span className="record-icon"><FolderCheck size={20} strokeWidth={1.8} /></span>
+                <div><strong>{brandKit.kitType === 'BUSINESS_CARD' ? '명함' : '제품 썸네일'}</strong><p>{brandKit.status === 'SUCCEEDED' ? '생성이 완료됐어요.' : brandKit.status === 'FAILED' ? '생성에 실패했어요.' : '현재 생성 중이에요.'}</p></div>
+                <span className={`brand-kit-state ${brandKit.status.toLowerCase()}`}>{brandKit.status === 'SUCCEEDED' ? '완료' : brandKit.status === 'FAILED' ? '실패' : '생성 중'}</span>
+              </article>
+            ) : <div className="mypage-inline-empty"><FolderCheck size={22} strokeWidth={1.6} /><span>아직 만든 브랜드킷이 없어요.</span></div>}
+          </section>
+
+          {projectError && <p className="project-error mypage-project-error" role="alert">{projectError}</p>}
           <button className="survey-entry-card" type="button" onClick={() => { setSurveySubmitted(false); setMode('survey') }}><span><MessageSquare aria-hidden="true" size={23} strokeWidth={1.8} /></span><div><strong>서비스를 이용해보셨나요?</strong><p>더 쉬운 브랜드 제작을 위해 의견을 들려주세요.</p></div><ChevronRight aria-hidden="true" size={21} strokeWidth={1.8} /></button>
         </section>
       </main>
