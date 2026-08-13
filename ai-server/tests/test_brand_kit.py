@@ -54,8 +54,11 @@ def test_business_card_returns_print_sized_image():
     assert body["kitType"] == "BUSINESS_CARD"
     assert body["preliminary"] is False  # 명함은 외부 API 없이 최종 품질까지 합성된다
     image = body["images"][0]
-    assert (image["width"], image["height"]) == (1063, 591)  # 90x50mm @300dpi
-    assert _decode(image).size == (1063, 591)
+    # 규격은 렌더러(business_card.CardLayout)를 따른다. 숫자를 여기에 박아두면
+    # 레이아웃을 조정할 때마다 무관한 테스트가 깨진다.
+    from app.schemas.brand_kit import KIT_SIZE
+    assert (image["width"], image["height"]) == KIT_SIZE["BUSINESS_CARD"]
+    assert _decode(image).size == KIT_SIZE["BUSINESS_CARD"]
 
 
 def test_response_exposes_top_level_image_base64():
@@ -93,7 +96,8 @@ def test_business_card_without_card_info_degrades_instead_of_failing():
     body = response.json()
     assert body["preliminary"] is True
     assert any("card_info" in w for w in body["warnings"])
-    assert body["images"][0]["width"] == 1063
+    from app.schemas.brand_kit import KIT_SIZE
+    assert body["images"][0]["width"] == KIT_SIZE["BUSINESS_CARD"][0]
 
 
 def test_backend_minimal_request_shape_is_accepted():
