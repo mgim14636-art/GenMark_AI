@@ -18,6 +18,7 @@ import binascii
 import re
 import time
 from io import BytesIO
+from pathlib import Path
 from typing import Optional, Tuple
 
 import numpy as np
@@ -157,73 +158,68 @@ def _readable_on(bg: Tuple[int, int, int]) -> Tuple[int, int, int]:
 
 
 # --------------------------------------------------------------------------- 명함
+# 명함 렌더링은 business_card.py(담당: 정혜리)에 위임한다.
+#
+# 한동안 이 파일에도 자체 명함 합성(좌우 2단 1063x591)이 있었으나, 앞/뒷면 분리와
+# 쇼케이스 연출까지 갖춘 business_card.py 쪽이 완성도가 높아 그쪽으로 통일했다.
+# 엔드포인트(/api/v1/generation/brand-kit)와 응답 스키마는 그대로라 백엔드는
+# 수정할 것이 없다.
+#
+# 사용자 정보(CardInfo)와 business_card.contact dict는 필드명이 다르다.
+# 스키마를 서로 맞추는 대신 여기서 변환한다 — 백엔드 계약(CardInfo)과 렌더러의
+# 내부 표현을 각자 바꿀 수 있게 두는 편이 낫다.
+_FONT_DIR = Path(__file__).resolve().parent.parent / "fonts" / "modern_sans"
+_CARD_FONT_BOLD = str(_FONT_DIR / "bold" / "Pretendard-Bold.ttf")
+_CARD_FONT_REGULAR = str(_FONT_DIR / "regular" / "Pretendard-Regular.ttf")
+
+
+def _card_contact(info: Optional[CardInfo]) -> dict:
+    if info is None:
+        return {}
+    return {
+        "title": (info.title or "").strip(),
+        "person_name": (info.name or "").strip(),
+        "mobile": (info.phone or "").strip(),
+        "email": (info.email or "").strip(),
+        "address": (info.address or "").strip(),
+    }
+
+
 def _compose_business_card(
     logo: Image.Image, info: Optional[CardInfo], survey: dict
-) -> Image.Image:
-    """좌: 로고 / 우: 인적사항 2단 구성.
+) -> Tuple[Image.Image, Image.Image]:
+    """명함 앞면과 뒷면을 만든다.
 
-    로고를 위, 정보를 아래에 쌓으면 명함 가로폭(1063px) 우측 절반이 통째로 비어
-    허전해진다(실측 확인됨). 좌우로 나눠 양쪽 무게를 맞춘다.
+    배경색은 로고에서 자동으로 뽑는다(business_card.derive_card_bg_colors).
+    설문 색상을 쓰지 않는 이유는, 사용자가 고른 색이 두 개일 때 어느 쪽을 카드
+    바탕으로 쓸지 정할 근거가 없고 로고에 실제로 쓰인 색이 더 정확하기 때문이다.
 
-    info가 없으면(백엔드가 아직 card_info를 안 보내는 상태) 회사명만 넣은 브랜드
-    카드로 합성한다. 레이아웃은 동일하므로 나중에 값이 채워지면 그대로 명함이 된다.
+    info가 없으면(백엔드가 아직 card_info를 안 보내는 상태) 인적사항 영역이 비고
+    브랜드 정보만 남는다. 레이아웃은 동일하므로 값이 채워지면 그대로 명함이 된다.
     """
-    W, H = KIT_SIZE["BUSINESS_CARD"]
-    accent = _pick_accent(survey)
-    tone = _tone(survey)
-
-    card = Image.new("RGB", (W, H), (255, 255, 255))
-    d = ImageDraw.Draw(card)
-
-    # 좌측 세로 강조 바 — 로고 색을 카드에 계승시키는 최소 장치
-    d.rectangle([0, 0, 14, H], fill=accent)
-
-    # --- 좌측: 로고 (세로 중앙)
-    left_x, left_w = 84, 320
-    logo_img = _fit(_trim(_logo_rgba(logo)), left_w, int(H * 0.62))
-    card.paste(
-        logo_img,
-        (left_x + (left_w - logo_img.width) // 2, (H - logo_img.height) // 2),
-        logo_img,
+    from app.services.business_card import (
+        compose_card_back,
+        compose_card_front,
+        derive_card_bg_colors,
     )
 
-    # --- 세로 구분선
-    div_x = left_x + left_w + 56
-    d.line([div_x, 96, div_x, H - 96], fill=(228, 232, 239), width=2)
+    logo_rgba = _logo_rgba(logo)
+    front_bg, back_bg = derive_card_bg_colors(logo_rgba)
 
-    # --- 우측: 인적사항 (블록 전체를 세로 중앙에 맞춘다)
-    tx = div_x + 56
-    f_name = _resolve_font(44, weight="bold")
-    f_title = _resolve_font(24, weight="regular")
-    f_body = _resolve_font(22, weight="regular")
+    brand = _brand_name(survey) or (info.company if info and info.company else "")
+    tagline = (survey.get("brand_direction") or survey.get("company_values_text") or "").strip()
+    # 태그라인이 길면 카드에서 잘린다. 문장이 아니라 한 줄 문구가 들어갈 자리다.
+    if len(tagline) > 40:
+        tagline = ""
 
-    brand = _brand_name(survey)
-    if info is None:
-        headline, title, company, lines = brand or " ", None, "", []
-    else:
-        headline = info.name
-        title = (info.title or "").strip() or None
-        company = (info.company or brand or "").strip()
-        lines = [t.strip() for t in (info.phone, info.email, info.address) if t and t.strip()]
-
-    block_h = 56 + (34 if title else 0) + (30 if company else 0) + len(lines) * 32
-    y = (H - block_h) // 2
-
-    d.text((tx, y), headline, font=f_name, fill=(24, 28, 36))
-    y += 56
-    if title:
-        d.text((tx, y), title, font=f_title, fill=accent)
-        y += 34
-    if company:
-        d.text((tx, y), company, font=f_body, fill=(120, 128, 142))
-        y += 30
-    y += 12
-    for text in lines:
-        d.text((tx, y), text, font=f_body, fill=(96, 104, 118))
-        y += 32
-
-    _ = tone  # 폰트 톤 반영은 후속 작업(현재는 기본 고딕 고정)
-    return card
+    front = compose_card_front(
+        logo_rgba, brand, tagline, front_bg, _CARD_FONT_BOLD, _CARD_FONT_REGULAR
+    )
+    back = compose_card_back(
+        logo_rgba, brand, tagline, _card_contact(info), back_bg,
+        _CARD_FONT_BOLD, _CARD_FONT_REGULAR,
+    )
+    return front, back
 
 
 # --------------------------------------------------------------------------- 제품 썸네일
@@ -271,21 +267,27 @@ def create_brand_kit(req: BrandKitRequest) -> BrandKitResponse:
     warnings: list[str] = []
 
     if kit_type == "BUSINESS_CARD":
-        image = _compose_business_card(logo, req.card_info, req.survey)
+        # 명함은 앞/뒷면 두 장이다. images[]에 순서대로 담고, 최상위 imageBase64에는
+        # 앞면을 복제한다 — 백엔드가 최상위 한 장만 읽고 있어 수정 없이 붙는다.
+        front, back = _compose_business_card(logo, req.card_info, req.survey)
+        images = [front, back]
         if req.card_info is None:
             warnings.append(
-                "card_info가 없어 회사명만 넣은 브랜드 카드로 합성했습니다. "
-                "이름·직함·연락처를 보내면 명함으로 완성됩니다."
+                "card_info가 없어 인적사항 없이 브랜드 정보만 넣었습니다. "
+                "이름·직함·연락처를 보내면 명함 뒷면이 완성됩니다."
             )
     else:
-        image = _compose_product_thumbnail(logo, req.product_name, req.survey)
+        images = [_compose_product_thumbnail(logo, req.product_name, req.survey)]
         warnings.append("AI 연출 배경 미적용 — 톤 기반 그라데이션으로 대체했습니다.")
 
-    encoded = _to_base64(image)
+    encoded = [_to_base64(img) for img in images]
     return BrandKitResponse(
         kitType=kit_type,
-        imageBase64=encoded,
-        images=[BrandKitImage(imageBase64=encoded, width=image.width, height=image.height)],
+        imageBase64=encoded[0],
+        images=[
+            BrandKitImage(imageBase64=b64, width=img.width, height=img.height)
+            for b64, img in zip(encoded, images)
+        ],
         preliminary=bool(warnings),
         warnings=warnings,
         elapsedMs=int((time.monotonic() - started) * 1000),

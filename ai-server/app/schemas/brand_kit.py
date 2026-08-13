@@ -19,9 +19,23 @@ CANONICAL_KIT_TYPE = {
     "BOTTLE": "PRODUCT_THUMBNAIL",
 }
 
-# 산출물 규격 — 명함은 국내 표준 90x50mm를 300dpi로, 썸네일은 기획서 명시값.
+# 산출물 규격.
+#
+# 명함 규격은 렌더러(business_card.CardLayout)를 단일 기준으로 삼는다. 여기에
+# 숫자를 따로 적어두면 레이아웃을 조정할 때 두 곳이 조용히 어긋난다.
+#
+# 참고: 국내 표준 명함은 90x50mm이고 300dpi로 환산하면 1063x591이다. 현재
+# 레이아웃(1050x600)은 그보다 조금 다르므로, 인쇄 입고를 전제한다면 규격을
+# 맞추는 편이 안전하다 — 담당자와 확인이 필요한 항목.
+def _card_size() -> tuple:
+    from app.services.business_card import CardLayout
+
+    layout = CardLayout()
+    return (layout.width, layout.height)
+
+
 KIT_SIZE = {
-    "BUSINESS_CARD": (1063, 591),
+    "BUSINESS_CARD": _card_size(),
     "PRODUCT_THUMBNAIL": (1000, 1000),
 }
 
