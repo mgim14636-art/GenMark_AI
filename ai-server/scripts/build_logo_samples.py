@@ -69,12 +69,12 @@ def main() -> int:
         print("이미 목표치를 채웠습니다. 더 필요하면 인자를 늘리세요.")
         return 0
 
-    from app.services import flux_service, logo_composer
+    from app.services import logo_gen_service, logo_composer
 
-    if not flux_service.OPENROUTER_API_KEY:
+    if not logo_gen_service.OPENROUTER_API_KEY:
         print("OPENROUTER_API_KEY가 없습니다. ai-server/.env를 확인하세요.")
         return 1
-    print(f"URL: {flux_service.OPENROUTER_API_URL} ({flux_service.OPENROUTER_MODEL})\n", flush=True)
+    print(f"URL: {logo_gen_service.OPENROUTER_API_URL} ({logo_gen_service.OPENROUTER_MODEL})\n", flush=True)
 
     rng = random.Random(20260810)
     per_style = max(1, target // len(STYLES))
@@ -116,7 +116,7 @@ def main() -> int:
             want = min(per_call, per_style - have[style])
 
             try:
-                symbols = flux_service.generate_logo_from_survey(survey, num_variants=want)
+                symbols = logo_gen_service.generate_logo_from_survey(survey, num_variants=want)
             except KeyboardInterrupt:
                 print("\n중단됨. 지금까지 만든 표본은 유지됩니다.", flush=True)
                 return 0

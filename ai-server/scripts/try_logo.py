@@ -85,7 +85,7 @@ def main() -> int:
     n, dry, v2, overrides = parse_args(sys.argv[1:])
     survey = dict(SURVEY, **overrides)
 
-    from app.services import flux_service, logo_composer
+    from app.services import logo_gen_service, logo_composer
     from app.services.prompt_service import (
         MOTIF_CATEGORY_MAP,
         TONE_MAP,
@@ -142,13 +142,15 @@ def main() -> int:
         print("--dry 모드: API를 호출하지 않고 종료합니다.", flush=True)
         return 0
 
-    key = flux_service.OPENROUTER_API_KEY or ""
+    key = logo_gen_service.OPENROUTER_API_KEY or ""
     print("=" * 60, flush=True)
-    print(f"URL   : {flux_service.OPENROUTER_API_URL}", flush=True)
-    print(f"MODEL : {flux_service.OPENROUTER_MODEL}", flush=True)
+    print(f"URL   : {logo_gen_service.OPENROUTER_API_URL}", flush=True)
+    print(f"MODEL : {logo_gen_service.OPENROUTER_MODEL}", flush=True)
     print(f"KEY   : {key[:8]}... ({len(key)}자)" if key else "KEY   : ❌ 없음", flush=True)
     print(f"시안수 : {n}", flush=True)
-    print(f"타임아웃: {flux_service.REQUEST_TIMEOUT}초 x (재시도 {flux_service.MAX_RETRIES}회)", flush=True)
+    print(f"벡터   : {'SVG 출력' if logo_gen_service.is_vector() else 'PNG 출력'}"
+          f" / 시드 {'지원' if logo_gen_service.supports_seed() else '미지원'}", flush=True)
+    print(f"타임아웃: {logo_gen_service.REQUEST_TIMEOUT}초 x (재시도 {logo_gen_service.MAX_RETRIES}회)", flush=True)
     print("=" * 60, flush=True)
 
     if not key:
@@ -168,14 +170,20 @@ def main() -> int:
             prompts = [build_prompt(survey, variant_index=i) for i in range(n)]
             seeds = [_random.randint(0, 2_147_483_647) for _ in range(n)]
             with ThreadPoolExecutor(max_workers=n) as ex:
-                symbols = list(ex.map(flux_service._call_flux_pro, prompts, seeds))
+                # _call_image_api는 (PIL 이미지, SVG 문자열|None)을 돌려준다
+                results = list(ex.map(logo_gen_service._call_image_api, prompts, seeds))
             variants = [
-                {"image": img, "seed": seeds[i], "variant_index": i}
-                for i, img in enumerate(symbols)
+                {
+                    "image": img,
+                    "svg": svg,
+                    "seed": seeds[i] if logo_gen_service.supports_seed() else None,
+                    "variant_index": i,
+                }
+                for i, (img, svg) in enumerate(results)
             ]
         else:
-            variants = flux_service.generate_logo_variants(survey, num_variants=n)
-            symbols = [v["image"] for v in variants]
+            variants = logo_gen_service.generate_logo_variants(survey, num_variants=n)
+        symbols = [v["image"] for v in variants]
     except KeyboardInterrupt:
         print(f"\n사용자가 중단했습니다 ({time.time() - started:.0f}초 경과).", flush=True)
         return 130
@@ -184,19 +192,35 @@ def main() -> int:
         traceback.print_exc()
         return 1
 
-    print(f"\n✅ 심볼 {len(symbols)}장 수신 ({time.time() - started:.1f}초)", flush=True)
+    elapsed = time.time() - started
+    print(f"\n✅ 심볼 {len(symbols)}장 수신 ({elapsed:.1f}초)", flush=True)
+    print(f"   시안 1장당 평균 {elapsed / max(len(symbols), 1):.1f}초 "
+          f"(병렬 호출이므로 순차 대비 약 {len(symbols)}배 단축)", flush=True)
     for v in variants:
-        print(f"   variantIndex={v['variant_index']}  seed={v['seed']}", flush=True)
+        seed = v["seed"] if v["seed"] is not None else "-(모델 미지원)"
+        print(f"   variantIndex={v['variant_index']}  seed={seed}", flush=True)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     # 톤을 파일명에 넣어 조합별 결과가 서로를 덮어쓰지 않게 한다
     tag = "".join(c for c in str(survey.get("tone", "")) if c.isalnum()) or "default"
     prefix = "logo_v2" if v2 else "logo_try"
-    for i, symbol in enumerate(symbols, 1):
-        logo = logo_composer.compose_final_logo(symbol, survey, variant_index=i - 1)
+    for i, v in enumerate(variants, 1):
+        symbol = v["image"]
+        try:
+            logo = logo_composer.compose_final_logo(symbol, survey, variant_index=i - 1)
+        except Exception as e:
+            # 합성이 실패해도 원본은 남긴다 — 소요 시간 측정이 날아가지 않게 한다
+            print(f"   ⚠️ 폰트 합성 실패, 원본 저장: {e}", flush=True)
+            logo = symbol
         path = OUT_DIR / f"{prefix}_{tag}_{i}.png"
         logo.save(path)
         print(f"   저장: {path}  {logo.size}", flush=True)
+
+        # 벡터 모델이면 SVG 원본도 남긴다 (다운로드·편집용)
+        if v.get("svg"):
+            svg_path = OUT_DIR / f"{prefix}_{tag}_{i}.svg"
+            svg_path.write_text(v["svg"], encoding="utf-8")
+            print(f"   저장: {svg_path}", flush=True)
 
     print(f"\n완료. 폴더 열기: explorer {OUT_DIR}", flush=True)
     return 0
