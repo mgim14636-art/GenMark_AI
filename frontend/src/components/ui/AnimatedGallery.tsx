@@ -5,24 +5,27 @@ type AnimatedGalleryProps = {
 }
 
 const IMAGES_1 = [
-  'https://images.unsplash.com/photo-1529218402470-5dec8fea0761?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1604928141064-207cea6f571f?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1573455494060-c5595004fb6c?w=900&auto=format&fit=crop&q=80',
+  '/hero-gallery/zevora.png',
+  '/hero-gallery/solvane.png',
+  '/hero-gallery/orbit-red.png',
+  '/hero-gallery/novaire.png',
+  '/hero-gallery/interlace.png',
 ]
 
 const IMAGES_2 = [
-  'https://images.unsplash.com/photo-1542052125323-e69ad37a47c2?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1564284369929-026ba231f89b?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1532236204992-f5e85c024202?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1493515322954-4fa727e97985?w=900&auto=format&fit=crop&q=80',
+  '/hero-gallery/velora.png',
+  '/hero-gallery/red-monogram.png',
+  '/hero-gallery/velune.png',
+  '/hero-gallery/aurelia-crest.png',
+  '/hero-gallery/velune-profile.png',
 ]
 
 const IMAGES_3 = [
-  'https://images.unsplash.com/photo-1528361237150-8a9a7df33035?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1493515322954-4fa727e97985?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1608875004752-2fdb6a39ba4c?w=900&auto=format&fit=crop&q=80',
+  '/hero-gallery/leaf-symbol.png',
+  '/hero-gallery/novaire-wordmark.png',
+  '/hero-gallery/aurelia-emblem.png',
+  '/hero-gallery/ar-monogram.png',
+  '/hero-gallery/lk-monogram.png',
 ]
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))

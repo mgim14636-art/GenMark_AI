@@ -215,3 +215,19 @@ const downloadFileWithToken = async (token: string | null, path: string, refresh
 
 export const downloadAuthenticatedFile = (path: string) => downloadFileWithToken(accessToken, path, true)
 export const downloadAuthenticatedFileWithToken = (token: string, path: string) => downloadFileWithToken(token, path)
+
+export const apiBlobRequest = async (imageUrl: string, retry = true): Promise<Blob> => {
+  const headers = new Headers({ Accept: 'image/*' })
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+
+  const response = await fetch(imageUrl, { headers })
+  if (response.status === 401 && retry && await refreshAccessToken()) {
+    return apiBlobRequest(imageUrl, false)
+  }
+
+  if (!response.ok) {
+    throw new AuthError('상표 이미지를 불러오지 못했어요.', 'TRADEMARK_IMAGE_ERROR', response.status)
+  }
+
+  return response.blob()
+}

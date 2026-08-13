@@ -6057,6 +6057,24 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   box-shadow: 0 8px 20px rgb(81 61 130 / .06);
 }
 
+.trademark-match-empty {
+  padding: 24px 20px;
+  text-align: center;
+}
+
+.trademark-match-empty strong {
+  color: #26304b;
+  font-size: 16px;
+  letter-spacing: -.06em;
+}
+
+.trademark-match-empty p {
+  margin: 7px 0 0;
+  color: #737b91;
+  font-size: 13px;
+  letter-spacing: -.06em;
+}
+
 .trademark-match-row {
   display: grid;
   grid-template-columns: 28px 70px minmax(0, 1fr) auto;
@@ -6184,6 +6202,417 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 .logo-result-trademark.analyzed { border-color: #d8c9f5; background: linear-gradient(110deg, #fff, #fcf8ff); }
 .logo-result-trademark.analyzed p b { color: #309a68; font-weight: 700; }
+
+/* Trademark result redesign: one clear comparison, one useful explanation. */
+.trademark-result-screen-redesign {
+  background:
+    radial-gradient(circle at 8% 4%, rgb(233 225 255 / .72), transparent 28%),
+    radial-gradient(circle at 92% 15%, rgb(255 228 244 / .62), transparent 30%),
+    #fbfbfd;
+}
+
+.trademark-result-header-redesign {
+  min-height: 70px;
+  border-bottom-color: rgb(228 224 237 / .72);
+  background: rgb(255 255 255 / .78);
+}
+
+.trademark-result-content-redesign {
+  width: min(calc(100% - 40px), 820px);
+  padding-top: 36px;
+}
+
+.trademark-result-content-redesign > .trademark-result-complete-redesign {
+  display: flex;
+  width: fit-content;
+  margin-inline: auto;
+}
+
+.trademark-result-complete-redesign {
+  border: 1px solid #e7defd;
+  background: #f7f3ff;
+  font-size: 13px;
+}
+
+.trademark-result-content-redesign h1 {
+  max-width: 650px;
+  margin-top: 22px;
+  margin-inline: auto;
+  text-align: center;
+  font-size: clamp(32px, 5.2vw, 50px);
+  line-height: 1.17;
+}
+
+.trademark-result-content-redesign h1 strong {
+  background: linear-gradient(100deg, #7650dc, #d55bb9);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.trademark-result-content-redesign .trademark-result-lead {
+  max-width: 600px;
+  margin-top: 13px;
+  margin-inline: auto;
+  text-align: center;
+  font-size: 16px;
+}
+
+.trademark-compare-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(250px, .7fr);
+  gap: 16px;
+  margin-top: 30px;
+}
+
+.trademark-generated-card,
+.trademark-score-card,
+.trademark-reference-card,
+.trademark-analysis-copy {
+  border: 1px solid #e8e3f2;
+  border-radius: 24px;
+  background: rgb(255 255 255 / .9);
+  box-shadow: 0 14px 34px rgb(73 55 118 / .07);
+}
+
+.trademark-result-screen-redesign .trademark-reference-card {
+  position: static;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  transform: none;
+}
+
+.trademark-result-screen-redesign .trademark-reference-card::after { display: none; }
+
+.trademark-generated-card {
+  min-width: 0;
+  padding: 18px;
+}
+
+.trademark-visual-label,
+.trademark-score-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #7152c7;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.06em;
+}
+
+.trademark-generated-art {
+  display: grid;
+  min-height: 330px;
+  margin-top: 12px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #eee9f8;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #fbf9ff, #fff8fc);
+}
+
+.trademark-generated-art img {
+  display: block;
+  width: min(100%, 380px);
+  height: 330px;
+  object-fit: contain;
+}
+
+.trademark-generated-card > p {
+  margin: 10px 0 0;
+  color: #8a91a4;
+  font-size: 12px;
+  letter-spacing: -.05em;
+}
+
+.trademark-score-card {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 26px 24px;
+  text-align: center;
+  background: linear-gradient(155deg, #fff, #f8f3ff);
+}
+
+.trademark-score-card.caution {
+  border-color: #f1d4e6;
+  background: linear-gradient(155deg, #fff, #fff6fa);
+}
+
+.trademark-score-card > strong {
+  margin-top: 22px;
+  color: #6543c7;
+  font-size: clamp(58px, 8vw, 86px);
+  font-weight: 800;
+  letter-spacing: -.11em;
+  line-height: .9;
+}
+
+.trademark-score-card.caution > strong { color: #c24d8e; }
+
+.trademark-score-card > strong small {
+  margin-left: 5px;
+  color: #8b7da9;
+  font-size: 22px;
+  letter-spacing: -.06em;
+}
+
+.trademark-score-status {
+  width: fit-content;
+  margin-top: 16px;
+  border-radius: 999px;
+  padding: 7px 12px;
+  color: #5d45a8;
+  background: #eee8ff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.06em;
+}
+
+.trademark-score-card.caution .trademark-score-status {
+  color: #a9457a;
+  background: #fde7f2;
+}
+
+.trademark-score-card > p {
+  max-width: 210px;
+  margin: 15px 0 0;
+  color: #737b91;
+  font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: -.06em;
+}
+
+.trademark-score-card-heading { justify-content: center; }
+
+.trademark-analysis-copy {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  margin-top: 16px;
+  border-color: #ded3f5;
+  padding: 20px;
+  background: linear-gradient(110deg, #fff, #fbf8ff);
+}
+
+.trademark-analysis-copy-visual {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #ece7f5;
+  border-radius: 16px;
+  color: #7954d5;
+  background: #f3eeff;
+}
+
+.trademark-analysis-copy-visual img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.trademark-analysis-copy > div:last-child {
+  align-self: center;
+  transform: translateX(-24px);
+}
+
+.trademark-analysis-copy-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.trademark-analysis-copy-heading span {
+  color: #4c3b8c;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -.06em;
+}
+
+.trademark-analysis-copy-heading small {
+  color: #8b83a1;
+  font-size: 11px;
+  letter-spacing: -.05em;
+}
+
+.trademark-analysis-copy-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 14px;
+  color: #7954d5;
+  background: #f3eeff;
+}
+
+.trademark-reference-heading h2 {
+  margin: 0;
+  color: #202945;
+  font-size: 18px;
+  letter-spacing: -.08em;
+}
+
+.trademark-analysis-copy p {
+  margin: 0;
+  color: #39425c;
+  font-size: 13px;
+  line-height: 1.7;
+  letter-spacing: -.06em;
+}
+
+.trademark-analysis-copy .trademark-analysis-copy-lead {
+  margin-top: 8px;
+  color: #202945;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.trademark-analysis-copy .trademark-analysis-copy-detail {
+  margin-top: 6px;
+  color: #737b91;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.trademark-analysis-copy p strong { color: #704bd2; font-weight: 800; }
+
+.trademark-reference-card {
+  margin-top: 16px;
+  padding: 20px;
+}
+
+.trademark-reference-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.trademark-reference-heading > div > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #8d94a6;
+  font-size: 12px;
+  letter-spacing: -.06em;
+}
+
+.trademark-reference-heading > svg { color: #7a58d3; }
+
+.trademark-reference-body {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  margin-top: 16px;
+  border-top: 1px solid #f0ecf6;
+  padding-top: 16px;
+}
+
+.trademark-reference-visual {
+  display: grid;
+  width: 150px;
+  height: 122px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #eee9f6;
+  border-radius: 16px;
+  background: #faf9fc;
+}
+
+.trademark-reference-visual img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.trademark-reference-placeholder {
+  display: grid;
+  place-items: center;
+  gap: 7px;
+  color: #9b92b4;
+  text-align: center;
+}
+
+.trademark-reference-placeholder span {
+  max-width: 108px;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: -.05em;
+}
+
+.trademark-reference-copy strong {
+  display: block;
+  color: #27314b;
+  font-size: 20px;
+  letter-spacing: -.08em;
+}
+
+.trademark-reference-copy > span {
+  display: block;
+  margin-top: 5px;
+  color: #858da1;
+  font-size: 12px;
+  letter-spacing: -.06em;
+}
+
+.trademark-reference-copy p {
+  margin: 12px 0 0;
+  color: #727b91;
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: -.06em;
+}
+
+.trademark-reference-copy p b { color: #714bd0; }
+
+.trademark-result-disclaimer-redesign {
+  margin-top: 17px;
+  color: #777f93;
+  font-size: 11px;
+}
+
+.trademark-result-actions-redesign { margin-top: 22px; }
+.trademark-result-actions-redesign .trademark-result-primary { min-height: 54px; font-size: 16px; }
+
+@media (max-width: 720px) {
+  .trademark-result-content-redesign { width: calc(100% - 28px); padding-top: 25px; }
+  .trademark-result-content-redesign h1 { margin-top: 18px; font-size: clamp(29px, 8vw, 39px); }
+  .trademark-result-content-redesign .trademark-result-lead { margin-top: 10px; font-size: 14px; }
+  .trademark-compare-board { grid-template-columns: minmax(0, 1fr); margin-top: 22px; }
+  .trademark-generated-card { padding: 14px; }
+  .trademark-generated-art { min-height: 270px; }
+  .trademark-generated-art img { height: 270px; }
+  .trademark-score-card { min-height: 220px; padding: 22px 20px; }
+  .trademark-score-card > strong { margin-top: 16px; font-size: 66px; }
+  .trademark-analysis-copy { grid-template-columns: 56px minmax(0, 1fr); gap: 11px; padding: 16px; }
+  .trademark-analysis-copy-visual { width: 56px; height: 56px; border-radius: 12px; }
+  .trademark-analysis-copy > div:last-child { transform: translateX(-8px); }
+  .trademark-analysis-copy-heading { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .trademark-analysis-copy-heading small { font-size: 10px; }
+  .trademark-analysis-copy .trademark-analysis-copy-lead { font-size: 16px; line-height: 1.55; }
+  .trademark-analysis-copy .trademark-analysis-copy-detail { font-size: 11px; }
+  .trademark-reference-card { padding: 16px; }
+  .trademark-reference-body { grid-template-columns: 110px minmax(0, 1fr); gap: 13px; }
+  .trademark-reference-visual { width: 110px; height: 100px; }
+  .trademark-reference-copy strong { font-size: 17px; }
+  .trademark-reference-copy p { margin-top: 9px; font-size: 11px; }
+  .trademark-result-disclaimer-redesign { font-size: 10px; }
+}
 
 @media (max-width: 720px) {
   .trademark-result-header { grid-template-columns: 36px minmax(0, 1fr) 36px; min-height: 70px; padding: 0 16px; }
@@ -8402,5 +8831,352 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
     width: 23px;
     height: 23px;
     flex-basis: 23px;
+  }
+}
+.logo-style-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: scale(1.14);
+  mix-blend-mode: multiply;
+  transition: transform 180ms ease;
+}
+
+.logo-style-option.selected .logo-style-preview img {
+  transform: scale(1.2);
+}
+
+@media (max-width: 720px) {
+  .logo-style-preview img {
+    transform: scale(1.1);
+  }
+
+  .logo-style-option.selected .logo-style-preview img {
+    transform: scale(1.15);
+  }
+}
+.main-home {
+  width: min(calc(100% - 64px), 1100px);
+  padding-bottom: 120px;
+}
+
+.main-home .featured-hero {
+  min-height: 420px;
+  border-radius: 20px;
+}
+
+.main-home .featured-art {
+  object-position: center;
+  object-fit: contain;
+  background: #000;
+  filter: saturate(1.04) brightness(1.03) contrast(1.02);
+}
+
+.main-home .featured-scrim {
+  background: transparent;
+}
+
+.main-home .featured-lockup {
+  top: 34px;
+}
+
+.main-home .featured-lockup .brand-emblem {
+  width: 44px;
+  height: 52px;
+}
+
+.main-home .featured-lockup h1 {
+  margin-top: 8px;
+  font-size: clamp(32px, 4.4vw, 50px);
+}
+
+.main-home .featured-korean {
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.main-home .hero-create-bar {
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  gap: 12px;
+  border-radius: 16px;
+  padding: 11px 14px 11px 18px;
+}
+
+.main-home .hero-create-bar strong {
+  font-size: 14px;
+}
+
+.main-home .hero-create-bar span {
+  font-size: 18px;
+}
+
+.main-home .hero-create-button {
+  min-width: 200px;
+  padding: 10px 15px;
+  font-size: 14px;
+}
+
+.main-home .curation-section {
+  padding-top: 22px;
+}
+
+.main-home .section-heading {
+  margin: 16px 0 11px;
+}
+
+.main-home .section-heading h2 {
+  font-size: 25px;
+}
+
+.main-home .gallery-controls {
+  gap: 8px;
+}
+
+.main-home .gallery-controls button {
+  width: 46px;
+  height: 46px;
+  font-size: 28px;
+}
+
+.main-home .gallery-track {
+  gap: 14px;
+}
+
+.main-home .gallery-card {
+  flex-basis: calc((100% - 42px) / 4);
+  min-width: 0;
+  border-radius: 16px;
+}
+
+.main-home .gallery-visual {
+  aspect-ratio: 1.18 / 1;
+}
+
+.main-home .curation-section:not(.product-gallery-section) .gallery-visual {
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-color: #eee9f6;
+}
+
+.main-home .curation-section:not(.product-gallery-section) .legacy-gallery-copy {
+  display: none;
+}
+
+.main-home .product-gallery-visual {
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-color: #f3eef7;
+}
+
+.main-home .gallery-meta {
+  min-height: 64px;
+  padding: 9px 11px 10px;
+}
+
+.main-home .gallery-meta h3 {
+  font-size: 16px;
+}
+
+.main-home .gallery-meta p {
+  font-size: 11px;
+}
+
+.main-home .product-gallery-section {
+  padding-top: 32px;
+}
+
+@media (max-width: 720px) {
+  .main-home {
+    width: 100%;
+    padding: 0 14px 112px;
+  }
+
+  .main-home .featured-hero {
+    width: 100%;
+    max-width: none;
+    min-height: clamp(300px, 82vw, 360px);
+    border-radius: 16px;
+  }
+
+  .main-home .featured-art {
+    object-position: center;
+    object-fit: contain;
+  }
+
+  .main-home .featured-lockup {
+    top: 24px;
+  }
+
+  .main-home .featured-lockup .brand-emblem {
+    width: 34px;
+    height: 40px;
+    transform: scale(.72);
+    transform-origin: top center;
+  }
+
+  .main-home .featured-lockup h1 {
+    margin-top: 2px;
+    font-size: clamp(25px, 7.8vw, 34px);
+    letter-spacing: .1em;
+  }
+
+  .main-home .featured-subtitle {
+    font-size: 7px;
+  }
+
+  .main-home .featured-rule {
+    margin: 8px 0 6px;
+  }
+
+  .main-home .featured-korean {
+    margin-bottom: 7px;
+    font-size: 11px;
+  }
+
+  .main-home .featured-tag {
+    padding: 4px 8px;
+    font-size: 8px;
+  }
+
+  .main-home .featured-dots {
+    bottom: 101px;
+    gap: 6px;
+  }
+
+  .main-home .featured-dots span {
+    width: 6px;
+    height: 6px;
+  }
+
+  .main-home .hero-create-bar {
+    right: 7px;
+    bottom: 7px;
+    left: 7px;
+    display: block;
+    max-width: calc(100% - 14px);
+    border-radius: 13px;
+    padding: 9px;
+  }
+
+  .main-home .hero-create-bar strong {
+    font-size: 12px;
+  }
+
+  .main-home .hero-create-bar span {
+    font-size: 15px;
+  }
+
+  .main-home .hero-create-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    margin-top: 6px;
+    padding: 8px 12px;
+    border-radius: 9px;
+    font-size: 12px;
+  }
+
+  .main-home .curation-section {
+    padding-top: 16px;
+  }
+
+  .main-home .filter-row {
+    gap: 7px;
+    margin-right: -14px;
+    padding-right: 14px;
+  }
+
+  .main-home .filter-button {
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+
+  .main-home .section-heading {
+    margin: 14px 0 9px;
+  }
+
+  .main-home .section-heading h2 {
+    font-size: 20px;
+  }
+
+  .main-home .gallery-track {
+    gap: 8px;
+    margin-right: -14px;
+    padding-right: 14px;
+  }
+
+  .main-home .gallery-card {
+    flex: 0 0 46vw;
+    min-width: 164px;
+    border-radius: 14px;
+  }
+
+  .main-home .gallery-visual {
+    aspect-ratio: 1.12 / 1;
+  }
+
+  .main-home .curation-section:not(.product-gallery-section) .gallery-visual {
+    background-size: cover;
+  }
+
+  .main-home .product-gallery-visual {
+    background-size: cover;
+  }
+
+  .main-home .gallery-art-copy span {
+    margin-bottom: 2px;
+    font-size: 23px;
+  }
+
+  .main-home .gallery-art-copy strong {
+    font-size: clamp(19px, 6vw, 25px);
+    letter-spacing: .1em;
+  }
+
+  .main-home .gallery-art-copy small {
+    margin-top: 3px;
+    font-size: 6px;
+  }
+
+  .main-home .visual-tag {
+    bottom: 8px;
+    left: 8px;
+    padding: 3px 7px;
+    font-size: 8px;
+  }
+
+  .main-home .gallery-meta {
+    min-height: 58px;
+    padding: 8px 9px 9px;
+  }
+
+  .main-home .gallery-meta h3 {
+    margin-bottom: 2px;
+    font-size: 14px;
+  }
+
+  .main-home .gallery-meta p {
+    font-size: 10px;
+  }
+
+  .main-home .like-count {
+    font-size: 11px;
+  }
+
+  .main-home .like-count svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .main-home .gallery-dots {
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .main-home .product-gallery-section {
+    padding-top: 25px;
   }
 }

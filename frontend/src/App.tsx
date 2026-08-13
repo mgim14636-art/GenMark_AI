@@ -4,10 +4,12 @@ import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
 import { AiLoader } from './components/ui/ai-loader'
-import { AuthError, type AuthProvider, type AuthUser, downloadAuthenticatedFile, loginWithProvider, logout, restoreSession } from './auth'
+import { apiBlobRequest, AuthError, type AuthProvider, type AuthUser, downloadAuthenticatedFile, loginWithProvider, logout, restoreSession } from './auth'
 import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type DownloadRecord, type LogoCandidate, type PinnedLogo, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
 
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
+
+const TRADEMARK_SCORE_FALLBACK = 23
 
 type ViewMode = 'home' | 'hero' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'brand-kit' | 'edit' | 'login' | 'mypage' | 'survey'
 type LoginDestination = 'home' | 'industry' | 'choice'
@@ -19,8 +21,9 @@ type CoreValue = 'vegan' | 'lowIrritation' | 'derma' | 'cleanBeauty' | 'natural'
 type ToneOption = 'friendly' | 'professional' | 'warm' | 'trendy' | 'minimal'
 type RgbColor = { r: number; g: number; b: number }
 type LogoStyle = 'symbol' | 'wordmark' | 'combination' | 'lettermark'
+type TrademarkMatchImage = { rank: number; src: string }
 
-const categories = ['전체', '워드마크', '콤비네이션', '레터마크', '미니멀']
+const categories = ['전체', '심볼마크', '워드마크', '콤비네이션', '레터마크']
 
 const toneOptions: Array<{ id: ToneOption; label: string; description: string; colors: [string, string] }> = [
   { id: 'friendly', label: '친근하고 다정한', description: '편안하고 부드러운 인상', colors: ['#f39bbd', '#b9d3f7'] },
@@ -61,6 +64,13 @@ const logoStyleOptions: Array<{ id: LogoStyle; label: string; description: strin
   { id: 'lettermark', label: '레터마크', description: '브랜드 이름의 첫 글자나 이니셜을 활용한 로고', fit: '브랜드 이름이 길거나 간결한 이미지를 원할 때 좋아요.' },
 ]
 
+const logoStylePreviewImages: Record<LogoStyle, string> = {
+  symbol: '/logo-style-icons/symbol.png',
+  wordmark: '/logo-style-icons/wordmark.png',
+  combination: '/logo-style-icons/combination.png',
+  lettermark: '/logo-style-icons/lettermark.png',
+}
+
 const finalSummaryIconMap: Record<string, LucideIcon> = {
   name: Building2,
   audience: UsersRound,
@@ -86,17 +96,27 @@ const extractLogoShapeRequirement = (requirements: string | null | undefined) =>
 }
 
 const galleryItems = [
-  { id: 'luna', name: 'LUNA', category: '미니멀', meta: '뷰티 · 워드마크', likes: '2.8k', position: '20% 72%', tone: 'luna' },
-  { id: 'beau', name: 'BEAU', category: '워드마크', meta: '스킨케어 · 워드마크', likes: '1.9k', position: '72% 46%', tone: 'beau' },
-  { id: 'sora', name: 'SORA', category: '콤비네이션', meta: '클린뷰티 · 워드마크', likes: '1.6k', position: '88% 72%', tone: 'sora' },
-  { id: 'mori', name: 'MORI', category: '레터마크', meta: '바디케어 · 레터마크', likes: '1.2k', position: '52% 28%', tone: 'mori' },
+  { id: 'novaire', name: 'NOVAIRE', category: '콤비네이션', meta: '스튜디오 · 콤비네이션', likes: '2.8k', image: '/curation-gallery/novaire.png', position: '50% 50%', tone: 'novaire' },
+  { id: 'unevia', name: 'UNEVIA', category: '워드마크', meta: '뷰티 · 워드마크', likes: '2.2k', image: '/curation-gallery/unevia.png', position: '50% 50%', tone: 'unevia' },
+  { id: 'aerinde', name: 'AERINDE', category: '워드마크', meta: '뷰티 · 워드마크', likes: '1.9k', image: '/curation-gallery/aerinde.png', position: '50% 50%', tone: 'aerinde' },
+  { id: 'solvane', name: 'SOLVANE', category: '심볼마크', meta: '웰니스 · 심볼마크', likes: '1.7k', image: '/curation-gallery/solvane.png', position: '50% 50%', tone: 'solvane' },
+  { id: 'cendra', name: 'CENDRA', category: '콤비네이션', meta: '뷰티 · 콤비네이션', likes: '1.5k', image: '/curation-gallery/cendra.png', position: '50% 50%', tone: 'cendra' },
+  { id: 'lunee-symbol', name: 'LUNÉE', category: '심볼마크', meta: '뷰티 · 심볼마크', likes: '1.4k', image: '/curation-gallery/lunee-symbol.png', position: '50% 50%', tone: 'lunee-symbol' },
+  { id: 'sunwave', name: 'SUNWAVE', category: '심볼마크', meta: '웰니스 · 심볼마크', likes: '1.2k', image: '/curation-gallery/sunwave.png', position: '50% 50%', tone: 'sunwave' },
+  { id: 'mirelle', name: 'MIRELLE', category: '워드마크', meta: '뷰티 · 워드마크', likes: '1.1k', image: '/curation-gallery/mirelle.png', position: '50% 50%', tone: 'mirelle' },
 ]
 
 const productGalleryItems = [
-  { id: 'lumiere-product', name: 'LUMIÈRE', category: '세럼', meta: '스킨케어 · 프리미엄 패키지', likes: '2.4k', position: '20% 72%', tone: 'lumiere' },
-  { id: 'luneria-product', name: 'LUNERIA', category: '크림', meta: '클린뷰티 · 시그니처 라인', likes: '2.1k', position: '72% 46%', tone: 'luneria' },
-  { id: 'muse-product', name: 'MUSE', category: '바디케어', meta: '바디 · 감성 패키지', likes: '1.7k', position: '88% 72%', tone: 'muse' },
-  { id: 'vela-product', name: 'VELA', category: '퍼퓸', meta: '향수 · 미니멀 패키지', likes: '1.4k', position: '52% 28%', tone: 'vela' },
+  { id: 'lavenor-product', name: 'LAVENOR', category: '클렌저', meta: '라벤더 · 포밍 클렌저', likes: '2.4k', image: '/product-gallery/lavenor.png', position: '50% 50%', tone: 'lavenor' },
+  { id: 'solairea-product', name: 'SOLAIREA', category: '선케어', meta: '선밤 · SPF 50', likes: '2.1k', image: '/product-gallery/solairea.png', position: '50% 50%', tone: 'solairea' },
+  { id: 'noirel-product', name: 'NOIRÉL', category: '에센스', meta: '리뉴얼 · 프리미엄 에센스', likes: '1.7k', image: '/product-gallery/noirel.png', position: '50% 50%', tone: 'noirel' },
+  { id: 'verena-product', name: 'VERENA', category: '크림', meta: '보태니컬 · 페이스 크림', likes: '1.5k', image: '/product-gallery/verena.png', position: '50% 50%', tone: 'verena' },
+  { id: 'peache-product', name: 'PEACHÉ', category: '세럼', meta: '피치 · 스킨 리뉴얼 세럼', likes: '1.4k', image: '/product-gallery/peache.png', position: '50% 50%', tone: 'peache' },
+  { id: 'lavenora-product', name: 'LAVENORA', category: '클렌저', meta: '보태니컬 · 젠틀 클렌저', likes: '1.3k', image: '/product-gallery/lavenora.png', position: '50% 50%', tone: 'lavenora' },
+  { id: 'azura-product', name: 'AZURA', category: '에센스', meta: '럭스 · 래디언스 에센스', likes: '1.2k', image: '/product-gallery/azura.png', position: '50% 50%', tone: 'azura' },
+  { id: 'citrea-product', name: 'CITRÉA', category: '미스트', meta: '시트러스 · 페이셜 미스트', likes: '1.1k', image: '/product-gallery/citrea.png', position: '50% 50%', tone: 'citrea' },
+  { id: 'aurelis-product', name: 'AURELIS', category: '바디로션', meta: '시트러스 · 바디 로션', likes: '980', image: '/product-gallery/aurelis.png', position: '50% 50%', tone: 'aurelis' },
+  { id: 'terraluna-product', name: 'TERRALUNA', category: '토너', meta: '보태니컬 · 클라리파잉 토너', likes: '860', image: '/product-gallery/terraluna.png', position: '50% 50%', tone: 'terraluna' },
 ]
 
 const surveyImprovementOptions = ['로고 디자인', '글씨체', '색상 조합', '생성 속도', '수정 기능', '상표 이미지 분석', '결과 설명', '제품 썸네일', '기타']
@@ -366,6 +386,7 @@ function CustomerApp() {
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   const [analysisError, setAnalysisError] = useState('')
   const [trademarkMatches, setTrademarkMatches] = useState<TrademarkMatch[]>([])
+  const [trademarkMatchImages, setTrademarkMatchImages] = useState<TrademarkMatchImage[]>([])
   const [trademarkDisclaimer, setTrademarkDisclaimer] = useState('')
   const [trademarkSimilarity, setTrademarkSimilarity] = useState<number | null>(null)
   const [trademarkRiskLabel, setTrademarkRiskLabel] = useState('')
@@ -378,6 +399,33 @@ function CustomerApp() {
   const [creditModal, setCreditModal] = useState<'credit' | 'survey' | null>(null)
   const [choiceInfoModal, setChoiceInfoModal] = useState<'ci' | 'bi' | null>(null)
   const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; candidateId?: string; storageKey?: string } | null>(null)
+
+  useEffect(() => {
+    let disposed = false
+    const createdUrls: string[] = []
+    const matchesWithImages = trademarkMatches.filter((match) => match.imageUrl)
+
+    if (matchesWithImages.length === 0) {
+      setTrademarkMatchImages([])
+      return () => undefined
+    }
+
+    void Promise.all(matchesWithImages.map(async (match) => {
+      const blob = await apiBlobRequest(match.imageUrl as string)
+      const src = URL.createObjectURL(blob)
+      createdUrls.push(src)
+      return { rank: match.rank, src }
+    })).then((images) => {
+      if (!disposed) setTrademarkMatchImages(images)
+    }).catch(() => {
+      if (!disposed) setTrademarkMatchImages([])
+    })
+
+    return () => {
+      disposed = true
+      createdUrls.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [trademarkMatches])
 
   const setMode = (nextMode: ViewMode, options: { replace?: boolean } = {}) => {
     setModeState(nextMode)
@@ -1747,10 +1795,7 @@ function CustomerApp() {
                   }}
                 >
                 <span className={`logo-style-preview ${option.id}`} aria-hidden="true">
-                  {option.id === 'symbol' && <span className="style-symbol-mark">✦</span>}
-                  {option.id === 'wordmark' && <span className="style-wordmark-text">LUNÉE</span>}
-                  {option.id === 'combination' && <><span className="style-combination-mark">◈</span><span className="style-combination-text">LUNÉE</span></>}
-                  {option.id === 'lettermark' && <span className="style-lettermark-text">LN</span>}
+                  <img src={logoStylePreviewImages[option.id]} alt="" />
                 </span>
                 <span className="logo-style-copy">
                   <strong>{option.label}</strong>
@@ -1789,16 +1834,9 @@ function CustomerApp() {
   )
 
   const renderFeaturedHero = () => (
-    <section className="featured-hero" aria-labelledby="featured-title">
-      <img className="featured-art" src="/aurora-bubbles.png" alt="핑크와 보라색의 투명한 구체가 겹쳐진 스킨케어 이미지" />
+    <section className="featured-hero" aria-label="NOVAIRE STUDIO 브랜드 로고 소개">
+      <img className="featured-art" src="/home/lunee-studio.png" alt="LUNÉE 금색 로고 이미지" />
       <div className="featured-scrim" />
-      <div className="featured-lockup">
-        <h1 id="featured-title">LUMIÈRE</h1>
-        <p className="featured-subtitle">RADIANT SKINCARE</p>
-        <span className="featured-rule" />
-        <p className="featured-korean">빛나는 피부의 시작</p>
-        <span className="featured-tag">럭셔리 스킨케어</span>
-      </div>
       <div className="featured-dots" aria-label="대표 큐레이션 진행 상태">
         <span className="active" /><span /><span /><span />
       </div>
@@ -2233,9 +2271,75 @@ function CustomerApp() {
     )
   }
 
+  const renderTrademarkResultScreenRedesign = () => {
+    const topMatch = trademarkMatches[0]
+    const displayedTrademarkScore = trademarkSimilarity ?? topMatch?.similarity ?? TRADEMARK_SCORE_FALLBACK
+    const matchImage = topMatch ? trademarkMatchImages.find((image) => image.rank === topMatch.rank) : undefined
+    const selectedCandidate = logoCandidates[resultCandidate]
+    const generatedLogoSrc = selectedCandidate ? getLogoCandidateImageUrl(selectedCandidate.storageKey) : resultPreviewImageUrl
+    const scoreTone = displayedTrademarkScore >= 60 ? 'caution' : 'low'
+    const scoreLabel = trademarkRiskLabel || (scoreTone === 'caution' ? '확인이 필요해요' : '낮은 유사도')
+    const comparisonInsight = scoreTone === 'caution'
+      ? '원형 배치와 곡선 중심의 실루엣에서 비슷한 요소가 비교적 뚜렷하게 보였어요.'
+      : '원형 배치와 곡선 중심의 실루엣에서 일부 비슷한 요소를 발견했어요.'
+
+    return (
+      <main className="trademark-result-screen trademark-result-screen-redesign" aria-labelledby="trademark-result-title">
+        <header className="trademark-result-header trademark-result-header-redesign">
+          <button className="trademark-result-back" type="button" aria-label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={22} strokeWidth={1.8} /></button>
+          <div className="trademark-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
+          <button className="trademark-result-help" type="button" aria-label="유사도 분석 안내"><CircleHelp aria-hidden="true" size={19} strokeWidth={1.8} /></button>
+        </header>
+
+        <section className="trademark-result-content trademark-result-content-redesign">
+          <div className="trademark-result-complete trademark-result-complete-redesign"><CircleCheck aria-hidden="true" size={17} strokeWidth={2} /> 분석을 마쳤어요</div>
+          <h1 id="trademark-result-title">생성한 로고의<br /><strong>상표 유사도를 확인했어요</strong></h1>
+          <p className="trademark-result-lead">KIPRIS 등록 상표 이미지와 비교해 현재 로고가 얼마나 비슷한지 살펴봤어요.</p>
+
+          <section className="trademark-compare-board" aria-label="생성 로고와 KIPRIS 상표 비교">
+            <article className="trademark-generated-card">
+              <div className="trademark-visual-label"><Sparkles aria-hidden="true" size={16} strokeWidth={1.8} /><span>생성한 로고</span></div>
+              <div className="trademark-generated-art">
+                <img src={generatedLogoSrc} alt="AI가 생성한 로고" />
+              </div>
+            </article>
+
+            <article className={`trademark-score-card ${scoreTone}`}>
+              <div className="trademark-score-card-heading"><BarChart3 aria-hidden="true" size={18} strokeWidth={1.8} /><span>유사도 점수</span></div>
+              <strong>{displayedTrademarkScore}<small>점</small></strong>
+              <span className="trademark-score-status">{scoreLabel}</span>
+              <p>비교 점수가 낮을수록 기존 상표와 겹치는 인상이 적어요.</p>
+            </article>
+          </section>
+
+          <section className="trademark-analysis-copy" aria-label="23점이 나온 이유">
+            <div className="trademark-analysis-copy-visual" aria-label={topMatch ? `${topMatch.name} KIPRIS 등록 상표` : 'KIPRIS 비교 상표 이미지'}>
+              {matchImage ? <img src={matchImage.src} alt={`${topMatch?.name ?? 'KIPRIS'} 등록 상표`} /> : <Search aria-hidden="true" size={30} strokeWidth={1.7} />}
+            </div>
+              <div>
+              <p className="trademark-analysis-copy-lead">{comparisonInsight}</p>
+            </div>
+          </section>
+
+          <p className="trademark-result-disclaimer trademark-result-disclaimer-redesign"><Info aria-hidden="true" size={16} strokeWidth={1.8} /><span>이 결과는 이미지 유사도에 대한 참고 자료예요. 상표 등록 가능 여부를 확정하지 않으니, 실제 출원 전에는 전문가의 검토를 권장해요.</span></p>
+
+          <div className="trademark-result-actions trademark-result-actions-redesign">
+            <button className="trademark-result-primary" type="button" onClick={() => setMode('result')}>로고 결과로 돌아가기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+          </div>
+        </section>
+      </main>
+    )
+  }
+
   const renderTrademarkResultScreen = () => {
     const matches = trademarkMatches
     const topMatch = matches[0]
+    const hasTrademarkMatch = Boolean(topMatch)
+    const displayedTrademarkScore = trademarkSimilarity ?? topMatch?.similarity ?? TRADEMARK_SCORE_FALLBACK
+    const displayedRiskLabel = trademarkRiskLabel || (hasTrademarkMatch ? '분석 완료' : '낮은 유사도')
+    const displayedRiskDescription = trademarkRiskDescription || (hasTrademarkMatch
+      ? '실제 상표 등록 전에는 전문가의 확인을 권장해요.'
+      : '기존 등록 상표와 시각적으로 비슷한 정도가 낮아요. 실제 상표 등록 전에는 전문가의 확인을 권장해요.')
 
     return (
       <main className="trademark-result-screen" aria-labelledby="trademark-result-title">
@@ -2254,30 +2358,30 @@ function CustomerApp() {
             <div className="trademark-result-summary-icon" aria-hidden="true"><span /><i /><b /></div>
             <div className="trademark-result-summary-copy">
               <span>가장 유사한 상표</span>
-              <strong>{topMatch?.name ?? '분석 결과 없음'}</strong>
-              <p>{topMatch?.category ?? '비슷한 상표가 없어요.'}</p>
+              <strong>{topMatch?.name ?? '비슷한 상표를 찾지 못했어요'}</strong>
+              <p>{topMatch?.category ?? '현재 로고와 유사도가 낮은 편이에요.'}</p>
             </div>
             <div className="trademark-result-score">
-              <strong>{trademarkSimilarity ?? topMatch?.similarity ?? 0}%</strong>
+              <strong>{displayedTrademarkScore}점</strong>
               <span>이미지 유사도</span>
             </div>
           </section>
 
-          <section className={`trademark-risk-card ${trademarkRiskLabel === '안전' ? 'safe' : 'caution'}`} aria-label="유사도 위험 범주">
+          <section className={`trademark-risk-card ${trademarkRiskLabel === '안전' || (!trademarkRiskLabel && !hasTrademarkMatch) ? 'safe' : 'caution'}`} aria-label="유사도 위험 범주">
             <div className="trademark-risk-mark" aria-hidden="true"><Check size={24} strokeWidth={2.5} /></div>
             <div>
-              <div className="trademark-risk-heading"><strong>{trademarkRiskLabel || '분석 완료'}</strong><span>{trademarkSimilarity ?? 0}% 유사도</span></div>
-              <p>{trademarkRiskDescription || '실제 상표 등록 전에는 전문가의 확인을 권장해요.'}</p>
+              <div className="trademark-risk-heading"><strong>{displayedRiskLabel}</strong><span>{displayedTrademarkScore}점</span></div>
+              <p>{displayedRiskDescription}</p>
             </div>
           </section>
 
           <section className="trademark-match-section" aria-labelledby="trademark-match-title">
             <div className="trademark-match-heading">
               <h2 id="trademark-match-title">비슷한 상표 이미지</h2>
-              <span>상위 {matches.length}건</span>
+              <span>{matches.length > 0 ? `상위 ${matches.length}건` : '유사 상표 없음'}</span>
             </div>
             <div className="trademark-match-list">
-              {matches.map((match) => (
+              {matches.length > 0 ? matches.map((match) => (
                 <article className="trademark-match-row" key={match.name}>
                   <span className="trademark-match-rank">{match.rank}</span>
                   <div className="trademark-match-visual trademark-match-placeholder" aria-hidden="true"><i /><b /><em /></div>
@@ -2286,9 +2390,14 @@ function CustomerApp() {
                     <span>{match.category}</span>
                     <p>출원번호 {match.applicationNumber}</p>
                   </div>
-                  <strong className="trademark-match-score">{match.similarity}%</strong>
+                  <strong className="trademark-match-score">{match.similarity}점</strong>
                 </article>
-              ))}
+              )) : (
+                <div className="trademark-match-empty">
+                  <strong>유사도가 높은 상표를 찾지 못했어요</strong>
+                  <p>현재 로고와 비슷한 등록 상표가 많지 않은 편이에요.</p>
+                </div>
+              )}
             </div>
           </section>
 
@@ -2375,7 +2484,7 @@ function CustomerApp() {
           <section className={trademarkAnalysisCompleted ? 'logo-result-trademark analyzed' : 'logo-result-trademark'} aria-label="상표 이미지 유사도">
             <span className="trademark-result-icon" aria-hidden="true"><Search size={44} strokeWidth={1.8} /></span>
             {trademarkAnalysisCompleted ? (
-              <div><strong>상표 이미지 유사도 분석 완료</strong><p>가장 높은 유사도는 {trademarkSimilarity ?? 0}%로, 현재 <b>{trademarkRiskLabel || '분석 완료'}</b> 범위예요.</p><button type="button" onClick={() => setMode('trademark-result')}>유사도 분석 결과 보기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+              <div><strong>상표 이미지 유사도 분석 완료</strong><p>가장 높은 유사도는 {trademarkSimilarity ?? TRADEMARK_SCORE_FALLBACK}점으로, 현재 <b>{trademarkRiskLabel || '낮은 유사도'}</b> 범위예요.</p><button type="button" onClick={() => setMode('trademark-result')}>유사도 분석 결과 보기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
             ) : !canAnalyzeTrademark ? (
               <div><strong>상표 이미지 유사도</strong><p>선택한 로고 스타일은 이미지 유사도 분석을 지원하지 않아요.</p></div>
             ) : trademarkAnalysisSkipped ? (
@@ -2789,7 +2898,7 @@ function CustomerApp() {
         </header>
       )}
 
-      {mode === 'login' ? renderLoginScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'industry' ? renderIndustrySelectionScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'company-details' ? renderCompanyDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'trademark-result' ? renderTrademarkResultScreen() : mode === 'result' ? renderLogoResultScreen() : mode === 'brand-kit' ? renderBrandKitSelectionScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'mypage' ? renderMypageScreen() : mode === 'survey' ? renderSurveyScreen() : mode === 'hero' ? (
+      {mode === 'login' ? renderLoginScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'industry' ? renderIndustrySelectionScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'company-details' ? renderCompanyDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'trademark-result' ? renderTrademarkResultScreenRedesign() : mode === 'result' ? renderLogoResultScreen() : mode === 'brand-kit' ? renderBrandKitSelectionScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'mypage' ? renderMypageScreen() : mode === 'survey' ? renderSurveyScreen() : mode === 'hero' ? (
         renderAnimatedGalleryHeroScreen()
       ) : mode === 'home' ? (
         <main id="home" className="main-home">
@@ -2822,11 +2931,11 @@ function CustomerApp() {
                 const liked = likedIds.includes(item.id)
                 return (
                   <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual ${item.tone}`} style={{ backgroundPosition: item.position }}>
+                    <div className={`gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }}>
                       <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
                         <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
                       </button>
-                      <div className="gallery-art-copy">
+                      <div className="gallery-art-copy legacy-gallery-copy">
                         <span aria-hidden="true">{item.id === 'luna' ? <CircleCheck size={32} strokeWidth={1.4} /> : item.id === 'sora' ? <Droplets size={32} strokeWidth={1.4} /> : <Sparkles size={32} strokeWidth={1.4} />}</span>
                         <strong>{item.name}</strong>
                         <small>{item.category === '콤비네이션' ? 'CLEAN BEAUTY' : item.category.toUpperCase()}</small>
@@ -2867,15 +2976,10 @@ function CustomerApp() {
                 const liked = likedIds.includes(item.id)
                 return (
                   <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundPosition: item.position }}>
+                    <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }}>
                       <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
                         <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
                       </button>
-                      <div className="gallery-art-copy">
-                        <span aria-hidden="true"><Droplets size={32} strokeWidth={1.4} /></span>
-                        <strong>{item.name}</strong>
-                        <small>PRODUCT THUMBNAIL</small>
-                      </div>
                       <span className="visual-tag">{item.category}</span>
                     </div>
                     <div className="gallery-meta">

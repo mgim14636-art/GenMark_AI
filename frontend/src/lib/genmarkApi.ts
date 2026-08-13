@@ -153,6 +153,7 @@ export type TrademarkMatch = {
   category: string
   similarity: number
   imagePath: string | null
+  imageUrl?: string
 }
 
 export const getLogoCandidateImageUrl = (storageKey: string) => {
