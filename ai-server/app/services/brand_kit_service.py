@@ -22,11 +22,14 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 from app.core.exceptions import BrandKitInvalidImage
 from app.schemas.brand_kit import (
+    CATEGORY_LABEL,
+    HEADLINE_MAX_CHARS,
     KIT_SIZE,
+    TEXT_AREA_LIMIT,
     BrandKitImage,
     BrandKitRequest,
     BrandKitResponse,
@@ -223,16 +226,36 @@ def _compose_business_card(
 
 
 # --------------------------------------------------------------------------- 제품 썸네일
-def _compose_product_thumbnail(
-    logo: Image.Image, product_name: Optional[str], survey: dict
-) -> Image.Image:
-    W, H = KIT_SIZE["PRODUCT_THUMBNAIL"]
-    accent = _pick_accent(survey)
+def _draw_background(canvas: Image.Image, style: str, accent: tuple) -> tuple:
+    """배경을 그리고 그 위에 올릴 글자색 판단용 바탕색을 돌려준다.
 
-    # 강조색을 위쪽에 옅게 깔고 아래로 갈수록 밝아지는 세로 그라데이션.
-    # AI 연출 배경이 붙기 전까지의 임시 바탕이다.
-    canvas = Image.new("RGB", (W, H))
+    제품 누끼컷 업로드가 아직 없으므로, 로고만으로 만들 수 있는 범위로 한정한다.
+    제형 텍스처·원료 그래픽 연출은 제품 사진이 선행되어야 한다.
+    """
+    W, H = canvas.size
     d = ImageDraw.Draw(canvas)
+
+    if style == "SOLID_LIGHT":
+        # 아이보리 단색. 판매 채널에서 가장 무난하고 제품이 도드라진다.
+        base = (250, 249, 246)
+        d.rectangle([0, 0, W, H], fill=base)
+        return base
+
+    if style == "SOFT_SHADOW":
+        # 밝은 바탕 + 하단에 은은한 그림자. 제품이 놓인 느낌을 준다.
+        base = (252, 252, 253)
+        d.rectangle([0, 0, W, H], fill=base)
+        shadow = Image.new("L", (W, H), 0)
+        sd = ImageDraw.Draw(shadow)
+        sd.ellipse([int(W * 0.18), int(H * 0.60), int(W * 0.82), int(H * 0.78)], fill=70)
+        canvas.paste(
+            Image.new("RGB", (W, H), tuple(int(c * 0.55) for c in accent)),
+            (0, 0),
+            shadow.filter(ImageFilter.GaussianBlur(48)),
+        )
+        return base
+
+    # TONE_GRADIENT (기본) — 강조색을 위에 옅게 깔고 아래로 밝아진다
     top = tuple(int(c * 0.34 + 255 * 0.66) for c in accent)
     bottom = (252, 252, 253)
     for y in range(H):
@@ -241,16 +264,72 @@ def _compose_product_thumbnail(
             [(0, y), (W, y)],
             fill=tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3)),
         )
+    return bottom
 
-    logo_img = _fit(_trim(_logo_rgba(logo)), int(W * 0.56), int(H * 0.42))
-    canvas.paste(logo_img, ((W - logo_img.width) // 2, int(H * 0.30) - logo_img.height // 2), logo_img)
+
+def _text_area_ratio(before: Image.Image, after: Image.Image) -> float:
+    """글자를 그리기 전후를 비교해 텍스트가 덮은 면적 비율을 구한다.
+
+    폰트 메트릭으로 사각형 넓이를 재면 글자 사이 여백까지 포함되어 과대평가된다.
+    실제로 픽셀이 바뀐 자리만 세는 편이 채널 심사 기준에 가깝다.
+    """
+    a = np.asarray(before.convert("RGB"), dtype=np.int16)
+    b = np.asarray(after.convert("RGB"), dtype=np.int16)
+    changed = (np.abs(a - b).max(axis=2) > 8)
+    return float(changed.sum()) / float(changed.size)
+
+
+def _compose_product_thumbnail(
+    logo: Image.Image,
+    product_name: Optional[str],
+    survey: dict,
+    category: Optional[str] = None,
+    background_style: str = "TONE_GRADIENT",
+    headline: Optional[str] = None,
+) -> Tuple[Image.Image, float]:
+    """스마트스토어 규격(1000x1000) 제품 썸네일과 텍스트 면적 비율을 돌려준다."""
+    W, H = KIT_SIZE["PRODUCT_THUMBNAIL"]
+    accent = _pick_accent(survey)
+
+    canvas = Image.new("RGB", (W, H))
+    base = _draw_background(canvas, background_style, accent)
+    text_color = _readable_on(base)
+
+    # 카테고리 라벨이 들어가면 그만큼 로고를 아래로 내린다. 겹치면 둘 다 안 읽힌다.
+    logo_cy = 0.36 if category else 0.32
+    logo_img = _fit(_trim(_logo_rgba(logo)), int(W * 0.54), int(H * 0.38))
+    canvas.paste(
+        logo_img,
+        ((W - logo_img.width) // 2, int(H * logo_cy) - logo_img.height // 2),
+        logo_img,
+    )
+
+    # 글자를 그리기 직전 상태를 떠둔다. 이후 면적 비율 계산의 기준이 된다.
+    before = canvas.copy()
+    d = ImageDraw.Draw(canvas)
+
+    if category:
+        label = CATEGORY_LABEL.get(category, "")
+        if label:
+            d.text(
+                (W // 2, int(H * 0.06)), label,
+                font=_resolve_font(30, weight="regular"), fill=accent, anchor="ma",
+            )
 
     name = (product_name or _brand_name(survey) or "").strip()
     if name:
-        f = _resolve_font(46, weight="bold")
-        d.text((W // 2, int(H * 0.70)), name[:28], font=f, fill=_readable_on(bottom), anchor="ma")
+        d.text(
+            (W // 2, int(H * 0.66)), name[:28],
+            font=_resolve_font(46, weight="bold"), fill=text_color, anchor="ma",
+        )
 
-    return canvas
+    if headline:
+        d.text(
+            (W // 2, int(H * 0.79)), headline.strip()[:HEADLINE_MAX_CHARS],
+            font=_resolve_font(34, weight="regular"), fill=text_color, anchor="ma",
+        )
+
+    return canvas, _text_area_ratio(before, canvas)
 
 
 # --------------------------------------------------------------------------- 진입점
@@ -277,8 +356,22 @@ def create_brand_kit(req: BrandKitRequest) -> BrandKitResponse:
                 "이름·직함·연락처를 보내면 명함 뒷면이 완성됩니다."
             )
     else:
-        images = [_compose_product_thumbnail(logo, req.product_name, req.survey)]
-        warnings.append("AI 연출 배경 미적용 — 톤 기반 그라데이션으로 대체했습니다.")
+        thumb, text_ratio = _compose_product_thumbnail(
+            logo, req.product_name, req.survey,
+            category=req.category,
+            background_style=req.background_style,
+            headline=req.headline,
+        )
+        images = [thumb]
+        # 판매 채널 가이드라인 자동 검수. 업로드 후 반려되어 재제작하는 비용을
+        # 생성 단계에서 미리 막는다.
+        if text_ratio > TEXT_AREA_LIMIT:
+            warnings.append(
+                f"텍스트가 이미지의 {text_ratio:.0%}를 차지합니다 "
+                f"(권장 {TEXT_AREA_LIMIT:.0%} 이하). 카피를 줄이면 채널 심사에 안전합니다."
+            )
+        if req.background_style == "TONE_GRADIENT":
+            warnings.append("AI 연출 배경 미적용 — 톤 기반 그라데이션으로 대체했습니다.")
 
     encoded = [_to_base64(img) for img in images]
     return BrandKitResponse(

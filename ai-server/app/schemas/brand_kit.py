@@ -13,6 +13,27 @@ from pydantic import BaseModel, Field
 # 명칭으로 두고, BOTTLE은 같은 산출물의 별칭으로 계속 허용한다(백엔드 무중단 전환용).
 KitType = Literal["BUSINESS_CARD", "PRODUCT_THUMBNAIL", "BOTTLE"]
 
+# 제품 유형 — 썸네일 상단 라벨과 향후 연출 프리셋 선택에 쓴다.
+ProductCategory = Literal[
+    "CREAM", "SERUM", "TONER", "CLEANSER", "MASK", "SUNCARE", "LIP", "ETC",
+]
+CATEGORY_LABEL = {
+    "CREAM": "크림", "SERUM": "세럼·에센스", "TONER": "토너",
+    "CLEANSER": "클렌저", "MASK": "마스크팩", "SUNCARE": "선케어",
+    "LIP": "립", "ETC": "기타",
+}
+
+# 배경 연출. 제품 사진 없이 로고만으로 만들 수 있는 범위로 한정한다.
+# 제형 텍스처·원료 그래픽 연출은 제품 누끼컷 업로드가 선행되어야 해서 제외했다.
+BackgroundStyle = Literal["SOLID_LIGHT", "TONE_GRADIENT", "SOFT_SHADOW"]
+
+# 판매 채널 가이드라인 대응.
+# 텍스트가 차지하는 면적 비율이 이 값을 넘으면 경고한다. 텍스트를 코드로
+# 렌더링하므로 면적을 정확히 셀 수 있다 — 모델이 그린 글자였다면 못 잰다.
+# 수치는 채널 정책에 따라 달라지므로 상수로 빼둔다.
+TEXT_AREA_LIMIT = 0.20
+HEADLINE_MAX_CHARS = 15
+
 CANONICAL_KIT_TYPE = {
     "BUSINESS_CARD": "BUSINESS_CARD",
     "PRODUCT_THUMBNAIL": "PRODUCT_THUMBNAIL",
@@ -70,6 +91,22 @@ class BrandKitRequest(BaseModel):
     # 두고, 없으면 회사명만 넣은 브랜드 카드로 합성한 뒤 preliminary=True로 표시한다.
     card_info: Optional[CardInfo] = Field(None, description="명함에 인쇄할 사용자 정보")
     product_name: Optional[str] = Field(None, max_length=60, description="썸네일 하단 문구(생략 가능)")
+
+    # --- 제품 썸네일 옵션 (전부 선택. 없으면 기존 동작 그대로) ---
+    category: Optional[ProductCategory] = Field(
+        None, description="제품 유형. 썸네일 상단 라벨로 표기한다"
+    )
+    background_style: BackgroundStyle = Field(
+        "TONE_GRADIENT", description="썸네일 배경 연출"
+    )
+    headline: Optional[str] = Field(
+        None,
+        max_length=HEADLINE_MAX_CHARS,
+        description=(
+            "핵심 카피. 판매 채널 가이드라인상 텍스트 비중 제한이 있어 짧게 제한한다. "
+            f"{HEADLINE_MAX_CHARS}자 이내"
+        ),
+    )
 
     @property
     def canonical_kit_type(self) -> str:
