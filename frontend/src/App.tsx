@@ -2571,7 +2571,7 @@ function CustomerApp() {
           <span>GenMark AI</span>
         </div>
         <div className="login-hero-mark">
-          <img className="login-stamp-art" src="/login-hero-bubbles.png" alt="빛나는 거품과 잎사귀를 담은 브랜드 이미지" />
+          <img className="login-stamp-art" src="/login-hero-bubbles-wide.png" alt="빛나는 거품과 잎사귀를 담은 브랜드 이미지" />
         </div>
         <h1 id="login-title">만들던 브랜드를<br /><strong>안전하게 저장하세요</strong></h1>
         <p className="login-description">로그인하면 작성 중인 내용과 생성한 로고,<br className="login-break" /> 상표 이미지 분석 결과를 나중에도 확인할 수 있어요.</p>
