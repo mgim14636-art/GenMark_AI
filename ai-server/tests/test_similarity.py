@@ -487,3 +487,75 @@ def test_note_parser_has_no_line_fallback():
     assert _parse_notes("설명을 드리자면 다음과 같습니다") is None
     # 정상 JSON은 그대로 통과
     assert _parse_notes('["가나다라마", "바사아자차"]') == ["가나다라마", "바사아자차"]
+
+
+# --- note 제공자 전환 -----------------------------------------------------
+# 로고 생성이 OpenRouter로 통합되면서 note도 같은 키로 쓸 수 있게 됐다.
+# 두 경로를 오갈 수 있어야 하므로(무료 등급 429가 서로 독립) 분기를 고정한다.
+
+def test_note_provider_defaults_to_openrouter_when_key_present(monkeypatch):
+    from app.services import note_service
+
+    monkeypatch.delenv("NOTE_PROVIDER", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    assert note_service._provider() == "openrouter"
+    assert note_service._api_key() == "sk-test"
+
+
+def test_note_provider_falls_back_to_gemini_without_openrouter_key(monkeypatch):
+    from app.services import note_service
+
+    monkeypatch.delenv("NOTE_PROVIDER", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gem-test")
+    assert note_service._provider() == "gemini"
+    assert note_service._api_key() == "gem-test"
+
+
+def test_note_provider_respects_explicit_setting(monkeypatch):
+    from app.services import note_service
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    monkeypatch.setenv("GEMINI_API_KEY", "gem-test")
+    monkeypatch.setenv("NOTE_PROVIDER", "gemini")
+    assert note_service._provider() == "gemini"
+
+
+def test_openrouter_request_carries_images_as_data_uri(monkeypatch):
+    """이미지가 OpenAI 호환 형식(image_url + data URI)으로 실려야 한다.
+
+    Gemini의 inline_data 형식을 그대로 보내면 모델이 이미지를 못 본 채
+    그럴듯한 설명을 지어낸다 — 실패가 눈에 띄지 않는 종류라 계약으로 고정한다.
+    """
+    from app.services import note_service
+
+    monkeypatch.setenv("NOTE_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    note_service._quota_blocked_until = 0.0
+    sent = {}
+
+    class _Res:
+        status_code = 200
+        ok = True
+
+        @staticmethod
+        def json():
+            return {"choices": [{"message": {"content": '["원형 윤곽이 닮았어요"]'},
+                                 "finish_reason": "stop"}]}
+
+    def fake_post(url, **kwargs):
+        sent["url"] = url
+        sent["json"] = kwargs.get("json")
+        return _Res()
+
+    monkeypatch.setattr(note_service.requests, "post", fake_post)
+
+    out = note_service._call_openrouter(["QkFTRTY0", "QkFTRTY0Mg=="])
+    assert out == '["원형 윤곽이 닮았어요"]'
+    assert sent["url"] == note_service.OPENROUTER_URL
+
+    content = sent["json"]["messages"][0]["content"]
+    images = [c for c in content if c.get("type") == "image_url"]
+    assert len(images) == 2
+    assert images[0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    assert any(c.get("type") == "text" for c in content)

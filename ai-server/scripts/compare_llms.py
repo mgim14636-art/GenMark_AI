@@ -7,6 +7,7 @@
     cd ai-server
     python scripts/compare_llms.py --list              # 모델 목록·가격만 (무료)
     python scripts/compare_llms.py --list --free       # 무료 모델만
+    python scripts/compare_llms.py --list --free --vision   # 이미지 입력 가능한 무료 모델
     python scripts/compare_llms.py --dry               # 보낼 프롬프트만 출력 (무료)
     python scripts/compare_llms.py                     # 기본 후보로 실제 비교
     python scripts/compare_llms.py --models google/gemini-2.0-flash-001,openai/gpt-4o-mini
@@ -203,11 +204,27 @@ def build_user_message(survey: dict) -> str:
 
 
 # ---------------------------------------------------------------- 모델 목록
-def list_models(free_only: bool = False):
+def _accepts_image(m: dict) -> bool:
+    """이미지를 입력으로 받는 모델인지 판별한다.
+
+    유사 근거 설명 생성은 쿼리 로고 1장 + 검출 상표 3장을 한 번에 넣는
+    멀티모달 작업이라, 텍스트 전용 모델은 후보가 될 수 없다.
+    OpenRouter가 필드명을 몇 가지로 내보내므로 모두 살펴본다.
+    """
+    arch = m.get("architecture") or {}
+    mods = arch.get("input_modalities") or arch.get("modality") or ""
+    if isinstance(mods, list):
+        return "image" in [str(x).lower() for x in mods]
+    return "image" in str(mods).lower()
+
+
+def list_models(free_only: bool = False, vision_only: bool = False):
     res = requests.get(MODELS_API, timeout=20)
     res.raise_for_status()
     rows = []
     for m in res.json().get("data", []):
+        if vision_only and not _accepts_image(m):
+            continue
         pricing = m.get("pricing") or {}
         try:
             pin = float(pricing.get("prompt", 0) or 0)
@@ -227,8 +244,10 @@ def list_models(free_only: bool = False):
     return rows
 
 
-def print_models(free_only: bool = False):
-    rows = list_models(free_only)
+def print_models(free_only: bool = False, vision_only: bool = False):
+    rows = list_models(free_only, vision_only)
+    if vision_only:
+        print("\n※ 이미지 입력을 받는 모델만 표시합니다 (유사 근거 설명 생성용)")
     print(f"\n{'모델':<52}{'1회 예상':>10}{'컨텍스트':>10}")
     print("-" * 74)
     for est, mid, _pin, _pout, ctx in rows[:60]:
@@ -677,6 +696,7 @@ def judge(data):
 # ---------------------------------------------------------------- 메인
 def main(argv):
     models, dry, do_list, free_only = list(DEFAULT_MODELS), False, False, False
+    vision_only = False
     no_shape = real = raw_mode = False
     gen = None
     i = 0
@@ -699,6 +719,8 @@ def main(argv):
             do_list = True
         elif a == "--free":
             free_only = True
+        elif a == "--vision":
+            vision_only = True
         elif a == "--no-shape":
             no_shape = True
         elif a == "--real":
@@ -711,7 +733,7 @@ def main(argv):
         i += 1
 
     if do_list:
-        print_models(free_only)
+        print_models(free_only, vision_only)
         return 0
 
     if real:

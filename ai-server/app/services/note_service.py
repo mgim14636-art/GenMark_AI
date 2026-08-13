@@ -32,7 +32,29 @@ from app.core.logging import logger
 load_dotenv()
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MAX_NOTE_CHARS = 60
+
+# 기본 모델. 이미지 입력을 받는 무료 모델 중 가장 작아 응답이 빠르다.
+# note는 유사도 응답에 1~3초를 더하는 부가 기능이라 크기보다 속도가 중요하다.
+# 후보 확인: python scripts/compare_llms.py --list --free --vision
+DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-nano-12b-v2-vl:free"
+
+
+def _provider() -> str:
+    """어느 API로 설명을 만들지 정한다.
+
+    로고 생성이 OpenRouter로 통합되면서 키를 하나로 줄일 수 있게 됐다.
+    다만 Gemini 경로도 남겨둔다 — 무료 등급 할당량이 서로 독립이라,
+    한쪽이 429일 때 .env 한 줄로 갈아탈 수 있는 편이 시연에 유리하다.
+    """
+    p = os.environ.get("NOTE_PROVIDER", "").strip().lower()
+    if p in ("openrouter", "gemini"):
+        return p
+    # 명시하지 않았으면 있는 키를 쓴다. OpenRouter를 우선한다.
+    if os.environ.get("OPENROUTER_API_KEY", "").strip():
+        return "openrouter"
+    return "gemini"
 
 
 def _api_key() -> str:
@@ -41,10 +63,14 @@ def _api_key() -> str:
     모듈 import 순서나 .env 로드 타이밍에 따라 값이 달라지는 것을 막는다.
     테스트에서 monkeypatch로 갈아끼우기도 쉬워진다.
     """
+    if _provider() == "openrouter":
+        return os.environ.get("OPENROUTER_API_KEY", "").strip()
     return os.environ.get("GEMINI_API_KEY", "").strip()
 
 
 def _model() -> str:
+    if _provider() == "openrouter":
+        return os.environ.get("NOTE_MODEL", DEFAULT_OPENROUTER_MODEL).strip()
     return os.environ.get("GEMINI_MODEL", "gemini-flash-latest").strip()
 
 
@@ -128,10 +154,17 @@ def _sanitize(text: object) -> Optional[str]:
     return note[:MAX_NOTE_CHARS]
 
 
-def _image_part(path: Path) -> dict:
+def _encode(source) -> str:
+    """이미지를 축소·흰배경 합성한 뒤 base64 JPEG 문자열로 만든다.
+
+    투명 배경을 그대로 두면 알파가 검정으로 합성되어 실제와 다른 그림이 전달된다.
+    KIPRIS 도면이 모두 흰 배경이므로 조건을 맞춘다.
+    source는 파일 경로 또는 바이트열.
+    """
     from PIL import Image
 
-    with Image.open(path) as im:
+    opener = Image.open(io.BytesIO(source)) if isinstance(source, bytes) else Image.open(source)
+    with opener as im:
         if im.mode in ("RGBA", "LA", "P"):
             im = im.convert("RGBA")
             bg = Image.new("RGBA", im.size, (255, 255, 255, 255))
@@ -141,33 +174,17 @@ def _image_part(path: Path) -> dict:
         buf = io.BytesIO()
         im.save(buf, format="JPEG", quality=85)
 
-    return {
-        "inline_data": {
-            "mime_type": "image/jpeg",
-            "data": base64.b64encode(buf.getvalue()).decode(),
-        }
-    }
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def _image_part(path: Path) -> dict:
+    """Gemini 형식 (inline_data)."""
+    return {"inline_data": {"mime_type": "image/jpeg", "data": _encode(path)}}
 
 
 def _query_part(image_bytes: bytes) -> dict:
-    from PIL import Image
-
-    with Image.open(io.BytesIO(image_bytes)) as im:
-        if im.mode in ("RGBA", "LA", "P"):
-            im = im.convert("RGBA")
-            bg = Image.new("RGBA", im.size, (255, 255, 255, 255))
-            im = Image.alpha_composite(bg, im)
-        im = im.convert("RGB")
-        im.thumbnail((THUMB_SIZE, THUMB_SIZE))
-        buf = io.BytesIO()
-        im.save(buf, format="JPEG", quality=85)
-
-    return {
-        "inline_data": {
-            "mime_type": "image/jpeg",
-            "data": base64.b64encode(buf.getvalue()).decode(),
-        }
-    }
+    """Gemini 형식 (inline_data)."""
+    return {"inline_data": {"mime_type": "image/jpeg", "data": _encode(image_bytes)}}
 
 
 def generate_notes(
@@ -182,21 +199,40 @@ def generate_notes(
         return blank
     if not is_enabled():
         # debug로 두면 왜 note가 안 나오는지 아무도 모른다. 설정 실수는 눈에 띄어야 한다.
-        logger.warning("GEMINI_API_KEY가 없어 note를 생성하지 않습니다 (.env 확인)")
+        key_name = "OPENROUTER_API_KEY" if _provider() == "openrouter" else "GEMINI_API_KEY"
+        logger.warning("%s가 없어 note를 생성하지 않습니다 (.env 확인)", key_name)
+        return blank
+    if _quota_blocked():
+        logger.warning("할당량 초과 상태 — note 생성을 건너뜁니다")
         return blank
 
     root = Path(settings.trademark_data_root)
     try:
-        parts = [{"text": PROMPT}, _query_part(query_image)]
+        images = [_encode(query_image)]
         for rel in image_paths:
             path = root / rel
             if not path.exists():
                 logger.warning("Note skipped, image missing: %s", rel)
                 return blank
-            parts.append(_image_part(path))
+            images.append(_encode(path))
     except Exception as e:
         logger.warning("Note image prep failed: %s", type(e).__name__)
         return blank
+
+    if _provider() == "openrouter":
+        text = _call_openrouter(images)
+        if text is None:
+            return blank
+        raw = _parse_notes(text)
+        if raw is None:
+            logger.warning("Note parse failed. 응답 앞부분: %r", text[:200])
+            return blank
+        notes = [_sanitize(item) for item in raw[: len(image_paths)]]
+        return notes + [None] * (len(image_paths) - len(notes))
+
+    parts = [{"text": PROMPT}] + [
+        {"inline_data": {"mime_type": "image/jpeg", "data": b64}} for b64 in images
+    ]
 
     # 모델·API 버전에 따라 지원하지 않는 옵션이 있고, Google은 400에
     # "Request contains an invalid argument."만 주고 어떤 필드인지 알려주지 않는다.
@@ -236,7 +272,7 @@ def generate_notes(
                     "contents": [{"parts": parts}],
                     "generationConfig": generation_config,
                 },
-                timeout=_timeout(),
+                timeout=(3.05, _timeout()),
             )
         except requests.exceptions.Timeout:
             logger.warning("Note generation timed out (%.0fs)", _timeout())
@@ -301,6 +337,78 @@ def generate_notes(
     notes = [_sanitize(item) for item in raw[: len(image_paths)]]
     notes += [None] * (len(image_paths) - len(notes))
     return notes
+
+
+def _call_openrouter(images: list[str]) -> Optional[str]:
+    """OpenAI 호환 채팅 API로 설명을 받아온다. 실패하면 None.
+
+    Gemini와 달리 옵션을 단계적으로 덜어낼 필요가 없다 — 지원하지 않는 필드는
+    보통 무시되고, 400을 주는 경우에도 어떤 필드인지 알려주기 때문이다.
+    다만 response_format(JSON 강제)은 모델마다 지원이 갈려 400이 나므로,
+    그때는 한 번만 끄고 재시도한다. 파서가 코드펜스·머리말을 흡수한다.
+    """
+    content = [{"type": "text", "text": PROMPT}] + [
+        {"type": "image_url",
+         "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+        for b64 in images
+    ]
+    payload = {
+        "model": _model(),
+        "messages": [{"role": "user", "content": content}],
+        "temperature": 0.3,
+        # 15~40자 설명 3건이면 충분하다. 추론형 모델이 생각을 길게 쓰다
+        # 잘리는 것을 막되, 무한정 늘리지는 않는다.
+        "max_tokens": 700,
+        "response_format": {"type": "json_object"},
+    }
+
+    for attempt in range(2):
+        try:
+            res = requests.post(
+                OPENROUTER_URL,
+                headers={"Authorization": f"Bearer {_api_key()}",
+                         "Content-Type": "application/json"},
+                json=payload,
+                # (연결, 읽기)로 나눠 준다. 값 하나만 주면 소켓 읽기 단위로만
+                # 적용되어, 서버가 연결만 유지한 채 응답을 미루면 무한정 기다린다
+                # (무료 등급 대기열에서 실제로 겪음).
+                timeout=(3.05, _timeout()),
+            )
+        except requests.exceptions.Timeout:
+            logger.warning("Note generation timed out (%.0fs)", _timeout())
+            return None
+        except Exception as e:
+            logger.warning("Note request failed: %s", type(e).__name__)
+            return None
+
+        if res.status_code == 429:
+            # 무료 등급에서 흔하다. 남은 요청까지 소모하지 않도록 잠시 차단한다.
+            _block_quota()
+            logger.warning(
+                "OpenRouter 할당량 초과(429). %.0f초간 note 생성을 중단합니다. %s",
+                QUOTA_COOLDOWN, res.text[:200],
+            )
+            return None
+
+        if not res.ok:
+            if res.status_code == 400 and attempt == 0 and "response_format" in payload:
+                logger.warning("400 — response_format 제거 후 재시도합니다")
+                payload.pop("response_format")
+                continue
+            logger.warning("Note generation failed (HTTP %s): %s",
+                           res.status_code, res.text[:300])
+            return None
+
+        choice = ((res.json().get("choices") or [{}])[0])
+        msg = choice.get("message") or {}
+        text = msg.get("content") or msg.get("reasoning") or ""
+        if choice.get("finish_reason") == "length":
+            # 추론형 모델이 생각을 길게 쓰다 잘린 경우. 잘린 JSON을 통과시키면
+            # 깨진 문구가 사용자에게 노출되므로 파서가 걸러내지만, 원인은 남긴다.
+            logger.warning("Note response truncated (max_tokens). model=%s", _model())
+        return text or None
+
+    return None
 
 
 def _parse_notes(text: str) -> Optional[list]:
