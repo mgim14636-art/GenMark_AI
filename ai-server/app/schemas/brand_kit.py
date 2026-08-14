@@ -11,7 +11,17 @@ from pydantic import BaseModel, Field
 # BOTTLE은 백엔드 요청서의 최초 표기. 기획서 (7) 수행방법의 산출물 정의는
 # "스마트스토어 규격(1000x1000) 제품 썸네일"이므로 PRODUCT_THUMBNAIL을 정식
 # 명칭으로 두고, BOTTLE은 같은 산출물의 별칭으로 계속 허용한다(백엔드 무중단 전환용).
-KitType = Literal["BUSINESS_CARD", "PRODUCT_THUMBNAIL", "BOTTLE"]
+#
+# THUMBNAIL은 DB와 백엔드가 실제로 쓰는 값이다. 이 별칭이 없던 동안에는
+# BrandKitProcessor가 보내는 값을 여기서 422로 거절해, BI 브랜드킷(제품 썸네일)
+# 생성이 전부 실패했다.
+#
+#   chk_kit_type CHECK (kit_type IN ('BUSINESS_CARD','THUMBNAIL'))     -- V22
+#   BrandKitProcessor: request.put("kit_type", kit.getKitType().name())
+#
+# DB CHECK가 계약의 출처이므로 그 두 값은 반드시 받아야 한다.
+# CHECK를 바꾸면 이 표와 tests/test_brand_kit_type_contract.py도 같이 바꿀 것.
+KitType = Literal["BUSINESS_CARD", "PRODUCT_THUMBNAIL", "THUMBNAIL", "BOTTLE"]
 
 # 제품 유형 — 썸네일 상단 라벨과 향후 연출 프리셋 선택에 쓴다.
 ProductCategory = Literal[
@@ -37,7 +47,8 @@ HEADLINE_MAX_CHARS = 15
 CANONICAL_KIT_TYPE = {
     "BUSINESS_CARD": "BUSINESS_CARD",
     "PRODUCT_THUMBNAIL": "PRODUCT_THUMBNAIL",
-    "BOTTLE": "PRODUCT_THUMBNAIL",
+    "THUMBNAIL": "PRODUCT_THUMBNAIL",  # DB·백엔드 표기 (chk_kit_type)
+    "BOTTLE": "PRODUCT_THUMBNAIL",     # 백엔드 요청서 최초 표기
 }
 
 # 산출물 규격.
