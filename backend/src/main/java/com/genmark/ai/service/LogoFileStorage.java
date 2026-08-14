@@ -6,20 +6,46 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Locale;
+import java.util.regex.Pattern;
+
+import org.w3c.dom.Element;
+import org.w3c.dom.Document;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 @Component
 public class LogoFileStorage {
-    private final Path root;
+    private static final Pattern EXTERNAL_CSS_URL = Pattern.compile(
+            "url\\s*\\(\\s*['\"]?(?!#)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SAFE_PATH_SEGMENT = Pattern.compile("[A-Za-z0-9_-]+");
 
-    public LogoFileStorage(@Value("${file.upload-dir:uploads}") String uploadDir) {
+    private final Path root;
+    private final Path privateRoot;
+    private final int maxSvgBytes;
+
+    public LogoFileStorage(@Value("${file.upload-dir:uploads}") String uploadDir,
+                           @Value("${file.private-upload-dir:private-uploads}") String privateUploadDir,
+                           @Value("${app.logo-svg-max-bytes:1048576}") int maxSvgBytes) {
         this.root = Path.of(uploadDir).toAbsolutePath().normalize();
+        this.privateRoot = Path.of(privateUploadDir).toAbsolutePath().normalize();
+        if (this.privateRoot.startsWith(this.root)) {
+            throw new IllegalArgumentException("Private SVG storage must be outside the public upload directory");
+        }
+        this.maxSvgBytes = maxSvgBytes;
     }
 
     public StoredImage store(String generationPublicId, int order, String base64) {
@@ -44,6 +70,55 @@ public class LogoFileStorage {
             Path file = root.resolve(storageKey).normalize();
             if (!file.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
             return Files.readAllBytes(file);
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
+    public String storeOriginalSvg(String generationPublicId, int order, String svg) {
+        byte[] bytes = validateSvg(svg);
+        Path file = svgPath(generationPublicId, order, false);
+        try {
+            Files.createDirectories(file.getParent());
+            if (Files.exists(file)) {
+                if (Arrays.equals(Files.readAllBytes(file), bytes)) return privateStorageKey(file);
+                throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "원본 SVG는 덮어쓸 수 없습니다.");
+            }
+            Files.write(file, bytes, StandardOpenOption.CREATE_NEW);
+            return privateStorageKey(file);
+        } catch (ApiException e) {
+            throw e;
+        } catch (java.nio.file.FileAlreadyExistsException e) {
+            try {
+                if (Arrays.equals(Files.readAllBytes(file), bytes)) return privateStorageKey(file);
+            } catch (IOException ignored) {
+                // Fall through to the immutable-original conflict below.
+            }
+            throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "원본 SVG는 덮어쓸 수 없습니다.");
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
+    public String storeEditedSvg(String generationPublicId, int order, String svg) {
+        byte[] bytes = validateSvg(svg);
+        Path file = svgPath(generationPublicId, order, true);
+        try {
+            Files.createDirectories(file.getParent());
+            writeAtomically(file, bytes);
+            return privateStorageKey(file);
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
+    public byte[] readPreferredSvg(String generationPublicId, int order) {
+        Path edited = svgPath(generationPublicId, order, true);
+        Path original = svgPath(generationPublicId, order, false);
+        Path selected = Files.exists(edited) ? edited : original;
+        if (!Files.exists(selected)) throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
+        try {
+            return Files.readAllBytes(selected);
         } catch (IOException e) {
             throw new ApiException(ErrorCode.STORAGE_ERROR);
         }
@@ -104,6 +179,122 @@ public class LogoFileStorage {
         } catch (IllegalArgumentException e) {
             throw new ApiException(ErrorCode.AI_INVALID_RESPONSE, "AI 이미지 Base64를 해석할 수 없습니다.");
         }
+    }
+
+    private Path svgPath(String generationPublicId, int order, boolean edited) {
+        if (generationPublicId == null || !SAFE_PATH_SEGMENT.matcher(generationPublicId).matches() || order < 1) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+        Path directory = privateRoot.resolve("logos").resolve(generationPublicId).normalize();
+        if (!directory.startsWith(privateRoot)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+        String suffix = edited ? "-edited.svg" : ".svg";
+        Path file = directory.resolve("candidate-" + order + suffix).normalize();
+        if (!file.startsWith(privateRoot)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+        return file;
+    }
+
+    private String privateStorageKey(Path file) {
+        return privateRoot.relativize(file).toString().replace('\\', '/');
+    }
+
+    private byte[] validateSvg(String svg) {
+        if (svg == null || svg.isBlank()) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "SVG 내용을 확인해 주세요.");
+        }
+        byte[] bytes = svg.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > maxSvgBytes) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "SVG 파일 크기가 허용 범위를 초과했습니다.");
+        }
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            factory.setXIncludeAware(false);
+            factory.setExpandEntityReferences(false);
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+            factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+            Document document = factory.newDocumentBuilder().parse(new ByteArrayInputStream(bytes));
+            if (containsProcessingInstruction(document)) throw invalidSvg();
+            Element rootElement = document.getDocumentElement();
+            if (rootElement == null || !"svg".equalsIgnoreCase(localName(rootElement))) {
+                throw invalidSvg();
+            }
+            validateElement(rootElement);
+            return bytes;
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw invalidSvg();
+        }
+    }
+
+    private void validateElement(Element element) {
+        String tag = localName(element).toLowerCase(Locale.ROOT);
+        if (tag.equals("script") || tag.equals("foreignobject")) throw invalidSvg();
+        if (tag.equals("style")) validateCssValue(element.getTextContent());
+
+        NamedNodeMap attributes = element.getAttributes();
+        for (int i = 0; i < attributes.getLength(); i++) {
+            Node attribute = attributes.item(i);
+            String name = localName(attribute).toLowerCase(Locale.ROOT);
+            String qualifiedName = attribute.getNodeName().toLowerCase(Locale.ROOT);
+            String value = attribute.getNodeValue() == null ? "" : attribute.getNodeValue().trim();
+            String normalizedValue = value.toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+            if (name.startsWith("on") || normalizedValue.contains("javascript:")) throw invalidSvg();
+            if ((name.equals("href") || qualifiedName.endsWith(":href"))
+                    && !value.isEmpty() && !value.startsWith("#")) {
+                throw invalidSvg();
+            }
+            if (EXTERNAL_CSS_URL.matcher(value).find()) throw invalidSvg();
+            if (name.equals("style")) validateCssValue(value);
+        }
+
+        NodeList children = element.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            if (children.item(i) instanceof Element child) validateElement(child);
+        }
+    }
+
+    private boolean containsProcessingInstruction(Node node) {
+        if (node.getNodeType() == Node.PROCESSING_INSTRUCTION_NODE) return true;
+        NodeList children = node.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            if (containsProcessingInstruction(children.item(i))) return true;
+        }
+        return false;
+    }
+
+    private void writeAtomically(Path target, byte[] bytes) throws IOException {
+        Path temp = Files.createTempFile(target.getParent(), target.getFileName().toString(), ".tmp");
+        try {
+            Files.write(temp, bytes, StandardOpenOption.TRUNCATE_EXISTING);
+            try {
+                Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temp);
+        }
+    }
+
+    private String localName(Node node) {
+        return node.getLocalName() == null ? node.getNodeName() : node.getLocalName();
+    }
+
+    private void validateCssValue(String value) {
+        String normalized = value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+        if (normalized.contains("@import") || normalized.contains("javascript:")
+                || EXTERNAL_CSS_URL.matcher(value == null ? "" : value).find()) {
+            throw invalidSvg();
+        }
+    }
+
+    private ApiException invalidSvg() {
+        return new ApiException(ErrorCode.VALIDATION_ERROR, "안전하지 않거나 올바르지 않은 SVG입니다.");
     }
 
     public record StoredImage(String storageKey, int width, int height) {}

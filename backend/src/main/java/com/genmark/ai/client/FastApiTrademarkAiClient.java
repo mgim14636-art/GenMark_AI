@@ -33,7 +33,7 @@ public class FastApiTrademarkAiClient implements TrademarkAiClient {
             if (!(raw instanceof List<?> list)) throw new ApiException(ErrorCode.AI_INVALID_RESPONSE);
             List<Match> matches = list.stream().map(item -> toMatch((Map<String, Object>) item)).toList();
             validateScore(max);
-            if (disclaimer == null || disclaimer.isBlank() || matches.size() != topK) {
+            if (disclaimer == null || disclaimer.isBlank() || matches.isEmpty() || matches.size() > topK) {
                 throw new ApiException(ErrorCode.AI_INVALID_RESPONSE);
             }
             return new Result(max, risk, matches, disclaimer);

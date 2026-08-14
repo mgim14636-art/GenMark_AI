@@ -15,7 +15,7 @@ public enum ErrorCode {
     SURVEY_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "이미 설문조사에 응답했습니다."),
     AI_UNAVAILABLE(HttpStatus.BAD_GATEWAY, "AI 서버 응답을 받을 수 없습니다."),
     AI_INVALID_RESPONSE(HttpStatus.BAD_GATEWAY, "AI 서버 응답 형식이 올바르지 않습니다."),
-    AI_INCOMPLETE_RESULT(HttpStatus.BAD_GATEWAY, "AI가 로고 후보 4개를 반환하지 않았습니다."),
+    AI_INCOMPLETE_RESULT(HttpStatus.BAD_GATEWAY, "AI가 로고 후보 1개를 반환하지 않았습니다."),
     STORAGE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "이미지 파일을 저장하거나 읽을 수 없습니다."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 

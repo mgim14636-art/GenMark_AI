@@ -1,4 +1,4 @@
-import { AuthError, apiRequest, apiRequestWithToken, downloadAuthenticatedFileWithToken } from '../auth'
+import { AuthError, apiRequest, apiRequestWithToken, apiTextRequest, downloadAuthenticatedFileWithToken } from '../auth'
 
 export type OnboardingResponse = {
   completed: boolean
@@ -55,6 +55,8 @@ export type LogoCandidate = {
   id: string
   order: number
   storageKey: string
+  svgUrl: string | null
+  svgEdited: boolean
   mimeType: string
   width: number | null
   height: number | null
@@ -313,7 +315,13 @@ export const projectsApi = {
     headers: { 'Idempotency-Key': idempotencyKey },
   }),
   getGeneration: (projectId: string, generationId: string) => apiRequest<LogoGeneration>(`/projects/${projectId}/logo-generations/${generationId}`),
+  getLatestCandidates: (projectId: string) => apiRequest<LogoCandidate[]>(`/projects/${projectId}/logo-candidates`),
   getCandidates: (projectId: string, generationId: string) => apiRequest<LogoCandidate[]>(`/projects/${projectId}/logo-generations/${generationId}/logo-candidates`),
+  getCandidateSvg: (svgUrl: string) => apiTextRequest(svgUrl),
+  saveCandidateSvg: (svgUrl: string, svg: string) => apiTextRequest(svgUrl, {
+    method: 'PUT',
+    body: JSON.stringify({ svg }),
+  }),
   selectCandidate: (projectId: string, candidateId: string) => apiRequest<LogoCandidate>(`/projects/${projectId}/logo-candidates/${candidateId}/select`, {
     method: 'POST',
   }),
@@ -329,7 +337,10 @@ export const projectsApi = {
   requestBrandKit: (projectId: string, candidateId: string) => apiRequest<BrandKit>(`/projects/${projectId}/logo-candidates/${candidateId}/brand-kits`, {
     method: 'POST',
   }),
-  getBrandKit: (projectId: string, candidateId: string) => apiRequest<BrandKit>(`/projects/${projectId}/logo-candidates/${candidateId}/brand-kits`),
+  getBrandKit: async (projectId: string, candidateId: string) => {
+    const kits = await apiRequest<BrandKit[]>(`/projects/${projectId}/logo-candidates/${candidateId}/brand-kits`)
+    return kits[0] ?? null
+  },
   createAnalysis: (projectId: string) => apiRequest<TrademarkAnalysis>(`/projects/${projectId}/trademark-analyses`, {
     method: 'POST',
   }),

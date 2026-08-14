@@ -19,6 +19,7 @@ class GenerationRequest(BaseModel):
     brand_name: Optional[str] = None
     company_name: Optional[str] = None
     brand_direction: Optional[str] = Field(None, description="브랜드 방향성/핵심 편익 서술형(BI)")
+    brand_description: Optional[str] = Field(None, description="브랜드 가치 설명 서술형(BI)")
 
     # 기업 가치·방향성 (BI: brand_values/brand_values_text, CI: company_values/company_values_text)
     brand_values: Optional[List[str]] = None
@@ -43,7 +44,7 @@ class GenerationRequest(BaseModel):
 
     # 상한이 없으면 한 번의 요청으로 수백 장이 생성돼 크레딧이 소진된다
     # (docs/2026-08-11_로고생성_문제점-점검.md 2번). max_workers도 같이 묶인다.
-    num_variants: int = Field(4, ge=1, le=8, description="생성할 로고 시안 수")
+    num_variants: int = Field(1, ge=1, le=1, description="생성할 로고 시안 수 (현재 1개 고정)")
 
     variant_offset: int = Field(
         0,

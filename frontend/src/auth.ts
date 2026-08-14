@@ -231,3 +231,19 @@ export const apiBlobRequest = async (imageUrl: string, retry = true): Promise<Bl
 
   return response.blob()
 }
+
+export const apiTextRequest = async (url: string, init: RequestInit = {}, retry = true): Promise<string> => {
+  const headers = new Headers(init.headers)
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  if (!headers.has('Accept')) headers.set('Accept', 'image/svg+xml, text/plain')
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+
+  const response = await fetch(url, { ...init, headers })
+  if (response.status === 401 && retry && await refreshAccessToken()) {
+    return apiTextRequest(url, init, false)
+  }
+  if (!response.ok) {
+    throw new AuthError('SVG 파일을 처리하지 못했어요.', 'SVG_REQUEST_ERROR', response.status)
+  }
+  return response.text()
+}

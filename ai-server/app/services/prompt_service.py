@@ -314,6 +314,14 @@ def _resolve_values(survey: dict) -> str:
     문장 없이 박혔다(실측 확인됨). 텍스트 인코더에는 노이즈일 뿐이라, 아는 키워드는
     영어로 바꾸고 남은 한글은 버린다. 전부 한글이면 이 문장 자체를 생략한다.
     """
+    if "value_keywords_en" in survey:
+        enriched_values = survey.get("value_keywords_en") or []
+        if isinstance(enriched_values, str):
+            enriched_values = [enriched_values]
+        if not enriched_values:
+            return ""
+        return f"The brand values are {', '.join(enriched_values[:5])}."
+
     raw_values = _raw_value_keys(survey)
     if raw_values:
         translated = [VALUE_KEYWORD_MAP.get(v, v) for v in raw_values]

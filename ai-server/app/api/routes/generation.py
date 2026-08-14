@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.logging import logger
 from app.schemas.generation import GeneratedLogo, GenerationRequest, GenerationResponse
-from app.services import logo_gen_service, logo_composer
+from app.services import logo_gen_service, logo_composer, svg_composer, value_keyword_service
 
 router = APIRouter()
 
@@ -16,9 +16,20 @@ def _image_to_base64(img) -> str:
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
+def _compose_svg(variant: dict, survey: dict) -> str | None:
+    symbol_svg = variant.get("svg")
+    if not symbol_svg:
+        return None
+    return svg_composer.compose_svg_logo(
+        symbol_svg,
+        survey,
+        variant_index=variant["variant_index"],
+    )
+
+
 @router.post("/generate", response_model=GenerationResponse)
 def generate_logo(req: GenerationRequest):
-    survey = req.to_survey_dict()
+    survey = value_keyword_service.enrich_value_keywords(req.to_survey_dict())
     try:
         # logo_gen_service: 설문 -> prompt_service.build_prompt_from_survey로 프롬프트를
         # 만든 뒤 OpenRouter 이미지 API 호출까지 내부에서 처리해 심볼(도형) 이미지들을 얻는다.
@@ -41,7 +52,7 @@ def generate_logo(req: GenerationRequest):
                     ),
                     seed=v["seed"],
                     variantIndex=v["variant_index"],
-                    svg=v.get("svg"),
+                    svg=_compose_svg(v, survey),
                 )
                 for v in variants
             ]

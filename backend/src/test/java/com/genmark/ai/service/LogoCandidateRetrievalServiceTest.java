@@ -55,9 +55,11 @@ class LogoCandidateRetrievalServiceTest {
         var result = service.candidates("project-1", "generation-2", MEMBER_ID);
 
         assertThat(result).extracting(candidate -> candidate.id())
-                .containsExactly("new-1", "new-2", "new-3", "new-4");
+                .containsExactly("new-1");
         assertThat(result).extracting(candidate -> candidate.order())
-                .containsExactly(1, 2, 3, 4);
+                .containsExactly(1);
+        assertThat(result.get(0).svgUrl()).isEqualTo(
+                "/api/v1/projects/project-1/logo-candidates/new-1/svg");
         verify(candidateRepository).findByGenerationIdOrderByCandidateOrder(22L);
     }
 
@@ -71,7 +73,7 @@ class LogoCandidateRetrievalServiceTest {
 
         var result = service.candidates("project-1", "generation-2", MEMBER_ID);
 
-        assertThat(result).hasSize(4);
+        assertThat(result).hasSize(1);
         assertThat(result).allMatch(candidate -> candidate.id().startsWith("latest-"));
     }
 
@@ -101,7 +103,7 @@ class LogoCandidateRetrievalServiceTest {
         when(generationRepository.findByPublicIdAndCiProjectIdAndCiProjectMemberId(
                 "generation-2", PROJECT_ID, MEMBER_ID)).thenReturn(Optional.of(generation));
         when(candidateRepository.findByGenerationIdOrderByCandidateOrder(22L))
-                .thenReturn(candidates(generation, "incomplete").subList(0, 3));
+                .thenReturn(List.of());
 
         assertThatThrownBy(() -> service.candidates("project-1", "generation-2", MEMBER_ID))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -119,13 +121,14 @@ class LogoCandidateRetrievalServiceTest {
     }
 
     private List<LogoCandidate> candidates(LogoGeneration generation, String prefix) {
-        return java.util.stream.IntStream.rangeClosed(1, 4)
+        return java.util.stream.IntStream.rangeClosed(1, 1)
                 .mapToObj(order -> LogoCandidate.builder()
                         .publicId(prefix + "-" + order)
                         .generation(generation)
                         .candidateOrder(order)
                         .storageKey("logos/" + generation.getPublicId() + "/candidate-" + order + ".png")
                         .mimeType("image/png")
+                        .aiMetadataJson("{\"svgAvailable\":true}")
                         .createdAt(LocalDateTime.now())
                         .build())
                 .toList();

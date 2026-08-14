@@ -41,7 +41,11 @@ services:
       SPRING_DATASOURCE_USERNAME: ${MARIADB_USER}
       SPRING_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD}
       AI_SERVER_URL: http://ai-server:8000
+      PRIVATE_UPLOAD_DIR: /app/private-uploads
       TZ: Asia/Seoul
+    volumes:
+      - backend_uploads_dev:/app/uploads
+      - backend_private_uploads_dev:/app/private-uploads
     networks:
       - genmark-dev-net
 
@@ -55,6 +59,10 @@ services:
     environment:
       FASTAPI_ENV: production
       HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-recraft/recraft-v4-vector}
+      VALUE_KEYWORD_MODEL: ${VALUE_KEYWORD_MODEL:-}
+      VALUE_KEYWORD_TIMEOUT_SECONDS: ${VALUE_KEYWORD_TIMEOUT_SECONDS:-5}
       EMBEDDINGS_PATH: /app/data/faiss/embeddings.npy
       IDS_PATH: /app/data/faiss/ids.csv
       DATA_MANIFEST_PATH: /app/data/faiss/data_manifest.json
@@ -93,3 +101,5 @@ networks:
 
 volumes:
   mariadb_dev_data:
+  backend_uploads_dev:
+  backend_private_uploads_dev:

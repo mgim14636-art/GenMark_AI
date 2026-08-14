@@ -13,6 +13,8 @@ public record LogoCandidateResponse(
         String id,
         int order,
         String storageKey,
+        String svgUrl,
+        boolean svgEdited,
         String mimeType,
         Integer width,
         Integer height,
