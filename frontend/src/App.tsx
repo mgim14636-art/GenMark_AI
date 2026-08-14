@@ -11,6 +11,10 @@ const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
 
 const TRADEMARK_SCORE_FALLBACK = 23
 
+// 화면 설계서용 임시 목업 모드입니다. 실제 로그인 사용자와 API 데이터에는 영향을 주지 않으며,
+// 원래의 비로그인 빈 상태로 되돌릴 때는 false로 바꾸면 됩니다.
+const MYPAGE_MOCK_MODE = true
+
 type ViewMode = 'home' | 'hero' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'brand-kit' | 'edit' | 'login' | 'mypage' | 'survey'
 type LoginDestination = 'home' | 'industry' | 'choice'
 type LoginReturnMode = 'hero' | 'home'
@@ -96,14 +100,16 @@ const extractLogoShapeRequirement = (requirements: string | null | undefined) =>
 }
 
 const galleryItems = [
-  { id: 'novaire', name: 'NOVAIRE', category: '콤비네이션', meta: '스튜디오 · 콤비네이션', likes: '2.8k', image: '/curation-gallery/novaire.png', position: '50% 50%', tone: 'novaire' },
-  { id: 'unevia', name: 'UNEVIA', category: '워드마크', meta: '뷰티 · 워드마크', likes: '2.2k', image: '/curation-gallery/unevia.png', position: '50% 50%', tone: 'unevia' },
-  { id: 'aerinde', name: 'AERINDE', category: '워드마크', meta: '뷰티 · 워드마크', likes: '1.9k', image: '/curation-gallery/aerinde.png', position: '50% 50%', tone: 'aerinde' },
-  { id: 'solvane', name: 'SOLVANE', category: '심볼마크', meta: '웰니스 · 심볼마크', likes: '1.7k', image: '/curation-gallery/solvane.png', position: '50% 50%', tone: 'solvane' },
-  { id: 'cendra', name: 'CENDRA', category: '콤비네이션', meta: '뷰티 · 콤비네이션', likes: '1.5k', image: '/curation-gallery/cendra.png', position: '50% 50%', tone: 'cendra' },
-  { id: 'lunee-symbol', name: 'LUNÉE', category: '심볼마크', meta: '뷰티 · 심볼마크', likes: '1.4k', image: '/curation-gallery/lunee-symbol.png', position: '50% 50%', tone: 'lunee-symbol' },
-  { id: 'sunwave', name: 'SUNWAVE', category: '심볼마크', meta: '웰니스 · 심볼마크', likes: '1.2k', image: '/curation-gallery/sunwave.png', position: '50% 50%', tone: 'sunwave' },
-  { id: 'mirelle', name: 'MIRELLE', category: '워드마크', meta: '뷰티 · 워드마크', likes: '1.1k', image: '/curation-gallery/mirelle.png', position: '50% 50%', tone: 'mirelle' },
+  { id: 'quendra', name: 'QUENDRA', category: '워드마크', meta: '뷰티 · 워드마크', likes: '2.8k', image: '/curation-gallery/quendra.png', position: '50% 50%', tone: 'quendra' },
+  { id: 'rk-monogram', name: 'RK', category: '레터마크', meta: '뷰티 · 레터마크', likes: '2.2k', image: '/curation-gallery/rk-monogram.png', position: '50% 50%', tone: 'rk-monogram' },
+  { id: 'bramont', name: 'BRAMONT', category: '콤비네이션', meta: '라이프스타일 · 콤비네이션', likes: '1.9k', image: '/curation-gallery/bramont.png', position: '50% 50%', tone: 'bramont' },
+  { id: 'gn-monogram', name: 'GN', category: '레터마크', meta: '뷰티 · 레터마크', likes: '1.7k', image: '/curation-gallery/gn-monogram.png', position: '50% 50%', tone: 'gn-monogram' },
+  { id: 'vastel', name: 'VASTEL', category: '콤비네이션', meta: '뷰티 · 콤비네이션', likes: '1.5k', image: '/curation-gallery/vastel.png', position: '50% 50%', tone: 'vastel' },
+  { id: 'sevria', name: 'SEVRIA', category: '워드마크', meta: '뷰티 · 워드마크', likes: '1.4k', image: '/curation-gallery/sevria.png', position: '50% 50%', tone: 'sevria' },
+  { id: 'aurelia-symbol', name: 'AURELIA', category: '심볼마크', meta: '뷰티 · 심볼마크', likes: '1.2k', image: '/curation-gallery/aurelia-symbol.png', position: '50% 50%', tone: 'aurelia-symbol' },
+  { id: 'sunwave-mark', name: 'SUNWAVE', category: '심볼마크', meta: '웰니스 · 심볼마크', likes: '1.1k', image: '/curation-gallery/sunwave-mark.png', position: '50% 50%', tone: 'sunwave-mark' },
+  { id: 'orivel', name: 'ORIVEL', category: '콤비네이션', meta: '테크 · 콤비네이션', likes: '980', image: '/curation-gallery/orivel.png', position: '50% 50%', tone: 'orivel' },
+  { id: 'lysenne', name: 'LYSENNE', category: '워드마크', meta: '뷰티 · 워드마크', likes: '860', image: '/curation-gallery/lysenne.png', position: '50% 50%', tone: 'lysenne' },
 ]
 
 const productGalleryItems = [
@@ -117,6 +123,14 @@ const productGalleryItems = [
   { id: 'citrea-product', name: 'CITRÉA', category: '미스트', meta: '시트러스 · 페이셜 미스트', likes: '1.1k', image: '/product-gallery/citrea.png', position: '50% 50%', tone: 'citrea' },
   { id: 'aurelis-product', name: 'AURELIS', category: '바디로션', meta: '시트러스 · 바디 로션', likes: '980', image: '/product-gallery/aurelis.png', position: '50% 50%', tone: 'aurelis' },
   { id: 'terraluna-product', name: 'TERRALUNA', category: '토너', meta: '보태니컬 · 클라리파잉 토너', likes: '860', image: '/product-gallery/terraluna.png', position: '50% 50%', tone: 'terraluna' },
+]
+
+const businessCardGalleryItems = [
+  { id: 'nevia-card', name: 'NEVIA', category: '명함', meta: '미니멀 · 내추럴', likes: '1.8k', image: '/business-card-gallery/nevia.png', position: '50% 50%', tone: 'nevia' },
+  { id: 'morvan-card', name: 'MORVAN', category: '명함', meta: '브라운 · 내추럴', likes: '1.5k', image: '/business-card-gallery/morvan.png', position: '50% 50%', tone: 'morvan' },
+  { id: 'eloris-card', name: 'ELORIS', category: '명함', meta: '라벤더 · 감성', likes: '1.3k', image: '/business-card-gallery/eloris.png', position: '50% 50%', tone: 'eloris' },
+  { id: 'vitara-card', name: 'VITARA', category: '명함', meta: '골드 · 내추럴', likes: '1.1k', image: '/business-card-gallery/vitara.png', position: '50% 50%', tone: 'vitara' },
+  { id: 'aurion-card', name: 'AURION', category: '명함', meta: '네이비 · 프리미엄', likes: '980', image: '/business-card-gallery/aurion.png', position: '50% 50%', tone: 'aurion' },
 ]
 
 const surveyImprovementOptions = ['로고 디자인', '글씨체', '색상 조합', '생성 속도', '수정 기능', '상표 이미지 분석', '결과 설명', '제품 썸네일', '기타']
@@ -355,6 +369,7 @@ function CustomerApp() {
   const [resultCandidate, setResultCandidate] = useState(0)
   const [resultLiked, setResultLiked] = useState(false)
   const [trademarkAnalysisSkipped, setTrademarkAnalysisSkipped] = useState(false)
+  const [trademarkAnalysisRequested, setTrademarkAnalysisRequested] = useState(false)
   const [editTarget, setEditTarget] = useState<'symbol' | 'text'>('symbol')
   const [editorBrandName, setEditorBrandName] = useState('LUVÉRA')
   const [editorSymbol, setEditorSymbol] = useState(0)
@@ -523,12 +538,13 @@ function CustomerApp() {
     }
 
     setLoadingStep(0)
+    const totalLoadingSteps = trademarkAnalysisRequested ? 6 : 5
     const timer = window.setInterval(() => {
-      setLoadingStep((current) => Math.min(current + 1, 4))
+      setLoadingStep((current) => Math.min(current + 1, totalLoadingSteps - 1))
     }, 1600)
 
     return () => window.clearInterval(timer)
-  }, [generationLoading, mode])
+  }, [generationLoading, mode, trademarkAnalysisRequested])
 
   useEffect(() => {
     if (mode !== 'company-details' || !loggedIn || brandKind !== 'ci' || ciProfileLoaded.current) return undefined
@@ -590,6 +606,10 @@ function CustomerApp() {
   const productGalleryDragStartX = useRef(0)
   const productGalleryDragStartScrollLeft = useRef(0)
   const isDraggingProductGallery = useRef(false)
+  const businessCardGalleryRef = useRef<HTMLDivElement>(null)
+  const businessCardGalleryDragStartX = useRef(0)
+  const businessCardGalleryDragStartScrollLeft = useRef(0)
+  const isDraggingBusinessCardGallery = useRef(false)
 
   const filteredItems = activeCategory === '전체'
     ? galleryItems
@@ -659,6 +679,38 @@ function CustomerApp() {
     if (!track) return
 
     isDraggingProductGallery.current = false
+    if (track.hasPointerCapture(event.pointerId)) track.releasePointerCapture(event.pointerId)
+    track.classList.remove('is-dragging')
+  }
+
+  const scrollBusinessCardGallery = (amount: number) => {
+    businessCardGalleryRef.current?.scrollBy({ left: amount, behavior: 'smooth' })
+  }
+
+  const handleBusinessCardGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    const track = businessCardGalleryRef.current
+    if (!track || event.button !== 0) return
+
+    isDraggingBusinessCardGallery.current = true
+    businessCardGalleryDragStartX.current = event.clientX
+    businessCardGalleryDragStartScrollLeft.current = track.scrollLeft
+    track.setPointerCapture(event.pointerId)
+    track.classList.add('is-dragging')
+  }
+
+  const handleBusinessCardGalleryPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const track = businessCardGalleryRef.current
+    if (!track || !isDraggingBusinessCardGallery.current) return
+
+    event.preventDefault()
+    track.scrollLeft = businessCardGalleryDragStartScrollLeft.current - (event.clientX - businessCardGalleryDragStartX.current)
+  }
+
+  const handleBusinessCardGalleryPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const track = businessCardGalleryRef.current
+    if (!track) return
+
+    isDraggingBusinessCardGallery.current = false
     if (track.hasPointerCapture(event.pointerId)) track.releasePointerCapture(event.pointerId)
     track.classList.remove('is-dragging')
   }
@@ -923,11 +975,13 @@ function CustomerApp() {
     setTrademarkAnalysisCompleted(false)
     if (!canAnalyzeTrademark) {
       setTrademarkAnalysisSkipped(true)
+      setTrademarkAnalysisRequested(false)
       setMode(entry === 'result' ? 'result' : 'loading')
       return
     }
 
     setTrademarkAnalysisSkipped(false)
+    setTrademarkAnalysisRequested(false)
     setTrademarkEntry(entry)
     setMode('trademark-selection')
   }
@@ -1095,6 +1149,8 @@ function CustomerApp() {
     if (generationLoading) return
     setGenerationLoading(true)
     setGenerationError('')
+    setTrademarkAnalysisRequested(false)
+    setTrademarkAnalysisSkipped(false)
     setMode('loading')
     try {
       const nextProjectId = await ensureProject('final-review')
@@ -2088,6 +2144,7 @@ function CustomerApp() {
       { number: '3', icon: 'palette', text: '색상과 글씨체를 조합하고 있어요' },
       { number: '4', icon: 'pen', text: '로고 후보를 생성하고 있어요' },
       { number: '5', icon: 'folder', text: '결과를 비교하기 쉽게 정리하고 있어요' },
+      ...(trademarkAnalysisRequested ? [{ number: '6', icon: 'search', text: '유사도를 분석하고 있어요' }] : []),
     ]
 
     return (
@@ -2111,9 +2168,10 @@ function CustomerApp() {
                 <span className={`logo-loading-step-icon icon-${step.icon}`} aria-hidden="true">
                   {step.icon === 'clipboard' ? <ClipboardCheck size={47} strokeWidth={1.8} />
                     : step.icon === 'mood' ? <Heart size={47} strokeWidth={1.8} fill="currentColor" />
-                      : step.icon === 'palette' ? <Palette size={47} strokeWidth={1.8} />
-                        : step.icon === 'pen' ? <PenLine size={47} strokeWidth={1.8} />
-                          : <FolderCheck size={47} strokeWidth={1.8} />}
+                        : step.icon === 'palette' ? <Palette size={47} strokeWidth={1.8} />
+                          : step.icon === 'pen' ? <PenLine size={47} strokeWidth={1.8} />
+                          : step.icon === 'folder' ? <FolderCheck size={47} strokeWidth={1.8} />
+                            : <Search size={47} strokeWidth={1.8} />}
                 </span>
                 <p>{step.text}</p>
                 {index === loadingStep && !generationError && <span className="logo-loading-dots" aria-label="진행 중"><i /><i /><i /></span>}
@@ -2254,12 +2312,12 @@ function CustomerApp() {
           </section>
 
           <div className="trademark-selection-actions">
-            <button className="trademark-check-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(false); setTrademarkAnalysisCompleted(false); void startTrademarkAnalysis() }}>
+            <button className="trademark-check-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(false); setTrademarkAnalysisRequested(true); setTrademarkAnalysisCompleted(false); void startTrademarkAnalysis() }}>
               <span className="trademark-check-search" aria-hidden="true" />
               <span>비슷한 상표 이미지 확인하기</span>
               <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
             </button>
-            <button className="trademark-skip-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(true); setTrademarkAnalysisCompleted(false); setMode(trademarkEntry === 'result' ? 'result' : 'loading') }}>
+            <button className="trademark-skip-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(true); setTrademarkAnalysisRequested(false); setTrademarkAnalysisCompleted(false); setMode(trademarkEntry === 'result' ? 'result' : 'loading') }}>
               <span>지금은 건너뛰기</span>
               <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
             </button>
@@ -2458,10 +2516,8 @@ function CustomerApp() {
               <img
                 className="logo-candidate-image"
                 src={isResultPreview ? resultPreviewImageUrl : getLogoCandidateImageUrl(candidate.storageKey)}
-                alt={`${candidate.name} AI 생성 로고`}
+                alt="AI로 생성된 로고"
               />
-              <strong>{candidate.name}</strong>
-              <small>{candidate.subtitle}</small>
             </div>
             <button className="logo-candidate-arrow next" type="button" aria-label="다음 후보" onClick={() => { const next = (resultCandidate + 1) % candidates.length; if (isResultPreview) setResultCandidate(next); else void selectLogoCandidate(candidates[next], next) }}><ChevronRight aria-hidden="true" size={26} strokeWidth={1.8} /></button>
               <button className="logo-candidate-action download" type="button" aria-label="로고 파일 다운로드" disabled={isResultPreview} onClick={() => requestLogoDownload({ ...candidate, candidateId: candidate.id })}>
@@ -2495,7 +2551,7 @@ function CustomerApp() {
           </section>
 
           <div className="logo-result-actions">
-            <button className="logo-result-edit" type="button" onClick={() => setMode('edit')}><Pencil aria-hidden="true" size={23} strokeWidth={1.8} />색상 · 글씨체 수정<ChevronRight aria-hidden="true" size={25} strokeWidth={1.8} /></button>
+            <button className="logo-result-edit" type="button" onClick={() => setMode('edit')}><Pencil aria-hidden="true" size={23} strokeWidth={1.8} />로고 수정<ChevronRight aria-hidden="true" size={25} strokeWidth={1.8} /></button>
           </div>
 
           <div className="logo-result-utility-grid">
@@ -2636,15 +2692,24 @@ function CustomerApp() {
   }
 
   const renderMypageScreen = () => {
-    const displayUserName = authUser?.name?.trim() || '사용자'
-    const displayEmail = authUser?.email?.trim() || '연결된 이메일 정보가 없어요.'
+    const useMypageMock = MYPAGE_MOCK_MODE && !authRestoring && !loggedIn
+    const displayUserName = useMypageMock ? '김명은' : authUser?.name?.trim() || '사용자'
+    const displayEmail = useMypageMock ? '연결된 이메일 정보가 없어요. tkss1217@gmail.com' : authUser?.email?.trim() || '연결된 이메일 정보가 없어요.'
+    const displayCompanyName = useMypageMock ? '육하원칙' : companyName.trim() || '아직 입력된 회사명이 없어요.'
+    const displayCompanyMotto = useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : companyMotto.trim() || '브랜드 프로젝트에서 회사 모토를 입력해보세요.'
     const selectedLogo = logoCandidates.find((candidate) => candidate.id === selectedCandidateId)
       ?? logoCandidates.find((candidate) => candidate.selected)
     const projectName = (brandKind === 'ci' ? companyName : brandName).trim()
     const projectDescription = (brandKind === 'ci' ? companyMotto : brandValueDescription).trim()
     const selectedIndustry = industryOptions.find((option) => option.id === industrySelection)?.title ?? '업종 미입력'
     const selectedStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? '스타일 미입력'
-    const completedProjects = projectId && selectedLogo && projectName
+    const completedProjects = useMypageMock ? [{
+      id: 'mypage-mock-completed-brand',
+      name: '육하원칙',
+      detail: '뷰티 · 콤비네이션',
+      description: '완성된 브랜드 로고 목업',
+      candidate: { id: 'mypage-mock-completed-candidate', storageKey: 'mypage/mock-completed-brand.png' } as LogoCandidate,
+    }] : projectId && selectedLogo && projectName
       ? [{
           id: projectId,
           name: projectName,
@@ -2653,10 +2718,45 @@ function CustomerApp() {
           candidate: selectedLogo,
         }]
       : []
+    const displayDownloadHistory: DownloadRecord[] = useMypageMock ? [
+      {
+        downloadId: -1,
+        candidateId: 'mypage-mock-pinned-1',
+        projectType: 'BI',
+        imageUrl: '/mypage/mock-pinned/mypage-mock-pinned-1.png',
+        firstTime: false,
+        downloadedAt: '2026-08-14T09:00:00.000Z',
+      },
+      {
+        downloadId: -2,
+        candidateId: 'mypage-mock-pinned-2',
+        projectType: 'BI',
+        imageUrl: '/mypage/mock-pinned/mypage-mock-pinned-2.png',
+        firstTime: false,
+        downloadedAt: '2026-08-14T09:05:00.000Z',
+      },
+    ] : downloadHistory
+    const displayPinnedLogos: PinnedLogo[] = useMypageMock ? [
+      { candidateId: 'mypage-mock-pinned-1', projectType: 'BI', storageKey: 'mypage/pinned/lysenne.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
+      { candidateId: 'mypage-mock-pinned-2', projectType: 'BI', storageKey: 'mypage/pinned/sunwave.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
+      { candidateId: 'mypage-mock-pinned-3', projectType: 'BI', storageKey: 'mypage/pinned/gn.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
+      { candidateId: 'mypage-mock-pinned-4', projectType: 'BI', storageKey: 'mypage/pinned/vastel.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
+      { candidateId: 'mypage-mock-pinned-5', projectType: 'BI', storageKey: 'mypage/pinned/rk.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
+    ] : pinnedLogos
+    const mockBrandKitItems = [
+      { image: '/mypage/mock-brand-kit/lavenor.png', name: 'LAVENOR' },
+      { image: '/mypage/mock-brand-kit/aurelis.png', name: 'AURELIS' },
+      { image: '/mypage/mock-brand-kit/solairea.png', name: 'SOLAIREA' },
+      { image: '/mypage/mock-brand-kit/noirel.png', name: 'NOIRÉL' },
+      { image: '/mypage/mock-brand-kit/citrea.png', name: 'CITRÉA' },
+    ]
+    const getPinnedImageUrl = (item: PinnedLogo) => useMypageMock
+      ? `/mypage/mock-pinned/${item.candidateId}.png`
+      : getLogoCandidateImageUrl(item.storageKey)
     const remainingPinDays = (expiresAt: string) => Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000))
     const beginProfileEdit = () => {
-      setProfileCompanyNameDraft(companyName)
-      setProfileCompanyMottoDraft(companyMotto)
+      setProfileCompanyNameDraft(useMypageMock ? '육하원칙' : companyName)
+      setProfileCompanyMottoDraft(useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : companyMotto)
       setProfileEditing(true)
     }
     const saveProfileEdit = (event: FormEvent<HTMLFormElement>) => {
@@ -2667,6 +2767,15 @@ function CustomerApp() {
     }
     const downloadHistoryItem = async (item: DownloadRecord) => {
       try {
+        if (item.imageUrl.startsWith('/')) {
+          const link = document.createElement('a')
+          link.href = item.imageUrl
+          link.download = `genmark-${item.projectType.toLowerCase()}-${item.candidateId}.png`
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+          return
+        }
         const blob = await downloadAuthenticatedFile(item.imageUrl)
         const link = document.createElement('a')
         link.href = URL.createObjectURL(blob)
@@ -2710,11 +2819,11 @@ function CustomerApp() {
               <dl className="profile-detail-list">
                 <div>
                   <dt><Building2 size={17} strokeWidth={1.8} />회사명</dt>
-                  <dd>{profileEditing ? <input aria-label="회사명 수정" maxLength={80} value={profileCompanyNameDraft} onChange={(event) => setProfileCompanyNameDraft(event.target.value)} placeholder="회사명을 입력해주세요." /> : companyName.trim() || '아직 입력된 회사명이 없어요.'}</dd>
+                  <dd>{profileEditing ? <input aria-label="회사명 수정" maxLength={80} value={profileCompanyNameDraft} onChange={(event) => setProfileCompanyNameDraft(event.target.value)} placeholder="회사명을 입력해주세요." /> : displayCompanyName}</dd>
                 </div>
                 <div>
                   <dt><Sparkles size={17} strokeWidth={1.8} />회사 모토</dt>
-                  <dd>{profileEditing ? <textarea aria-label="회사 모토 수정" maxLength={300} rows={2} value={profileCompanyMottoDraft} onChange={(event) => setProfileCompanyMottoDraft(event.target.value)} placeholder="회사 모토를 입력해주세요." /> : companyMotto.trim() || '브랜드 프로젝트에서 회사 모토를 입력해보세요.'}</dd>
+                  <dd>{profileEditing ? <textarea aria-label="회사 모토 수정" maxLength={300} rows={2} value={profileCompanyMottoDraft} onChange={(event) => setProfileCompanyMottoDraft(event.target.value)} placeholder="회사 모토를 입력해주세요." /> : displayCompanyMotto}</dd>
                 </div>
               </dl>
             </form>
@@ -2724,7 +2833,7 @@ function CustomerApp() {
             <div className="section-title-row"><div><h2 id="completed-title">완성한 브랜드</h2><p>생성한 로고와 분석 결과를 다시 확인할 수 있어요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
             {completedProjects.length > 0 ? completedProjects.map((project) => (
               <article className="completed-project-card" key={project.id}>
-                <div className="completed-project-preview"><img src={getLogoCandidateImageUrl(project.candidate.storageKey)} alt={`${project.name} 선택 로고`} /></div>
+                <div className="completed-project-preview"><img src={useMypageMock ? '/mypage/mock-completed-brand.png' : getLogoCandidateImageUrl(project.candidate.storageKey)} alt={`${project.name} 선택 로고`} /></div>
                 <div className="completed-project-info"><div className="project-info-heading"><strong>{project.name}</strong><span className="project-status"><Check size={14} strokeWidth={2.3} /> 로고 선택 완료</span></div><p>{project.detail}</p>{project.description && <p className="project-description">{project.description}</p>}<div className="project-status-list"><span><Check size={14} strokeWidth={2} /> 로고 생성 완료</span><span className={trademarkAnalysisCompleted ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 상표 분석 {trademarkAnalysisCompleted ? '완료' : '미완료'}</span><span className={brandKit?.status === 'SUCCEEDED' ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 브랜드킷 {brandKit?.status === 'SUCCEEDED' ? '완료' : '미완료'}</span></div></div>
                 <div className="project-action-grid">
                   <button type="button" onClick={() => setMode('result')}><ImageIcon size={19} strokeWidth={1.8} />결과 보기</button>
@@ -2741,26 +2850,37 @@ function CustomerApp() {
 
           <section className="mypage-section" aria-labelledby="download-history-title">
             <div className="section-title-row"><div><h2 id="download-history-title">내 다운로드 목록</h2><p>CI·BI 유형별로 최근 20개까지 보관돼요. 한도를 넘으면 오래된 기록부터 자동으로 정리됩니다.</p></div><Download aria-hidden="true" size={27} strokeWidth={1.8} /></div>
-            {downloadHistory.length > 0 ? (
-              <div className="mypage-record-list">
-                {downloadHistory.map((item) => (
-                  <article className="mypage-record-row" key={item.downloadId}>
-                    <span className="record-icon"><Download size={19} strokeWidth={1.8} /></span>
-                    <div><strong>{item.projectType} 로고</strong><p>{new Date(item.downloadedAt).toLocaleString('ko-KR')}에 저장</p></div>
-                    <button type="button" onClick={() => void downloadHistoryItem(item)}>다시 받기</button>
-                  </article>
-                ))}
-              </div>
+            {displayDownloadHistory.length > 0 ? (
+              useMypageMock ? (
+                <div className="download-logo-grid">
+                  {displayDownloadHistory.map((item) => (
+                    <article className="download-logo-card" key={item.downloadId}>
+                      <img src={item.imageUrl} alt="다운로드한 로고" />
+                      <div><strong>{item.projectType} 로고</strong><p>{new Date(item.downloadedAt).toLocaleString('ko-KR')}에 저장</p><button type="button" onClick={() => void downloadHistoryItem(item)}>다시 받기</button></div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="mypage-record-list">
+                  {displayDownloadHistory.map((item) => (
+                    <article className="mypage-record-row" key={item.downloadId}>
+                      <span className="record-icon"><Download size={19} strokeWidth={1.8} /></span>
+                      <div><strong>{item.projectType} 로고</strong><p>{new Date(item.downloadedAt).toLocaleString('ko-KR')}에 저장</p></div>
+                      <button type="button" onClick={() => void downloadHistoryItem(item)}>다시 받기</button>
+                    </article>
+                  ))}
+                </div>
+              )
             ) : <div className="mypage-inline-empty"><Download size={22} strokeWidth={1.6} /><span>아직 다운로드한 로고가 없어요.</span></div>}
           </section>
 
           <section className="mypage-section" aria-labelledby="pinned-title">
               <div className="section-title-row"><div><h2 id="pinned-title">찜한 로고</h2><p>찜한 로고는 3일 동안 잠시 보관돼요. 기간이 지나면 목록에서 자동으로 사라집니다.</p></div><Heart aria-hidden="true" size={27} strokeWidth={1.8} /></div>
-            {pinnedLogos.length > 0 ? (
+            {displayPinnedLogos.length > 0 ? (
               <div className="pinned-logo-grid">
-                {pinnedLogos.map((item) => (
+                {displayPinnedLogos.map((item) => (
                   <article className="pinned-logo-card" key={item.candidateId}>
-                    <img src={getLogoCandidateImageUrl(item.storageKey)} alt="찜한 로고" />
+                    <img src={getPinnedImageUrl(item)} alt="찜한 로고" />
                     <div><strong>{item.projectType ?? '브랜드'} 로고</strong><span>{remainingPinDays(item.expiresAt)}일 후 목록에서 사라져요</span><small>{new Date(item.expiresAt).toLocaleDateString('ko-KR')}까지 보관</small></div>
                   </article>
                 ))}
@@ -2770,7 +2890,16 @@ function CustomerApp() {
 
           <section className="mypage-section" aria-labelledby="brand-kit-list-title">
             <div className="section-title-row"><div><h2 id="brand-kit-list-title">내 브랜드킷</h2><p>선택한 로고로 만든 명함과 제품 썸네일을 확인하세요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
-            {brandKit ? (
+            {useMypageMock ? (
+              <div className="pinned-logo-grid brand-kit-mock-grid">
+                {mockBrandKitItems.map((item) => (
+                  <article className="pinned-logo-card" key={item.name}>
+                    <img src={item.image} alt={`${item.name} 제품 썸네일`} />
+                    <div><strong>{item.name}</strong><span>제품 썸네일</span><small>브랜드 키트 목업</small></div>
+                  </article>
+                ))}
+              </div>
+            ) : brandKit ? (
               <article className="brand-kit-summary-row">
                 <span className="record-icon"><FolderCheck size={20} strokeWidth={1.8} /></span>
                 <div><strong>{brandKit.kitType === 'BUSINESS_CARD' ? '명함' : '제품 썸네일'}</strong><p>{brandKit.status === 'SUCCEEDED' ? '생성이 완료됐어요.' : brandKit.status === 'FAILED' ? '생성에 실패했어요.' : '현재 생성 중이에요.'}</p></div>
@@ -2935,11 +3064,6 @@ function CustomerApp() {
                       <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
                         <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
                       </button>
-                      <div className="gallery-art-copy legacy-gallery-copy">
-                        <span aria-hidden="true">{item.id === 'luna' ? <CircleCheck size={32} strokeWidth={1.4} /> : item.id === 'sora' ? <Droplets size={32} strokeWidth={1.4} /> : <Sparkles size={32} strokeWidth={1.4} />}</span>
-                        <strong>{item.name}</strong>
-                        <small>{item.category === '콤비네이션' ? 'CLEAN BEAUTY' : item.category.toUpperCase()}</small>
-                      </div>
                       <span className="visual-tag">{item.category}</span>
                     </div>
                     <div className="gallery-meta">
@@ -2977,6 +3101,46 @@ function CustomerApp() {
                 return (
                   <article className="gallery-card" key={item.id}>
                     <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }}>
+                      <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
+                        <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
+                      </button>
+                      <span className="visual-tag">{item.category}</span>
+                    </div>
+                    <div className="gallery-meta">
+                      <div>
+                        <h3>{item.name}</h3>
+                        <p>{item.meta}</p>
+                      </div>
+                      <div className="like-count"><Heart aria-hidden="true" size={17} strokeWidth={1.8} fill="currentColor" />{item.likes}</div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+            <div className="gallery-dots" aria-hidden="true"><span className="active" /><span /><span /><span /><span /></div>
+          </section>
+
+          <section className="curation-section business-card-gallery-section" aria-labelledby="business-card-gallery-title">
+            <div className="section-heading">
+              <h2 id="business-card-gallery-title">명함 갤러리</h2>
+              <div className="gallery-controls">
+                <button type="button" aria-label="이전 명함 보기" onClick={() => scrollBusinessCardGallery(-340)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <button type="button" aria-label="다음 명함 보기" onClick={() => scrollBusinessCardGallery(340)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+              </div>
+            </div>
+            <div
+              className="gallery-track"
+              ref={businessCardGalleryRef}
+              onPointerDown={handleBusinessCardGalleryPointerDown}
+              onPointerMove={handleBusinessCardGalleryPointerMove}
+              onPointerUp={handleBusinessCardGalleryPointerUp}
+              onPointerCancel={handleBusinessCardGalleryPointerUp}
+            >
+              {businessCardGalleryItems.map((item) => {
+                const liked = likedIds.includes(item.id)
+                return (
+                  <article className="gallery-card" key={item.id}>
+                    <div className={`gallery-visual business-card-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }}>
                       <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
                         <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
                       </button>
