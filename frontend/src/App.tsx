@@ -133,7 +133,7 @@ const businessCardGalleryItems = [
   { id: 'aurion-card', name: 'AURION', category: '명함', meta: '네이비 · 프리미엄', likes: '980', image: '/business-card-gallery/aurion.png', position: '50% 50%', tone: 'aurion' },
 ]
 
-const surveyImprovementOptions = ['로고 디자인', '글씨체', '색상 조합', '생성 속도', '수정 기능', '상표 이미지 분석', '결과 설명', '제품 썸네일', '기타']
+const surveyImprovementOptions = ['로고 생성·재생성', '브랜드 맞춤 로고', '로고 수정', '유사 상표 확인', '로고 저장·활용', '기타']
 
 const getModeFromUrl = (): ViewMode => {
   const requestedView = new URLSearchParams(window.location.search).get('view')
@@ -168,7 +168,7 @@ const resultPreviewCandidates: LogoCandidate[] = [
   { id: 'preview-candidate-3', order: 3, storageKey: 'preview-candidate-3', mimeType: 'image/svg+xml', width: 760, height: 760, selected: false, pinnedAt: null, createdAt: '' },
   { id: 'preview-candidate-4', order: 4, storageKey: 'preview-candidate-4', mimeType: 'image/svg+xml', width: 760, height: 760, selected: false, pinnedAt: null, createdAt: '' },
 ]
-const resultPreviewImageUrl = '/logo-result-preview.svg'
+const resultPreviewImageUrl = '/logo-result-preview-bramont.png'
 
 const clampColorChannel = (value: number) => Math.max(0, Math.min(255, Math.round(value)))
 const rgbToHex = ({ r, g, b }: RgbColor) => `#${[r, g, b].map((channel) => clampColorChannel(channel).toString(16).padStart(2, '0')).join('')}`
@@ -2932,7 +2932,7 @@ function CustomerApp() {
 
             <section className="survey-section" aria-labelledby="rating-title"><h2 id="rating-title">결과에 얼마나 만족하시나요?</h2><div className="rating-options" role="radiogroup" aria-label="결과 만족도"><button type="button" role="radio" aria-checked={surveyRating === 5} className={surveyRating === 5 ? 'rating-choice like selected' : 'rating-choice like'} onClick={() => setSurveyRating(5)}><ThumbsUp aria-hidden="true" size={34} strokeWidth={1.7} fill={surveyRating === 5 ? 'currentColor' : 'none'} /><span>좋아요</span></button><button type="button" role="radio" aria-checked={surveyRating === 1} className={surveyRating === 1 ? 'rating-choice dislike selected' : 'rating-choice dislike'} onClick={() => setSurveyRating(1)}><ThumbsDown aria-hidden="true" size={34} strokeWidth={1.7} fill={surveyRating === 1 ? 'currentColor' : 'none'} /><span>싫어요</span></button></div></section>
 
-            <section className="survey-section" aria-labelledby="improvement-title"><h2 id="improvement-title">어떤 부분이 더 좋아졌으면 하나요?</h2><p className="survey-helper">개선이 필요하다고 느낀 항목을 모두 선택해주세요.</p><div className="improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'improvement-option selected' : 'improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}><span>{selected ? <Check size={16} strokeWidth={2.4} /> : <Plus size={16} strokeWidth={1.8} />}</span>{item}</button> })}</div></section>
+            <section className="survey-section" aria-labelledby="improvement-title"><h2 id="improvement-title">어떤 부분이 더 좋아졌으면 하나요?</h2><p className="survey-helper">개선이 필요하다고 느낀 항목을 모두 선택해주세요.</p><div className="improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'improvement-option selected' : 'improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div></section>
 
             <section className="survey-section" aria-labelledby="comment-title"><h2 id="comment-title">추가 의견</h2><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /><div className="survey-character-count">{surveyComment.length} / 500</div></section>
 
@@ -2967,7 +2967,7 @@ function CustomerApp() {
         <div className="survey-modal-heading"><MessageSquare aria-hidden="true" size={24} strokeWidth={1.8} /><div><h2 id="credit-survey-title">잠깐만 의견을 들려주세요</h2><p>설문에 참여하시면 크레딧 1개를 드려요.</p></div></div>
         <form onSubmit={submitCreditSurvey}>
           <div className="modal-survey-block"><h3>결과에 얼마나 만족하시나요?</h3><div className="modal-rating-options" role="radiogroup" aria-label="결과 만족도"><button type="button" role="radio" aria-checked={surveyRating === 5} className={surveyRating === 5 ? 'modal-rating-choice like selected' : 'modal-rating-choice like'} onClick={() => setSurveyRating(5)}><ThumbsUp aria-hidden="true" size={24} strokeWidth={1.8} fill={surveyRating === 5 ? 'currentColor' : 'none'} /><span>좋아요</span></button><button type="button" role="radio" aria-checked={surveyRating === 1} className={surveyRating === 1 ? 'modal-rating-choice dislike selected' : 'modal-rating-choice dislike'} onClick={() => setSurveyRating(1)}><ThumbsDown aria-hidden="true" size={24} strokeWidth={1.8} fill={surveyRating === 1 ? 'currentColor' : 'none'} /><span>싫어요</span></button></div></div>
-          <div className="modal-survey-block"><h3>어떤 부분이 더 좋아졌으면 하나요?</h3><div className="modal-improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'modal-improvement-option selected' : 'modal-improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}><span>{selected ? <Check size={13} strokeWidth={2.4} /> : <Plus size={13} strokeWidth={1.8} />}</span>{item}</button> })}</div></div>
+          <div className="modal-survey-block"><h3>어떤 부분이 더 좋아졌으면 하나요?</h3><div className="modal-improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'modal-improvement-option selected' : 'modal-improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div></div>
           <div className="modal-survey-block"><h3>추가 의견</h3><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /></div>
           <button className="gradient-button modal-submit" type="submit">의견 보내고 크레딧 받기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
         </form>

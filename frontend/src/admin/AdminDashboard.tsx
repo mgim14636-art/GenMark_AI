@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import { Fragment, FormEvent, useEffect, useRef, useState } from 'react'
 import {
   ArrowRight,
   ArrowUpRight,
@@ -16,18 +16,20 @@ import {
   House,
   Palette,
   RefreshCw,
+  Search,
   ShieldCheck,
   Sparkles,
   ThumbsUp,
   UserRound,
   UsersRound,
+  X,
 } from 'lucide-react'
 import GenMarkLogo from '../components/ui/GenMarkLogo'
 import { AuthError } from '../auth'
 import { adminApi, type AdminDashboardStats, type AdminMember } from '../lib/genmarkApi'
 import './admin-dashboard.css'
 
-type DashboardSection = 'overview' | 'generation' | 'download' | 'signup' | 'requests' | 'members' | 'credits'
+type DashboardSection = 'overview' | 'generation' | 'download' | 'signup' | 'requests' | 'members' | 'admins' | 'credits' | 'ci-generations' | 'bi-generations'
 
 type AdminDashboardProps = {
   standalone?: boolean
@@ -35,6 +37,37 @@ type AdminDashboardProps = {
 
 const defaultAdminId = 'admin@genmark.ai'
 const ADMIN_TOKEN_KEY = 'genmark-admin-access-token'
+// Temporarily keep the admin dashboard available for screen review without login.
+// Restore this to true when the admin authentication flow is ready for deployment.
+const ADMIN_LOGIN_REQUIRED = false
+
+type AdminMemberTableRow = AdminMember & {
+  ciDownloads?: number
+  biDownloads?: number
+}
+
+type AdminAccountRow = {
+  id: string
+  name: string
+  createdAt: string
+  lastAccessAt: string
+}
+
+const previewAdminMembers: AdminMemberTableRow[] = [
+  { id: 1, email: 'tkss1217@gmail.com', name: '김명은', provider: 'GOOGLE', ciGenerations: 8, biGenerations: 5, downloadCount: 7, ciDownloads: 4, biDownloads: 3, creditBalance: 12, paidUser: true, createdAt: '2026-08-05T09:24:00' },
+  { id: 2, email: 'minji.kim@example.com', name: '김민지', provider: 'KAKAO', ciGenerations: 6, biGenerations: 9, downloadCount: 8, ciDownloads: 3, biDownloads: 5, creditBalance: 18, paidUser: true, createdAt: '2026-08-08T14:10:00' },
+  { id: 3, email: 'design.lee@example.com', name: '이서윤', provider: 'GOOGLE', ciGenerations: 3, biGenerations: 4, downloadCount: 3, ciDownloads: 2, biDownloads: 1, creditBalance: 7, paidUser: false, createdAt: '2026-08-11T11:42:00' },
+]
+
+const previewAdminAccounts: AdminAccountRow[] = [
+  { id: 'admin@genmark.ai', name: '김명은', createdAt: '2026.08.01', lastAccessAt: '2026.08.14 14:36' },
+  { id: 'manager@genmark.ai', name: '서비스 관리자', createdAt: '2026.08.05', lastAccessAt: '2026.08.14 11:18' },
+]
+
+const formatAdminDate = (value: string) => {
+  const datePart = value.slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(datePart) ? datePart.replace(/-/g, '.') : value
+}
 
 const getStoredAdminToken = () => {
   try {
@@ -82,15 +115,251 @@ const getCalendarDays = (month: Date) => {
   return Array.from({ length: 42 }, (_, index) => new Date(firstCell.getFullYear(), firstCell.getMonth(), firstCell.getDate() + index))
 }
 
+type LogoAsset = {
+  id: string
+  projectId: string
+  imageUrl: string
+  name: string
+  date: string
+}
+
+type LogoMemberRecord = {
+  memberId: string
+  memberName: string
+  generatedLogos: LogoAsset[]
+  downloadedLogos: LogoAsset[]
+}
+
+type LogoGenerationTrack = 'CI' | 'BI'
+
+type LogoPanelState = {
+  track: LogoGenerationTrack
+  memberId: string
+  type: 'generated' | 'downloaded'
+} | null
+
+const normalizeAdminSearchValue = (value: string) => value.trim().toLocaleLowerCase()
+
+const matchesAdminMemberSearch = (query: string, ...identifiers: Array<string | undefined>) => {
+  const normalizedQuery = normalizeAdminSearchValue(query)
+  return !normalizedQuery || identifiers.some((identifier) => identifier && normalizeAdminSearchValue(identifier) === normalizedQuery)
+}
+
+const makeLogoAsset = (id: string, projectId: string, imageUrl: string, name: string, date: string): LogoAsset => ({
+  id,
+  projectId,
+  imageUrl,
+  name,
+  date,
+})
+
+const ciGenerationMembers: LogoMemberRecord[] = [
+  {
+    memberId: 'tkss1217',
+    memberName: '김명은',
+    generatedLogos: [
+      makeLogoAsset('ci-1', 'CI-240814-01', '/curation-gallery/novaire.png', 'Novaire Studio', '2026.08.14'),
+      makeLogoAsset('ci-2', 'CI-240814-02', '/curation-gallery/aurelia-symbol.png', 'Aurelia Skincare', '2026.08.14'),
+      makeLogoAsset('ci-3', 'CI-240813-03', '/curation-gallery/quendra.png', 'Quendra', '2026.08.13'),
+    ],
+    downloadedLogos: [
+      makeLogoAsset('ci-d-1', 'CI-240814-01', '/curation-gallery/novaire.png', 'Novaire Studio', '2026.08.14'),
+      makeLogoAsset('ci-d-2', 'CI-240813-03', '/curation-gallery/quendra.png', 'Quendra', '2026.08.13'),
+    ],
+  },
+  {
+    memberId: 'beauty_lab',
+    memberName: '이서연',
+    generatedLogos: [
+      makeLogoAsset('ci-4', 'CI-240812-04', '/curation-gallery/solvane.png', 'Solvane', '2026.08.12'),
+      makeLogoAsset('ci-5', 'CI-240812-05', '/curation-gallery/aerinde.png', 'Aurion', '2026.08.12'),
+    ],
+    downloadedLogos: [
+      makeLogoAsset('ci-d-3', 'CI-240812-04', '/curation-gallery/solvane.png', 'Solvane', '2026.08.12'),
+    ],
+  },
+  { memberId: 'atelier03', memberName: '박지훈', generatedLogos: [], downloadedLogos: [] },
+  {
+    memberId: 'minseo94',
+    memberName: '최민서',
+    generatedLogos: [
+      makeLogoAsset('ci-6', 'CI-240811-06', '/hero-gallery/velora.png', 'Velora', '2026.08.11'),
+    ],
+    downloadedLogos: [
+      makeLogoAsset('ci-d-4', 'CI-240811-06', '/hero-gallery/velora.png', 'Velora', '2026.08.11'),
+    ],
+  },
+]
+
+const biGenerationMembers: LogoMemberRecord[] = [
+  {
+    memberId: 'tkss1217',
+    memberName: '김명은',
+    generatedLogos: [
+      makeLogoAsset('bi-1', 'BI-240814-01', '/curation-gallery/lysenne.png', 'Lavenor', '2026.08.14'),
+      makeLogoAsset('bi-2', 'BI-240814-02', '/hero-gallery/velora.png', 'Velora', '2026.08.14'),
+    ],
+    downloadedLogos: [makeLogoAsset('bi-d-1', 'BI-240814-01', '/curation-gallery/lysenne.png', 'Lavenor', '2026.08.14')],
+  },
+  {
+    memberId: 'studio_m',
+    memberName: '정하윤',
+    generatedLogos: [
+      makeLogoAsset('bi-3', 'BI-240813-03', '/curation-gallery/rk-monogram.png', 'Morvan', '2026.08.13'),
+      makeLogoAsset('bi-4', 'BI-240813-04', '/curation-gallery/gn-monogram.png', 'Eloris', '2026.08.13'),
+      makeLogoAsset('bi-5', 'BI-240812-05', '/curation-gallery/unevia.png', 'Vitara', '2026.08.12'),
+    ],
+    downloadedLogos: [
+      makeLogoAsset('bi-d-2', 'BI-240813-03', '/curation-gallery/rk-monogram.png', 'Morvan', '2026.08.13'),
+      makeLogoAsset('bi-d-3', 'BI-240812-05', '/curation-gallery/unevia.png', 'Vitara', '2026.08.12'),
+    ],
+  },
+  { memberId: 'brand_note', memberName: '오지아', generatedLogos: [], downloadedLogos: [] },
+]
+
+type AdminMemberIdSearchProps = {
+  id: string
+  value: string
+  onChange: (value: string) => void
+  resultCount: number
+  totalCount: number
+  placeholder?: string
+}
+
+function AdminMemberIdSearch({ id, value, onChange, resultCount, totalCount, placeholder = '회원 아이디 입력' }: AdminMemberIdSearchProps) {
+  const hasQuery = value.trim().length > 0
+
+  return (
+    <div className="admin-list-toolbar">
+      <div className="admin-list-search">
+        <label htmlFor={id}>회원 아이디 검색</label>
+        <div className="admin-list-search-field">
+          <Search size={16} aria-hidden="true" />
+          <input id={id} type="search" inputMode="email" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-label="회원 아이디 검색" />
+          {hasQuery && <button className="admin-list-search-clear" type="button" aria-label="회원 아이디 검색어 지우기" onClick={() => onChange('')}><X size={15} aria-hidden="true" /></button>}
+        </div>
+        <span className="admin-list-search-hint">입력한 아이디와 정확히 일치하는 회원만 표시합니다.</span>
+      </div>
+      <span className="admin-list-search-result" aria-live="polite">{hasQuery ? `검색 결과 ${resultCount}명 / 전체 ${totalCount}명` : `전체 ${totalCount}명`}</span>
+    </div>
+  )
+}
+
+type LogoGenerationListProps = {
+  track: LogoGenerationTrack
+  members: LogoMemberRecord[]
+  openPanel: LogoPanelState
+  setOpenPanel: (panel: LogoPanelState) => void
+}
+
+function AdminLogoGenerationList({ track, members, openPanel, setOpenPanel }: LogoGenerationListProps) {
+  const [searchQuery, setSearchQuery] = useState('')
+  const getLogos = (member: LogoMemberRecord, type: 'generated' | 'downloaded') => type === 'generated' ? member.generatedLogos : member.downloadedLogos
+  const trackLabel = track === 'CI' ? '기업 로고' : '브랜드 로고'
+  const filteredMembers = members.filter((member) => matchesAdminMemberSearch(searchQuery, member.memberId))
+
+  return (
+    <section className="admin-record-page" aria-labelledby={`${track.toLowerCase()}-generation-title`}>
+      <div className="admin-section-heading">
+        <div>
+          <p className="admin-eyebrow">LOGO GENERATION</p>
+          <h2 id={`${track.toLowerCase()}-generation-title`}>{track} 생성 목록</h2>
+          <p>회원별 {trackLabel} 생성 및 다운로드 기록을 확인할 수 있어요.</p>
+        </div>
+        <AdminMemberIdSearch id={`${track.toLowerCase()}-member-search`} value={searchQuery} onChange={setSearchQuery} resultCount={filteredMembers.length} totalCount={members.length} />
+      </div>
+      <div className="admin-table-shell">
+        <table className="admin-logo-table">
+          <caption className="admin-sr-only">{track} 회원별 로고 생성 및 다운로드 목록</caption>
+          <thead>
+            <tr><th scope="col">No.</th><th scope="col">회원 아이디</th><th scope="col">회원 이름</th><th scope="col">생성 로고</th><th scope="col">다운로드 로고</th></tr>
+          </thead>
+          <tbody>
+            {filteredMembers.length === 0 ? <tr><td colSpan={5} className="admin-empty-table-state">입력한 회원 아이디와 일치하는 회원이 없습니다.</td></tr> : filteredMembers.map((member, index) => {
+              const isOpen = openPanel?.track === track && openPanel?.memberId === member.memberId
+              const activeType = isOpen ? openPanel.type : null
+              const activeLogos = activeType ? getLogos(member, activeType) : []
+              const panelId = `${track.toLowerCase()}-logos-${member.memberId}`
+              const togglePanel = (type: 'generated' | 'downloaded') => {
+                setOpenPanel(isOpen && activeType === type ? null : { track, memberId: member.memberId, type })
+              }
+
+              return (
+                <Fragment key={member.memberId}>
+                  <tr className={`admin-logo-member-row ${isOpen ? 'is-open' : ''}`}>
+                    <td data-label="No.">{index + 1}</td>
+                    <td data-label="회원 아이디"><code>{member.memberId}</code></td>
+                    <td data-label="회원 이름"><strong>{member.memberName}</strong></td>
+                    <td data-label="생성 로고">
+                      <button className="admin-logo-record-button" type="button" disabled={member.generatedLogos.length === 0} aria-expanded={isOpen && activeType === 'generated'} aria-controls={panelId} onClick={() => togglePanel('generated')}>
+                        <FolderCheck size={16} aria-hidden="true" /><span>{member.generatedLogos.length ? `생성 로고 ${member.generatedLogos.length}개` : '생성 기록 없음'}</span><ChevronDown size={15} aria-hidden="true" />
+                      </button>
+                    </td>
+                    <td data-label="다운로드 로고">
+                      <button className="admin-logo-record-button download" type="button" disabled={member.downloadedLogos.length === 0} aria-expanded={isOpen && activeType === 'downloaded'} aria-controls={panelId} onClick={() => togglePanel('downloaded')}>
+                        <Download size={16} aria-hidden="true" /><span>{member.downloadedLogos.length ? `다운로드 ${member.downloadedLogos.length}개` : '다운로드 기록 없음'}</span><ChevronDown size={15} aria-hidden="true" />
+                      </button>
+                    </td>
+                  </tr>
+                  <tr className={`admin-logo-accordion-row ${isOpen ? 'is-open' : ''}`} aria-hidden={!isOpen}>
+                    <td colSpan={5}>
+                      <div id={panelId} className={`admin-logo-accordion ${isOpen ? 'is-open' : ''}`}>
+                        <div className="admin-logo-accordion-inner" role="region" aria-label={`${member.memberName} ${activeType === 'downloaded' ? '다운로드' : '생성'} 로고 상세`}>
+                          <div className="admin-logo-accordion-heading"><strong>{activeType === 'downloaded' ? '다운로드한 로고' : '생성한 로고'}</strong><span>{activeLogos.length}개</span></div>
+                          <div className="admin-logo-thumb-grid">
+                            {activeLogos.map((logo) => <article className="admin-logo-thumb-card" key={logo.id}><img src={logo.imageUrl} alt={`${member.memberName} ${track} ${logo.name} 로고`} loading="lazy" /><div><strong>{logo.name}</strong><span>프로젝트 {logo.projectId}</span><small>{logo.date}</small></div></article>)}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+type SurveyResponse = { id: number; memberId: string; projectId: string; category: string; otherText?: string }
+
+const adminSurveyResponses: SurveyResponse[] = [
+  { id: 1, memberId: 'tkss1217', projectId: 'PRJ-240814-01', category: '로고 생성·재생성' },
+  { id: 2, memberId: 'beauty_lab', projectId: 'PRJ-240813-04', category: '브랜드 맞춤 로고' },
+  { id: 3, memberId: 'studio_m', projectId: 'PRJ-240812-02', category: '유사 상표 확인' },
+  { id: 4, memberId: 'brand_note', projectId: 'PRJ-240811-07', category: '기타', otherText: '완성한 로고를 명함과 제품 이미지에도 바로 적용하고 싶어요.' },
+  { id: 5, memberId: 'minseo94', projectId: 'PRJ-240810-09', category: '로고 저장·활용' },
+]
+
+function AdminSurveyResponseTable() {
+  const [searchQuery, setSearchQuery] = useState('')
+  const filteredResponses = adminSurveyResponses.filter((response) => matchesAdminMemberSearch(searchQuery, response.memberId))
+
+  return (
+    <section className="admin-record-page" aria-labelledby="survey-response-title">
+      <div className="admin-section-heading"><div><p className="admin-eyebrow">USER FEEDBACK</p><h2 id="survey-response-title">개선 요청</h2><p>사용자가 선택한 개선 항목을 프로젝트 단위로 확인해요.</p></div><AdminMemberIdSearch id="survey-member-search" value={searchQuery} onChange={setSearchQuery} resultCount={filteredResponses.length} totalCount={adminSurveyResponses.length} /></div>
+      <div className="admin-table-shell">
+        <table className="admin-survey-response-table">
+          <caption className="admin-sr-only">개선 요청 설문 응답 목록</caption>
+          <thead><tr><th scope="col">No.</th><th scope="col">아이디</th><th scope="col">프로젝트 ID</th><th scope="col">불만 내용</th></tr></thead>
+          <tbody>{filteredResponses.length === 0 ? <tr><td colSpan={4} className="admin-empty-table-state">입력한 회원 아이디와 일치하는 개선 요청이 없습니다.</td></tr> : filteredResponses.map((response) => <tr key={response.id}><td data-label="No.">{response.id}</td><td data-label="아이디"><code>{response.memberId}</code></td><td data-label="프로젝트 ID"><code>{response.projectId}</code></td><td data-label="불만 내용"><span className={`admin-request-tag ${response.category === '기타' ? 'other' : ''}`}>{response.category}</span>{response.otherText && <span className="admin-request-other-text">{response.otherText}</span>}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
 const getDashboardSectionFromUrl = (): DashboardSection => {
   const section = new URLSearchParams(window.location.search).get('tab')
   if (section === 'overview' || section === 'home') return 'overview'
-  if (section === 'generation' || section === 'generations' || section === 'logo-generation') return 'generation'
-  if (section === 'download' || section === 'downloads') return 'download'
-  if (section === 'signup' || section === 'signups' || section === 'join') return 'signup'
+  if (section === 'ci-generations' || section === 'ci-generation') return 'ci-generations'
+  if (section === 'bi-generations' || section === 'bi-generation') return 'bi-generations'
+  if (section === 'generation' || section === 'generations' || section === 'logo-generation' || section === 'download' || section === 'downloads' || section === 'signup' || section === 'signups' || section === 'join' || section === 'credits' || section === 'credit' || section === 'credit-stats') return 'overview'
   if (section === 'requests' || section === 'improvement' || section === 'feedback') return 'requests'
   if (section === 'members' || section === 'member-list' || section === 'users') return 'members'
-  if (section === 'credits' || section === 'credit' || section === 'credit-stats') return 'credits'
+  if (section === 'admins' || section === 'admin-list' || section === 'administrators') return 'admins'
   return 'overview'
 }
 
@@ -105,6 +374,8 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
   const [dashboardSection, setDashboardSectionState] = useState<DashboardSection>(getDashboardSectionFromUrl)
   const [isMemberMenuOpen, setIsMemberMenuOpen] = useState(true)
   const [isStatsMenuOpen, setIsStatsMenuOpen] = useState(true)
+  const [openLogoPanel, setOpenLogoPanel] = useState<LogoPanelState>(null)
+  const [memberSearchQuery, setMemberSearchQuery] = useState('')
   const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false)
   const [hoveredOverviewSignupPoint, setHoveredOverviewSignupPoint] = useState<number | null>(null)
   const [hoveredGenerationUserPoint, setHoveredGenerationUserPoint] = useState<number | null>(null)
@@ -117,6 +388,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
   const [adminLoginLoading, setAdminLoginLoading] = useState(false)
   const [adminStats, setAdminStats] = useState<AdminDashboardStats | null>(null)
   const [adminMemberData, setAdminMemberData] = useState<AdminMember[]>([])
+  const [adminMemberDownloadCounts, setAdminMemberDownloadCounts] = useState<Record<number, { ci: number; bi: number }>>({})
   const adminInitial = Array.from(adminId.trim())[0]?.toLocaleUpperCase() || 'A'
 
   const saveAdminId = () => {
@@ -222,9 +494,24 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
 
   useEffect(() => {
     if (standalone || !adminToken) return
+
+    const loadMembers = async () => {
+      const members = await adminApi.members(adminToken)
+      setAdminMemberData(members)
+
+      const entries = await Promise.all(members.map(async (member) => {
+        const [ciDownloads, biDownloads] = await Promise.all([
+          adminApi.memberDownloads(adminToken, member.id, 'CI'),
+          adminApi.memberDownloads(adminToken, member.id, 'BI'),
+        ])
+        return [member.id, { ci: ciDownloads.length, bi: biDownloads.length }] as const
+      }))
+      setAdminMemberDownloadCounts(Object.fromEntries(entries))
+    }
+
     void Promise.allSettled([
       adminApi.dashboard(adminToken).then(setAdminStats),
-      adminApi.members(adminToken).then(setAdminMemberData),
+      loadMembers(),
     ]).then((results) => {
       if (results.some((result) => result.status === 'rejected' && result.reason instanceof AuthError && result.reason.status === 401)) {
         setAdminToken('')
@@ -279,7 +566,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
       custom: Array.from({ length: 12 }, (_, index) => `${index + 1}구간`),
     } as const
     const generationXAxisLabels = generationXAxisLabelsByPeriod[dashboardPeriod]
-    const dashboardSectionLabels = { overview: '대시보드', generation: '생성통계', download: '다운로드 통계', signup: '가입 통계', requests: '개선 요청', members: '회원 목록', credits: '크레딧 통계' }
+    const dashboardSectionLabels: Record<DashboardSection, string> = { overview: '대시보드', generation: '', download: '', signup: '', requests: '개선 요청', members: '회원 목록', admins: '관리자 목록', credits: '', 'ci-generations': 'CI 생성 목록', 'bi-generations': 'BI 생성 목록' }
     const calendarDays = getCalendarDays(dashboardCalendarMonth)
     const calendarMonthLabel = `${dashboardCalendarMonth.getFullYear()}년 ${dashboardCalendarMonth.getMonth() + 1}월`
     const customRangeLabel = dashboardCustomStart && dashboardCustomEnd
@@ -426,20 +713,43 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     const logoGenerationTrend = logoGenerationTrendByPeriod[dashboardPeriod]
     const logoGenerationTrendMax = Math.max(...logoGenerationTrend.ci, ...logoGenerationTrend.bi)
 
+    const surveyImprovementCategories = [
+      '로고 생성·재생성',
+      '브랜드 맞춤 로고',
+      '로고 수정',
+      '유사 상표 확인',
+      '로고 저장·활용',
+      '기타',
+    ] as const
+    const surveyImprovementStatsByPeriod = {
+      daily: [184, 160, 128, 86, 62, 18],
+      weekly: [1284, 1116, 893, 604, 421, 97],
+      monthly: [4920, 4310, 3460, 2360, 1640, 380],
+      custom: [612, 528, 421, 286, 198, 46],
+    } as const
+    const selectedSurveyImprovementStats = surveyImprovementCategories.map((label, index) => ({
+      label,
+      value: surveyImprovementStatsByPeriod[dashboardPeriod][index],
+    }))
+    const surveyImprovementMax = Math.max(...selectedSurveyImprovementStats.map(({ value }) => value))
+    const surveyImprovementTotal = selectedSurveyImprovementStats.reduce((total, { value }) => total + value, 0)
+    const allAdminMembers: AdminMemberTableRow[] = adminMemberData.length > 0 ? adminMemberData : previewAdminMembers
+    const displayedAdminMembers = allAdminMembers.filter((member) => matchesAdminMemberSearch(memberSearchQuery, member.email))
+
     return (
       <main className="admin-dashboard-screen">
         <aside className="admin-sidebar" aria-label="관리자 메뉴">
           <div className="admin-brand"><span className="admin-brand-mark"><Sparkles size={25} strokeWidth={1.8} /></span><strong>GenMark <em>AI</em></strong></div>
           <nav className="admin-menu">
             <button className={`admin-menu-item ${dashboardSection === 'overview' ? 'active' : ''}`} type="button" onClick={() => setDashboardSection('overview')}><House size={19} strokeWidth={1.8} /><span>대시보드</span></button>
-            <div className="admin-menu-group"><button className={`admin-menu-item ${dashboardSection === 'members' ? 'active' : ''}`} type="button" aria-expanded={isMemberMenuOpen} onClick={() => setIsMemberMenuOpen((open) => !open)}><UsersRound size={19} strokeWidth={1.8} /><span>회원관리</span><ChevronDown className={isMemberMenuOpen ? 'menu-chevron-open' : ''} size={15} /></button>{isMemberMenuOpen && <div className="admin-submenu active-submenu"><button className={dashboardSection === 'members' ? 'active' : ''} type="button" onClick={() => setDashboardSection('members')}>회원목록</button><span>관리자</span></div>}</div>
-            <div className="admin-menu-group"><button className={`admin-menu-item ${['signup', 'generation', 'download', 'credits'].includes(dashboardSection) ? 'active' : ''}`} type="button" aria-expanded={isStatsMenuOpen} onClick={() => setIsStatsMenuOpen((open) => !open)}><BarChart3 size={19} strokeWidth={1.8} /><span>통계</span><ChevronDown className={isStatsMenuOpen ? 'menu-chevron-open' : ''} size={15} /></button>{isStatsMenuOpen && <div className="admin-submenu active-submenu"><button className={dashboardSection === 'signup' ? 'active' : ''} type="button" onClick={() => setDashboardSection('signup')}>가입 통계</button><button className={dashboardSection === 'generation' ? 'active' : ''} type="button" onClick={() => setDashboardSection('generation')}>생성통계</button><button className={dashboardSection === 'download' ? 'active' : ''} type="button" onClick={() => setDashboardSection('download')}>다운로드 통계</button><button className={dashboardSection === 'credits' ? 'active' : ''} type="button" onClick={() => setDashboardSection('credits')}>크레딧 통계</button></div>}</div>
+            <div className="admin-menu-group"><button className={`admin-menu-item ${['members', 'admins'].includes(dashboardSection) ? 'active' : ''}`} type="button" aria-expanded={isMemberMenuOpen} onClick={() => setIsMemberMenuOpen((open) => !open)}><UsersRound size={19} strokeWidth={1.8} /><span>회원관리</span><ChevronDown className={isMemberMenuOpen ? 'menu-chevron-open' : ''} size={15} /></button>{isMemberMenuOpen && <div className="admin-submenu active-submenu"><button className={dashboardSection === 'members' ? 'active' : ''} type="button" onClick={() => setDashboardSection('members')}>회원목록</button><button className={dashboardSection === 'admins' ? 'active' : ''} type="button" onClick={() => setDashboardSection('admins')}>관리자 목록</button></div>}</div>
+            <div className="admin-menu-group"><button className={`admin-menu-item ${['ci-generations', 'bi-generations'].includes(dashboardSection) ? 'active' : ''}`} type="button" aria-expanded={isStatsMenuOpen} onClick={() => setIsStatsMenuOpen((open) => !open)}><BarChart3 size={19} strokeWidth={1.8} /><span>로고 생성 목록</span><ChevronDown className={isStatsMenuOpen ? 'menu-chevron-open' : ''} size={15} /></button>{isStatsMenuOpen && <div className="admin-submenu active-submenu"><button className={dashboardSection === 'ci-generations' ? 'active' : ''} type="button" onClick={() => setDashboardSection('ci-generations')}>CI 생성 목록</button><button className={dashboardSection === 'bi-generations' ? 'active' : ''} type="button" onClick={() => setDashboardSection('bi-generations')}>BI 생성 목록</button></div>}</div>
             <button className={`admin-menu-item ${dashboardSection === 'requests' ? 'active' : ''}`} type="button" onClick={() => setDashboardSection('requests')}><ThumbsUp size={19} strokeWidth={1.8} /><span>개선 요청</span></button>
           </nav>
         </aside>
 
         <section className="admin-dashboard-content">
-          {dashboardSection !== 'requests' && <header className="admin-dashboard-header">
+          <header className="admin-dashboard-header">
              <div><p className="admin-eyebrow">ADMIN · ANALYTICS</p><h1>GenMark AI {dashboardSectionLabels[dashboardSection]}</h1>{adminStats && <p className="admin-live-status">실시간 API 연결됨 · 회원 {adminStats.totalMembers}명 · 생성 {adminStats.totalGenerations}건</p>}</div>
             <div className="admin-header-actions" ref={adminAccountMenuRef}>
               <button className="admin-account-trigger" type="button" aria-label="관리자 계정 메뉴" aria-expanded={isAdminMenuOpen} onClick={() => setIsAdminMenuOpen((open) => !open)}>
@@ -454,9 +764,9 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
                 <button type="button" onClick={saveAdminId}>저장</button>
               </div>}
             </div>
-          </header>}
+          </header>
 
-          {(dashboardSection === 'overview' || dashboardSection === 'generation' || dashboardSection === 'signup' || dashboardSection === 'download' || dashboardSection === 'credits') && <section className="admin-period-card">
+          {dashboardSection === 'overview' && <section className="admin-period-card">
             <div className="admin-period-picker" ref={dashboardCalendarRef}>
               <div className="admin-period-tabs" role="tablist" aria-label="통계 기간">
                 {(Object.keys(periodLabels) as Array<keyof typeof periodLabels>).map((period) => <button key={period} className={dashboardPeriod === period ? 'active' : ''} type="button" role="tab" aria-selected={dashboardPeriod === period} onClick={() => handleDashboardPeriodChange(period)}>{periodLabels[period]}{period === 'custom' && <CalendarDays size={12} />}</button>)}
@@ -494,10 +804,97 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
           </section>}
 
           {dashboardSection === 'overview' ? <>
-            <section className="admin-overview-chart-grid" aria-label="대시보드 핵심 지표"><article className="admin-card admin-overview-chart-card"><div className="admin-overview-chart-heading"><div><p>가입자 수</p><strong>{selectedSignupData.total}<small>명</small></strong><span className="admin-positive">{selectedSignupData.totalDelta} <ArrowUpRight size={14} /></span></div><span className="admin-kpi-icon purple"><UsersRound size={19} /></span></div><div className="admin-mini-line-chart"><svg viewBox="0 0 600 190" role="img" aria-label={periodLabels[dashboardPeriod] + ' 가입자 수 추이'}><defs><linearGradient id="overviewLineFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#8d70ed" stopOpacity=".24" /><stop offset="1" stopColor="#8d70ed" stopOpacity=".02" /></linearGradient></defs><path d={overviewSignupAreaPath} fill="url(#overviewLineFill)" /><path d={overviewSignupChartPath} fill="none" stroke="#8d70ed" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />{overviewSignupChartPoints.map((point, index) => <g key={point.label + point.value} role="button" tabIndex={0} aria-label={point.label + ' 가입자 ' + point.value.toLocaleString() + '명'} onMouseEnter={() => setHoveredOverviewSignupPoint(index)} onMouseLeave={() => setHoveredOverviewSignupPoint(null)} onFocus={() => setHoveredOverviewSignupPoint(index)} onBlur={() => setHoveredOverviewSignupPoint(null)}><circle cx={point.x} cy={point.y} r={hoveredOverviewSignupPoint === index ? 8 : 4.5} fill="#fff" stroke="#8d70ed" strokeWidth={hoveredOverviewSignupPoint === index ? 4 : 3} />{hoveredOverviewSignupPoint === index && <g className="admin-chart-tooltip" pointerEvents="none"><rect x={Math.min(Math.max(point.x - 48, 0), 504)} y={Math.max(point.y - 52, 4)} width="96" height="39" rx="9" fill="#202945" /><text x={Math.min(Math.max(point.x, 48), 552)} y={Math.max(point.y - 34, 22)} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="700">{point.label}</text><text x={Math.min(Math.max(point.x, 48), 552)} y={Math.max(point.y - 18, 38)} textAnchor="middle" fill="#dcd5ff" fontSize="10">{point.value.toLocaleString()}명 가입</text></g>}</g>)}</svg><div className="admin-mini-line-axis" style={{ gridTemplateColumns: 'repeat(' + overviewSignupTrend.labels.length + ', minmax(0, 1fr))' }}>{overviewSignupTrend.labels.map((label) => <span key={label}>{label}</span>)}</div></div></article><article className="admin-card admin-overview-chart-card"><div className="admin-overview-chart-heading"><div><p>로고 생성</p><strong>{selectedPeriodData.total}<small>건</small></strong><span className="admin-positive">{selectedPeriodData.totalDelta} <ArrowUpRight size={14} /></span></div><span className="admin-kpi-icon pink"><Sparkles size={19} /></span></div><div className="admin-mini-dual-bars" aria-label={periodLabels[dashboardPeriod] + ' CI BI 로고 생성량'}>{logoGenerationTrend.labels.map((label, index) => <div className="admin-mini-dual-group" key={label}><div><i className="ci" style={{ height: Math.max(12, logoGenerationTrend.ci[index] / logoGenerationTrendMax * 100) + '%' }} /><i className="bi" style={{ height: Math.max(12, logoGenerationTrend.bi[index] / logoGenerationTrendMax * 100) + '%' }} /></div><span>{label}</span></div>)}</div><div className="admin-mini-dual-legend"><span><i className="ci" />CI</span><span><i className="bi" />BI</span></div></article><article className="admin-card admin-overview-chart-card"><div className="admin-overview-chart-heading"><div><p>전체 다운로드</p><strong>{selectedDownloadData.total}<small>건</small></strong><span className="admin-positive">{selectedDownloadData.conversion}% 전환 <ArrowUpRight size={14} /></span></div><span className="admin-kpi-icon orange"><Download size={19} /></span></div><div className="admin-download-overview-graph"><div className="admin-overview-donut"><span>{selectedDownloadData.total}<small>전체</small></span></div><div className="admin-overview-legend"><span><i className="ci" />CI <strong>{selectedDownloadData.ciShare}%</strong></span><span><i className="bi" />BI <strong>{selectedDownloadData.biShare}%</strong></span></div></div></article><article className="admin-card admin-overview-chart-card"><div className="admin-overview-chart-heading"><div><p>크레딧 사용량</p><strong>{selectedCreditData.totalUse}<small>개</small></strong><span className="admin-positive">{selectedCreditData.totalUseDelta} <ArrowUpRight size={14} /></span></div><span className="admin-kpi-icon blue"><ClipboardCheck size={19} /></span></div><div className="admin-credit-overview-graph"><div><span>사용량</span><i><b className="purple" style={{ width: Math.min(100, Number(selectedCreditData.totalUse.replace(/,/g, '')) / Number(selectedCreditData.totalPayment.replace(/,/g, '')) * 100) + '%' }} /></i><strong>{selectedCreditData.totalUse}</strong></div><div><span>결제량</span><i><b className="pink" style={{ width: '100%' }} /></i><strong>{selectedCreditData.totalPayment}</strong></div></div><span className="admin-overview-chart-caption">크레딧 사용량 / 결제량 비교</span></article></section>
+            <section className="admin-overview-chart-grid" aria-label="대시보드 핵심 지표">
+              <article className="admin-card admin-overview-chart-card">
+                <div className="admin-overview-chart-heading">
+                  <div><p>가입자 수</p><strong>{selectedSignupData.total}<small>명</small></strong><span className="admin-positive">{selectedSignupData.totalDelta} <ArrowUpRight size={14} /></span></div>
+                  <span className="admin-kpi-icon purple"><UsersRound size={19} /></span>
+                </div>
+                <div className="admin-mini-line-chart">
+                  <svg viewBox="0 0 600 190" role="img" aria-label={periodLabels[dashboardPeriod] + ' 가입자 수 추이'}>
+                    <defs><linearGradient id="overviewLineFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#8d70ed" stopOpacity=".24" /><stop offset="1" stopColor="#8d70ed" stopOpacity=".02" /></linearGradient></defs>
+                    <path d={overviewSignupAreaPath} fill="url(#overviewLineFill)" />
+                    <path d={overviewSignupChartPath} fill="none" stroke="#8d70ed" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                    {overviewSignupChartPoints.map((point, index) => <g key={point.label + point.value} role="button" tabIndex={0} aria-label={point.label + ' 가입자 ' + point.value.toLocaleString() + '명'} onMouseEnter={() => setHoveredOverviewSignupPoint(index)} onMouseLeave={() => setHoveredOverviewSignupPoint(null)} onFocus={() => setHoveredOverviewSignupPoint(index)} onBlur={() => setHoveredOverviewSignupPoint(null)}><circle cx={point.x} cy={point.y} r={hoveredOverviewSignupPoint === index ? 8 : 4.5} fill="#fff" stroke="#8d70ed" strokeWidth={hoveredOverviewSignupPoint === index ? 4 : 3} />{hoveredOverviewSignupPoint === index && <g className="admin-chart-tooltip" pointerEvents="none"><rect x={Math.min(Math.max(point.x - 48, 0), 504)} y={Math.max(point.y - 52, 4)} width="96" height="39" rx="9" fill="#202945" /><text x={Math.min(Math.max(point.x, 48), 552)} y={Math.max(point.y - 34, 22)} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="700">{point.label}</text><text x={Math.min(Math.max(point.x, 48), 552)} y={Math.max(point.y - 18, 38)} textAnchor="middle" fill="#dcd5ff" fontSize="10">{point.value.toLocaleString()}명 가입</text></g>}</g>)}
+                  </svg>
+                  <div className="admin-mini-line-axis" style={{ gridTemplateColumns: 'repeat(' + overviewSignupTrend.labels.length + ', minmax(0, 1fr))' }}>{overviewSignupTrend.labels.map((label) => <span key={label}>{label}</span>)}</div>
+                </div>
+              </article>
+
+              <article className="admin-card admin-overview-chart-card">
+                <div className="admin-overview-chart-heading">
+                  <div><p>로고 생성 건수</p><strong>{selectedPeriodData.total}<small>건</small></strong><span className="admin-positive">{selectedPeriodData.totalDelta} <ArrowUpRight size={14} /></span></div>
+                  <span className="admin-kpi-icon pink"><Sparkles size={19} /></span>
+                </div>
+                <div className="admin-mini-dual-bars" aria-label={periodLabels[dashboardPeriod] + ' CI BI 로고 생성량'}>{logoGenerationTrend.labels.map((label, index) => <div className="admin-mini-dual-group" key={label}><div><i className="ci" style={{ height: Math.max(12, logoGenerationTrend.ci[index] / logoGenerationTrendMax * 100) + '%' }} /><i className="bi" style={{ height: Math.max(12, logoGenerationTrend.bi[index] / logoGenerationTrendMax * 100) + '%' }} /></div><span>{label}</span></div>)}</div>
+                <div className="admin-mini-dual-legend"><span><i className="ci" />CI</span><span><i className="bi" />BI</span></div>
+              </article>
+
+              <article className="admin-card admin-overview-chart-card">
+                <div className="admin-overview-chart-heading">
+                  <div><p>전체 다운로드 건수</p><strong>{selectedDownloadData.total}<small>건</small></strong><span className="admin-positive">{selectedDownloadData.conversion}% 전환 <ArrowUpRight size={14} /></span></div>
+                  <span className="admin-kpi-icon orange"><Download size={19} /></span>
+                </div>
+                <div className="admin-download-overview-graph"><div className="admin-overview-donut"><span>{selectedDownloadData.total}<small>전체</small></span></div><div className="admin-overview-legend"><span><i className="ci" />CI <strong>{selectedDownloadData.ciShare}%</strong></span><span><i className="bi" />BI <strong>{selectedDownloadData.biShare}%</strong></span></div></div>
+              </article>
+
+              <article className="admin-card admin-overview-chart-card admin-survey-overview-card" aria-labelledby="admin-survey-overview-title">
+                <div className="admin-overview-chart-heading">
+                  <div><p id="admin-survey-overview-title">설문 개선 항목</p><strong>{surveyImprovementTotal.toLocaleString()}<small>건</small></strong><span className="admin-positive">{periodLabels[dashboardPeriod]} 응답</span></div>
+                  <span className="admin-kpi-icon blue"><ClipboardCheck size={19} /></span>
+                </div>
+                <div className="admin-survey-improvement-bars" role="list" aria-label="설문 개선 항목별 응답 통계">
+                  {selectedSurveyImprovementStats.map(({ label, value }) => <div className="admin-survey-improvement-row" key={label} role="listitem" aria-label={label + ' ' + value.toLocaleString() + '건'}><div><span>{label}</span><strong>{value.toLocaleString()}건</strong></div><i aria-hidden="true"><b style={{ width: `${surveyImprovementMax ? value / surveyImprovementMax * 100 : 0}%` }} /></i></div>)}
+                </div>
+              </article>
+            </section>
           </> : dashboardSection === 'members' ? <>
-            <section className="admin-card admin-member-list-card"><div className="admin-card-heading"><div><h2>회원 목록</h2><p>현재 가입한 회원의 서비스 이용 현황입니다.</p></div><span className="admin-status-label">총 1명</span></div><div className="admin-member-table-wrap"><table className="admin-member-table"><thead><tr><th>아이디</th><th>가입일자</th><th>다운로드 횟수</th><th>크레딧 사용량</th><th>크레딧 결제일자</th><th>보유 크레딧</th></tr></thead><tbody><tr><td data-label="아이디"><div className="admin-member-identity"><span className="admin-member-avatar"><UserRound size={17} /></span><div><strong>minji.kim@example.com</strong><small>김민지</small></div></div></td><td data-label="가입일자">2026.08.05</td><td data-label="다운로드 횟수"><strong>3회</strong></td><td data-label="크레딧 사용량"><strong>8개</strong></td><td data-label="크레딧 결제일자">2026.08.05</td><td data-label="보유 크레딧"><strong>12개</strong></td></tr></tbody></table></div></section>
-          </> : dashboardSection === 'generation' ? <>
+            <section className="admin-card admin-member-list-card" aria-labelledby="admin-member-list-title">
+              <div className="admin-card-heading admin-member-list-heading"><div><h2 id="admin-member-list-title">회원 목록</h2><p>회원별 생성·다운로드 현황과 잔여 크레딧을 확인합니다.</p></div><AdminMemberIdSearch id="admin-member-search" value={memberSearchQuery} onChange={setMemberSearchQuery} resultCount={displayedAdminMembers.length} totalCount={allAdminMembers.length} placeholder="회원 아이디(이메일) 입력" /></div>
+              <div className="admin-member-table-wrap" role="region" tabIndex={0} aria-label="회원 목록 표, 좌우로 스크롤할 수 있습니다">
+                <table className="admin-member-table admin-member-usage-table">
+                  <caption className="admin-sr-only">회원별 로고 생성, 다운로드 및 잔여 크레딧 목록</caption>
+                  <thead><tr><th scope="col">No.</th><th scope="col">아이디(이메일)</th><th scope="col">이름</th><th scope="col">가입일자</th><th scope="col">CI 생성 건수</th><th scope="col">BI 생성 건수</th><th scope="col">CI 다운로드 건수</th><th scope="col">BI 다운로드 건수</th><th scope="col">잔여 크레딧</th></tr></thead>
+                  <tbody>{displayedAdminMembers.length === 0 ? <tr><td colSpan={9} className="admin-empty-table-state">입력한 회원 아이디와 일치하는 회원이 없습니다.</td></tr> : displayedAdminMembers.map((member, index) => {
+                    const downloadCounts = adminMemberDownloadCounts[member.id]
+                    const ciDownloads = downloadCounts?.ci ?? member.ciDownloads
+                    const biDownloads = downloadCounts?.bi ?? member.biDownloads
+                    return <tr key={member.id}>
+                      <td data-label="No." className="admin-index-cell">{index + 1}</td>
+                      <td data-label="아이디(이메일)" className="admin-member-email"><strong title={member.email}>{member.email}</strong></td>
+                      <td data-label="이름"><div className="admin-member-identity"><span className="admin-member-avatar"><UserRound size={17} /></span><strong>{member.name || '이름 미등록'}</strong></div></td>
+                      <td data-label="가입일자">{formatAdminDate(member.createdAt)}</td>
+                      <td data-label="CI 생성 건수" className="admin-count-cell"><strong>{member.ciGenerations.toLocaleString()}</strong><small>건</small></td>
+                      <td data-label="BI 생성 건수" className="admin-count-cell"><strong>{member.biGenerations.toLocaleString()}</strong><small>건</small></td>
+                      <td data-label="CI 다운로드 건수" className="admin-count-cell"><strong>{ciDownloads === undefined ? '—' : ciDownloads.toLocaleString()}</strong>{ciDownloads !== undefined && <small>건</small>}</td>
+                      <td data-label="BI 다운로드 건수" className="admin-count-cell"><strong>{biDownloads === undefined ? '—' : biDownloads.toLocaleString()}</strong>{biDownloads !== undefined && <small>건</small>}</td>
+                      <td data-label="잔여 크레딧" className="admin-credit-cell"><strong>{member.creditBalance.toLocaleString()}</strong><small>개</small></td>
+                    </tr>
+                  })}</tbody>
+                </table>
+              </div>
+            </section>
+          </> : dashboardSection === 'admins' ? <>
+            <section className="admin-card admin-member-list-card" aria-labelledby="admin-account-list-title">
+              <div className="admin-card-heading"><div><h2 id="admin-account-list-title">관리자 목록</h2><p>관리자 계정의 생성일과 최근 접속 기록을 확인합니다.</p></div><span className="admin-status-label">총 {previewAdminAccounts.length.toLocaleString()}명</span></div>
+              <div className="admin-member-table-wrap" role="region" tabIndex={0} aria-label="관리자 목록 표">
+                <table className="admin-member-table admin-account-table">
+                  <caption className="admin-sr-only">관리자 계정 생성일과 마지막 접속 기록 목록</caption>
+                  <thead><tr><th scope="col">No.</th><th scope="col">관리자 아이디</th><th scope="col">이름</th><th scope="col">생성 날짜</th><th scope="col">마지막 접속 시간</th></tr></thead>
+                  <tbody>{previewAdminAccounts.map((account, index) => <tr key={account.id}>
+                    <td data-label="No." className="admin-index-cell">{index + 1}</td>
+                    <td data-label="관리자 아이디" className="admin-member-email"><strong title={account.id}>{account.id}</strong></td>
+                    <td data-label="이름"><div className="admin-member-identity"><span className="admin-member-avatar admin-avatar-neutral"><ShieldCheck size={17} /></span><strong>{account.name}</strong></div></td>
+                    <td data-label="생성 날짜">{account.createdAt}</td>
+                    <td data-label="마지막 접속 시간"><span className="admin-last-access"><Clock3 size={15} />{account.lastAccessAt}</span></td>
+                  </tr>)}</tbody>
+                </table>
+              </div>
+            </section>
+          </> : dashboardSection === 'ci-generations' ? <AdminLogoGenerationList track="CI" members={ciGenerationMembers} openPanel={openLogoPanel} setOpenPanel={setOpenLogoPanel} />
+          : dashboardSection === 'bi-generations' ? <AdminLogoGenerationList track="BI" members={biGenerationMembers} openPanel={openLogoPanel} setOpenPanel={setOpenLogoPanel} />
+          : dashboardSection === 'requests' ? <AdminSurveyResponseTable />
+          : dashboardSection === 'generation' ? <>
           <section className="admin-kpi-grid admin-generation-kpi-grid admin-generation-single-kpi-grid" aria-label="생성 핵심 지표">
             <article className="admin-kpi-card"><span className="admin-kpi-icon purple"><Sparkles size={19} /></span><div><p>총 로고 생성</p><strong>{selectedPeriodData.total}<small>건</small></strong><span className="admin-positive">{selectedPeriodData.totalDelta} <ArrowUpRight size={14} /></span></div></article>
           </section>
@@ -535,5 +932,5 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
   }
 
 
-  return standalone || adminToken ? renderDashboardScreen() : renderAdminLoginScreen()
+  return standalone || !ADMIN_LOGIN_REQUIRED || adminToken ? renderDashboardScreen() : renderAdminLoginScreen()
 }

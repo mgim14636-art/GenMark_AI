@@ -306,10 +306,8 @@
 .rating-choice.dislike.selected { border-color: #e48aaf; color: #d25f8a; background: #fff8fb; box-shadow: 0 7px 16px rgb(215 96 145 / .1); }
 .rating-caption { display: flex; justify-content: space-between; margin-top: 7px; color: #9ba0ae; font-size: 12px; }
 .improvement-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.improvement-option { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 45px; border: 1px solid #e6dff4; border-radius: 12px; color: #697187; background: #fff; font-size: 13px; letter-spacing: -.06em; }
-.improvement-option > span { display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid #cfc1ee; border-radius: 50%; color: #8c5de8; }
-.improvement-option.selected { border-color: #a065ec; color: #744bd0; background: #faf6ff; }
-.improvement-option.selected > span { color: #fff; border-color: #965fe8; background: #965fe8; }
+.improvement-option { display: inline-flex; align-items: center; justify-content: center; min-height: 45px; border: 1px solid #e6dff4; border-radius: 12px; color: #697187; background: #fff; font-size: 13px; letter-spacing: -.06em; }
+.improvement-option.selected { border-color: #8d70ed; color: #6644c5; background: #eee8ff; }
 .survey-section textarea { width: 100%; min-height: 150px; margin-top: 17px; resize: vertical; border: 1px solid #dacdf1; border-radius: 15px; padding: 16px; color: #26304a; background: #fff; font: inherit; font-size: 14px; line-height: 1.7; }
 .survey-section textarea::placeholder { color: #a5a9b5; }
 .survey-character-count { margin-top: 6px; color: #a1a6b4; font-size: 12px; text-align: right; }
@@ -6805,18 +6803,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   letter-spacing: -.06em;
 }
 
-.modal-improvement-option > span {
-  display: grid;
-  width: 17px;
-  height: 17px;
-  place-items: center;
-  border: 1px solid #cfc1ee;
-  border-radius: 50%;
-  color: #8c5de8;
-}
-
-.modal-improvement-option.selected { border-color: #a065ec; color: #744bd0; background: #faf6ff; }
-.modal-improvement-option.selected > span { color: #fff; border-color: #965fe8; background: #965fe8; }
+.modal-improvement-option.selected { border-color: #8d70ed; color: #6644c5; background: #eee8ff; }
 
 .modal-survey-block textarea {
   width: 100%;
