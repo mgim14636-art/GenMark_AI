@@ -131,7 +131,7 @@ public class LogoGenerationService {
     }
 
     /** 재생성 시 한 번에 만드는 시안 수. AI 서버의 모티프 순환 배정 주기와 같아야 한다. */
-    private static final int NUM_VARIANTS = 4;
+    private static final int NUM_VARIANTS = 1;
 
     /**
      * 재생성 시 AI에게 넘길 모티프 시작 위치 (F12-2).
@@ -174,7 +174,7 @@ public class LogoGenerationService {
         }
         List<LogoCandidate> candidates = candidateRepository
                 .findByGenerationIdOrderByCandidateOrder(generation.getId());
-        if (candidates.size() != 4) {
+        if (candidates.size() != NUM_VARIANTS) {
             throw new ApiException(ErrorCode.AI_INCOMPLETE_RESULT);
         }
         return candidates.stream().map(this::toResponse).toList();
@@ -197,7 +197,29 @@ public class LogoGenerationService {
     }
 
     private LogoCandidateResponse toResponse(LogoCandidate c) {
-        return new LogoCandidateResponse(c.getPublicId(), c.getCandidateOrder(), c.getStorageKey(), c.getMimeType(),
+        return new LogoCandidateResponse(c.getPublicId(), c.getCandidateOrder(), c.getStorageKey(), svgUrl(c), svgEdited(c), c.getMimeType(),
                 c.getWidth(), c.getHeight(), c.isSelected(), c.getPinnedAt(), c.getCreatedAt());
+    }
+
+    private String svgUrl(LogoCandidate candidate) {
+        if (candidate.getAiMetadataJson() == null) return null;
+        try {
+            Map<?, ?> metadata = objectMapper.readValue(candidate.getAiMetadataJson(), Map.class);
+            if (!Boolean.TRUE.equals(metadata.get("svgAvailable"))) return null;
+            return "/api/v1/projects/%s/logo-candidates/%s/svg".formatted(
+                    candidate.getGeneration().getProject().getPublicId(), candidate.getPublicId());
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private boolean svgEdited(LogoCandidate candidate) {
+        if (candidate.getAiMetadataJson() == null) return false;
+        try {
+            Map<?, ?> metadata = objectMapper.readValue(candidate.getAiMetadataJson(), Map.class);
+            return Boolean.TRUE.equals(metadata.get("svgEdited"));
+        } catch (JsonProcessingException e) {
+            return false;
+        }
     }
 }

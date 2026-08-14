@@ -37,10 +37,15 @@ public class FastApiLogoAiClient implements LogoAiClient {
     private static GeneratedLogo toGeneratedLogo(Map<?, ?> item) {
         Object image = item.get("imageBase64");
         if (!(image instanceof String value) || value.isBlank()) return null;
-        return new GeneratedLogo(value, toInteger(item.get("seed")), toInteger(item.get("variantIndex")));
+        return new GeneratedLogo(value, toInteger(item.get("seed")), toInteger(item.get("variantIndex")),
+                toNonBlankString(item.get("svg")));
     }
 
     private static Integer toInteger(Object value) {
         return value instanceof Number number ? number.intValue() : null;
+    }
+
+    private static String toNonBlankString(Object value) {
+        return value instanceof String string && !string.isBlank() ? string : null;
     }
 }

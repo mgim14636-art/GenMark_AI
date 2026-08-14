@@ -132,7 +132,7 @@ public class BiProject implements ProjectLike {
         survey.put("color_manual", colorList());
         survey.put("style", logoStyle);
         survey.put("additional_requirements", additionalRequirements);
-        survey.put("num_variants", 4);
+        survey.put("num_variants", 1);
         return survey;
     }
 }

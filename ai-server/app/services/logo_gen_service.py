@@ -297,7 +297,7 @@ def _call_image_api(prompt: str, seed: int | None = None):
 
 def generate_logo_variants(
     survey: dict,
-    num_variants: int = 4,
+    num_variants: int = 1,
     steps: int = 4,
     variant_offset: int = 0,
 ):
@@ -372,7 +372,7 @@ def generate_logo_variants(
 
 def generate_logo_from_survey(
     survey: dict,
-    num_variants: int = 4,
+    num_variants: int = 1,
     steps: int = 4,
     variant_offset: int = 0,
 ):

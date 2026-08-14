@@ -21,7 +21,7 @@ class ProjectSurveyTest {
                 .containsEntry("brand_name", "GenMark")
                 .containsEntry("style", "combination")
                 .containsEntry("color_manual", List.of("#112233"))
-                .containsEntry("num_variants", 4);
+                .containsEntry("num_variants", 1);
     }
 
     @Test

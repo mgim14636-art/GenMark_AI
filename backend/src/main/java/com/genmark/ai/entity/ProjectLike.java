@@ -15,6 +15,7 @@ public interface ProjectLike {
     Member getMember();
     ProjectStatus getStatus();
     void setStatus(ProjectStatus status);
+    String getLogoStyle();
     String getColor1();
     String getColor2();
     String getColor3();
