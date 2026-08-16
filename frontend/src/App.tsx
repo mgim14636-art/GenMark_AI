@@ -1225,6 +1225,19 @@ function CustomerApp() {
     })
   }
 
+  // 색을 1개로 줄일 수 있어야 단색 로고를 만들 수 있다. 지금까지 슬롯에 추가(+)만
+  // 있고 삭제가 없어, 직접 지정 모드가 항상 2색으로 시작한 뒤 줄일 방법이 없었다.
+  // 그 결과 AI 서버의 단색 강제 분기가 한 번도 실행되지 않았다(실측 확인됨).
+  const removeManualColor = (slot: number) => {
+    setManualColors((current) => {
+      if (current.length <= 1) return current
+      const next = current.filter((_, index) => index !== slot)
+      setManualColorSlot((active) => Math.min(active, next.length - 1))
+      return next
+    })
+    setManualColorsSelected(true)
+  }
+
   const resetManualColors = () => {
     setManualColors(['#9765e9', '#dcaff5'])
     setManualColorSlot(0)
@@ -2235,7 +2248,14 @@ function CustomerApp() {
                 <button type="button" aria-label="색상 팔레트 닫기" onClick={() => setColorPickerOpen(false)}>×</button>
               </div>
               <div className="tone-picker-slots direct-slots">
-                {manualColors.map((color, slot) => <button key={slot} type="button" className={manualColorSlot === slot ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setManualColorSlot(slot)}><i style={{ background: color }} /><span>{slot < 2 ? `${slot + 1}번째 색` : `추가 색상 ${slot - 1}`}</span></button>)}
+                {manualColors.map((color, slot) => (
+                  <span key={slot} className="tone-picker-slot-wrap">
+                    <button type="button" className={manualColorSlot === slot ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setManualColorSlot(slot)}><i style={{ background: color }} /><span>{slot < 2 ? `${slot + 1}번째 색` : `추가 색상 ${slot - 1}`}</span></button>
+                    {manualColors.length > 1 && (
+                      <button type="button" className="tone-picker-slot-remove" aria-label={`${slot + 1}번째 색 삭제`} onClick={() => removeManualColor(slot)}>×</button>
+                    )}
+                  </span>
+                ))}
               </div>
               <ToneColorPalette
                 value={hexToRgb(manualColors[manualColorSlot] ?? manualColors[0])}
