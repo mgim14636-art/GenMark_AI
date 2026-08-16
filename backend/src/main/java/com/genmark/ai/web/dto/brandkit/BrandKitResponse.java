@@ -20,6 +20,8 @@ public record BrandKitResponse(
         String status,
         String storageKey,
         List<String> storageKeys,
+        boolean preliminary,
+        List<String> warnings,
         String errorCode,
         String errorMessage,
         LocalDateTime startedAt,

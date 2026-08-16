@@ -101,10 +101,7 @@ public class BiProjectService {
         if (r.targetAge() != null) p.setTargetAge(r.targetAge());
         if (r.tone() != null) p.setTone(r.tone());
         if (r.colorMode() != null) p.setColorMode(r.colorMode());
-        if (r.color1() != null) p.setColor1(r.color1());
-        if (r.color2() != null) p.setColor2(r.color2());
-        if (r.color3() != null) p.setColor3(r.color3());
-        if (r.color4() != null) p.setColor4(r.color4());
+        applyPalette(p, r);
         if (r.logoStyle() != null) p.setLogoStyle(r.logoStyle());
         if (r.additionalRequirements() != null) p.setAdditionalRequirements(r.additionalRequirements());
         if (r.logoShape() != null) {
@@ -113,6 +110,32 @@ public class BiProjectService {
             if (logoShape.isEmpty()) p.setAdditionalRequirements(removeLegacyLogoShape(p.getAdditionalRequirements()));
         }
         if (hasBrief(p)) p.setStatus(ProjectStatus.BRIEF_READY);
+    }
+
+    private void applyPalette(BiProject p, BiProjectUpsertRequest r) {
+        if (!Boolean.TRUE.equals(r.paletteReplace())) {
+            if (r.color1() != null) p.setColor1(r.color1());
+            if (r.color2() != null) p.setColor2(r.color2());
+            if (r.color3() != null) p.setColor3(r.color3());
+            if (r.color4() != null) p.setColor4(r.color4());
+            return;
+        }
+
+        if ("TONE".equals(p.getColorMode())) {
+            p.setColor1(null);
+            p.setColor2(null);
+            p.setColor3(null);
+            p.setColor4(null);
+            return;
+        }
+
+        p.setColor1(r.color1());
+        p.setColor2(r.color2());
+        p.setColor3(r.color3());
+        p.setColor4(r.color4());
+        if ("MANUAL".equals(p.getColorMode()) && p.colorList().isEmpty()) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "직접 선택 색상은 한 개 이상 필요합니다.");
+        }
     }
 
     private boolean hasBrief(BiProject p) {

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -48,6 +49,15 @@ public class BrandKit {
     /** 완성된 이미지 경로. 완료 전에는 null. */
     @Column(name = "storage_key", length = 500)
     private String storageKey;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean preliminary = false;
+
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(name = "warnings_json", columnDefinition = "TEXT")
+    @Builder.Default
+    private List<String> warnings = List.of();
 
     @OneToOne(mappedBy = "brandKit", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private BusinessCardInfo businessCardInfo;

@@ -25,13 +25,15 @@ class FastApiTrademarkAiClientTest {
         server.expect(once(), requestTo("http://ai-server:8000/api/v1/similarity/search"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess(responseWithMatches("""
-                        {"applicationNumber":"1","name":"first","category":"42","similarity":50,"imagePath":"a.png"},
+                        {"applicationNumber":"1","name":"first","category":"42","similarity":50,"imagePath":"a.png","note":"외곽선이 유사함"},
                         {"applicationNumber":"2","name":"second","category":"42","similarity":40,"imagePath":"b.png"}
                         """), MediaType.APPLICATION_JSON));
 
         TrademarkAiClient.Result result = client.search("image", "combination", 3);
 
         assertThat(result.matches()).hasSize(2);
+        assertThat(result.matches().get(0).note()).isEqualTo("외곽선이 유사함");
+        assertThat(result.matches().get(1).note()).isNull();
         server.verify();
     }
 

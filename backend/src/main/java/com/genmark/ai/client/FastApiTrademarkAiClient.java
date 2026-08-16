@@ -48,7 +48,7 @@ public class FastApiTrademarkAiClient implements TrademarkAiClient {
         int similarity = number(value.get("similarity"));
         validateScore(similarity);
         return new Match(string(value.get("applicationNumber")), string(value.get("name")),
-                string(value.get("category")), similarity, string(value.get("imagePath")));
+                string(value.get("category")), similarity, string(value.get("imagePath")), string(value.get("note")));
     }
 
     private int number(Object value) {

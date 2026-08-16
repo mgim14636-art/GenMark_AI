@@ -32,8 +32,7 @@ import java.util.zip.ZipOutputStream;
  *
  * <p>킷 종류를 사용자가 고르지 않는다. 프로젝트가 CI인지 BI인지에 따라 자동으로 정해진다.
  *
- * <p><b>AI 서버에 브랜드킷 엔드포인트가 아직 없다.</b> 이 코드는 준비만 되어 있고,
- * 실제로 호출하면 AI_UNAVAILABLE로 실패 처리된다. AI 담당자 작업이 끝나야 동작한다.
+ * <p>AI 서버가 돌려준 임시 결과 여부와 경고도 함께 저장해 화면이 품질 상태를 구분할 수 있게 한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -230,6 +229,8 @@ public class BrandKitService {
                 kit.getStatus().name(),
                 kit.getStorageKey(),
                 storage.brandKitStorageKeys(kit.getPublicId(), kit.getStorageKey()),
+                kit.isPreliminary(),
+                kit.getWarnings(),
                 kit.getErrorCode(),
                 kit.getErrorMessage(),
                 kit.getStartedAt(),

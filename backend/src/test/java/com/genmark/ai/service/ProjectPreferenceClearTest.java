@@ -53,4 +53,41 @@ class ProjectPreferenceClearTest {
         assertThat(project.getLogoShape()).isNull();
         assertThat(project.getAdditionalRequirements()).isNull();
     }
+
+    @Test
+    void ciPaletteReplaceRemovesStaleTrailingColors() {
+        CiProjectRepository repository = mock(CiProjectRepository.class);
+        CiProject project = CiProject.builder()
+                .publicId("ci-2").industry("TECH").companyName("GenMark")
+                .colorMode("MANUAL")
+                .color1("#111111").color2("#222222").color3("#333333").color4("#444444")
+                .build();
+        when(repository.findByPublicIdAndMemberId("ci-2", 1L)).thenReturn(Optional.of(project));
+
+        new CiProjectService(repository).update(
+                "ci-2", 1L,
+                new CiProjectUpsertRequest(null, null, null, null, "MANUAL",
+                        "#AAAAAA", "#BBBBBB", null, null, null, null, null, true));
+
+        assertThat(project.colorList()).containsExactly("#AAAAAA", "#BBBBBB");
+    }
+
+    @Test
+    void biTonePaletteReplaceClearsAllManualColors() {
+        BiProjectRepository repository = mock(BiProjectRepository.class);
+        BiProject project = BiProject.builder()
+                .publicId("bi-2").industry("PET").brandName("GenMark")
+                .colorMode("MANUAL")
+                .color1("#111111").color2("#222222")
+                .build();
+        when(repository.findByPublicIdAndMemberId("bi-2", 1L)).thenReturn(Optional.of(project));
+
+        new BiProjectService(repository).update(
+                "bi-2", 1L,
+                new BiProjectUpsertRequest(null, null, null, null, null, null, null, "따뜻한",
+                        "TONE", null, null, null, null, null, null, null, true));
+
+        assertThat(project.getColorMode()).isEqualTo("TONE");
+        assertThat(project.colorList()).isEmpty();
+    }
 }

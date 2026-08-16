@@ -109,6 +109,11 @@ CREATE TABLE IF NOT EXISTS member_surveys (
     member_id BIGINT PRIMARY KEY,
     completed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     credited BOOLEAN NOT NULL DEFAULT FALSE,
+    rating TINYINT NULL,
+    improvements_json TEXT NULL,
+    comment VARCHAR(500) NULL,
+    survey_version SMALLINT NOT NULL DEFAULT 1,
+    CONSTRAINT chk_survey_rating CHECK (rating IS NULL OR rating IN (1, 5)),
     CONSTRAINT fk_survey_member FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -191,6 +196,8 @@ CREATE TABLE IF NOT EXISTS brand_kits (
     kit_type VARCHAR(20) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'QUEUED',
     storage_key VARCHAR(500) NULL,
+    preliminary BOOLEAN NOT NULL DEFAULT FALSE,
+    warnings_json TEXT NULL,
     error_code VARCHAR(50) NULL,
     error_message TEXT NULL,
     started_at DATETIME NULL,
@@ -243,6 +250,7 @@ CREATE TABLE IF NOT EXISTS trademark_matches (
     category VARCHAR(100) NULL,
     similarity INT NOT NULL,
     image_path VARCHAR(500) NULL,
+    note TEXT NULL,
     CONSTRAINT fk_match_analysis FOREIGN KEY (analysis_id) REFERENCES trademark_analyses(id) ON DELETE CASCADE,
     CONSTRAINT uq_match_rank UNIQUE (analysis_id, match_rank),
     CONSTRAINT chk_match_similarity CHECK (similarity BETWEEN 0 AND 100)

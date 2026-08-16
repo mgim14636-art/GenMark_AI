@@ -1,11 +1,15 @@
 package com.genmark.ai.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.genmark.ai.entity.CreditHistory;
 import com.genmark.ai.entity.Member;
 import com.genmark.ai.entity.MemberSurvey;
 import com.genmark.ai.repository.MemberRepository;
 import com.genmark.ai.repository.MemberSurveyRepository;
 import com.genmark.ai.web.dto.survey.SurveyResponse;
+import com.genmark.ai.web.dto.survey.SurveySubmitRequest;
 import com.genmark.ai.web.exception.ApiException;
 import com.genmark.ai.web.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +30,7 @@ public class SurveyService {
     private final MemberSurveyRepository surveyRepository;
     private final MemberRepository memberRepository;
     private final CreditService creditService;
+    private final ObjectMapper objectMapper;
 
     public SurveyResponse status(Long memberId) {
         boolean completed = surveyRepository.existsByMemberId(memberId);
@@ -33,13 +38,13 @@ public class SurveyService {
     }
 
     /**
-     * 설문 응답을 기록하고 크레딧 2개를 지급한다.
+     * 설문 응답을 기록하고 크레딧 1개를 지급한다.
      *
      * <p>기록과 지급이 한 트랜잭션 안에 있으므로 "응답은 됐는데 크레딧은 안 들어온" 상태가
      * 생기지 않는다.
      */
     @Transactional
-    public SurveyResponse submit(Long memberId) {
+    public SurveyResponse submit(Long memberId, SurveySubmitRequest request) {
         if (surveyRepository.existsByMemberId(memberId)) {
             throw new ApiException(ErrorCode.SURVEY_ALREADY_SUBMITTED);
         }
@@ -49,9 +54,32 @@ public class SurveyService {
         surveyRepository.save(MemberSurvey.builder()
                 .member(member)
                 .credited(true)
+                .rating(request == null ? null : request.rating())
+                .improvementsJson(writeImprovements(request))
+                .comment(normalizeComment(request == null ? null : request.comment()))
+                .surveyVersion(1)
                 .build());
 
         int balance = creditService.grant(memberId, CreditService.SURVEY_GRANT, CreditHistory.Reason.SURVEY);
         return new SurveyResponse(true, balance);
+    }
+
+    public SurveyResponse submit(Long memberId) {
+        return submit(memberId, null);
+    }
+
+    private String writeImprovements(SurveySubmitRequest request) {
+        if (request == null || request.improvements().isEmpty()) return null;
+        try {
+            return objectMapper.writeValueAsString(request.improvements());
+        } catch (JsonProcessingException ex) {
+            throw new ApiException(ErrorCode.INTERNAL_ERROR, "설문 개선항목을 저장할 수 없습니다.");
+        }
+    }
+
+    private String normalizeComment(String comment) {
+        if (comment == null) return null;
+        String normalized = comment.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 }

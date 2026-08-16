@@ -12,9 +12,11 @@ import com.genmark.ai.web.dto.brandkit.BrandKitResponse;
 import com.genmark.ai.web.dto.logo.LogoDownloadResponse;
 import com.genmark.ai.web.dto.logo.PinnedCandidateResponse;
 import com.genmark.ai.web.dto.survey.SurveyResponse;
+import com.genmark.ai.web.dto.survey.SurveySubmitRequest;
 import com.genmark.ai.web.exception.ApiException;
 import com.genmark.ai.web.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -86,11 +88,12 @@ public class MeController {
         return ResponseEntity.ok(ApiSuccessResponse.of(surveyService.status(principal.id())));
     }
 
-    /** 설문조사 제출. 성공하면 크레딧 2개가 지급된다. 회원당 1회만 가능하다. */
+    /** 설문조사 제출. 성공하면 크레딧 1개가 지급된다. 회원당 1회만 가능하다. */
     @PostMapping("/survey")
     public ResponseEntity<ApiSuccessResponse<SurveyResponse>> submitSurvey(
-            @AuthenticationPrincipal MemberPrincipal principal) {
-        return ResponseEntity.ok(ApiSuccessResponse.of(surveyService.submit(principal.id())));
+            @AuthenticationPrincipal MemberPrincipal principal,
+            @Valid @RequestBody(required = false) SurveySubmitRequest request) {
+        return ResponseEntity.ok(ApiSuccessResponse.of(surveyService.submit(principal.id(), request)));
     }
 
     private LogoDownload.ProjectType parseType(String type) {

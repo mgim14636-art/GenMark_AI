@@ -5,6 +5,7 @@ import com.genmark.ai.entity.*;
 import com.genmark.ai.repository.TrademarkAnalysisRepository;
 import com.genmark.ai.repository.TrademarkMatchRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Optional;
@@ -27,7 +28,7 @@ class TrademarkAnalysisProcessorTest {
                 .status(TrademarkAnalysis.Status.QUEUED).build();
         when(analysisRepository.findById(1L)).thenReturn(Optional.of(analysis));
         when(storage.read("logos/c.png")).thenReturn(new byte[]{1, 2, 3});
-        TrademarkAiClient.Match first = new TrademarkAiClient.Match("1", "first", "42", 50, "a.png");
+        TrademarkAiClient.Match first = new TrademarkAiClient.Match("1", "first", "42", 50, "a.png", "외곽선이 유사함");
         TrademarkAiClient.Match second = new TrademarkAiClient.Match("2", "second", "42", 40, "b.png");
         TrademarkAiClient.Match third = new TrademarkAiClient.Match("3", "third", "42", 30, "c.png");
         when(aiClient.search(any(), eq("symbol"), eq(3))).thenReturn(
@@ -40,6 +41,9 @@ class TrademarkAnalysisProcessorTest {
         assertThat(project.getStatus()).isEqualTo(ProjectStatus.COMPLETED);
         verify(aiClient).search(any(), eq("symbol"), eq(3));
         verify(matchRepository, times(3)).save(any());
+        ArgumentCaptor<TrademarkMatch> savedMatch = ArgumentCaptor.forClass(TrademarkMatch.class);
+        verify(matchRepository, atLeastOnce()).save(savedMatch.capture());
+        assertThat(savedMatch.getAllValues().get(0).getNote()).isEqualTo("외곽선이 유사함");
     }
 
     @Test

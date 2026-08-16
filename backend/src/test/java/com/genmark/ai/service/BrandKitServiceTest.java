@@ -47,7 +47,9 @@ class BrandKitServiceTest {
                 .storageKey("logos/brand-kits/older.png").createdAt(LocalDateTime.parse("2026-08-14T10:00:00")).build();
         BrandKit newer = BrandKit.builder().publicId("newer").candidate(biCandidate)
                 .kitType(BrandKit.KitType.THUMBNAIL).status(BrandKit.Status.SUCCEEDED)
-                .storageKey("logos/brand-kits/newer.png").createdAt(LocalDateTime.parse("2026-08-14T11:00:00")).build();
+                .storageKey("logos/brand-kits/newer.png").preliminary(true)
+                .warnings(List.of("AI 연출 배경 미적용"))
+                .createdAt(LocalDateTime.parse("2026-08-14T11:00:00")).build();
         when(brandKitRepository.findByCandidateGenerationCiProjectMemberIdOrderByCreatedAtDesc(7L))
                 .thenReturn(List.of(older));
         when(brandKitRepository.findByCandidateGenerationBiProjectMemberIdOrderByCreatedAtDesc(7L))
@@ -57,6 +59,8 @@ class BrandKitServiceTest {
 
         assertThat(responses).extracting(response -> response.id()).containsExactly("newer", "older");
         assertThat(responses).extracting(response -> response.projectId()).containsExactly("bi-project", "ci-project");
+        assertThat(responses.get(0).preliminary()).isTrue();
+        assertThat(responses.get(0).warnings()).containsExactly("AI 연출 배경 미적용");
     }
 
     @Test

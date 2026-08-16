@@ -41,7 +41,8 @@ public class BrandKitProcessor {
         kit.setStartedAt(LocalDateTime.now());
         try {
             String sourceStorageKey = kit.getCandidate().getStorageKey();
-            var imageBase64Values = brandKitAiClient.generate(buildRequest(kit, sourceStorageKey));
+            BrandKitAiClient.Result result = brandKitAiClient.generate(buildRequest(kit, sourceStorageKey));
+            var imageBase64Values = result.imageBase64Values();
             int expectedImageCount = kit.getKitType() == BrandKit.KitType.BUSINESS_CARD ? 2 : 1;
             if (imageBase64Values.size() != expectedImageCount) {
                 throw new IllegalStateException("Brand kit response image count mismatch");
@@ -56,6 +57,8 @@ public class BrandKitProcessor {
             if (stored == null) throw new IllegalStateException("Brand kit response contains no images");
             storage.storeBrandKitSourceKey(kit.getPublicId(), sourceStorageKey);
             kit.setStorageKey(stored.storageKey());
+            kit.setPreliminary(result.preliminary());
+            kit.setWarnings(result.warnings());
             kit.setStatus(BrandKit.Status.SUCCEEDED);
             kit.setCompletedAt(LocalDateTime.now());
         } catch (Exception ex) {

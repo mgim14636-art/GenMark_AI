@@ -51,7 +51,7 @@ public class TrademarkAnalysisProcessor {
                 TrademarkAiClient.Match match = result.matches().get(i);
                 matchRepository.save(TrademarkMatch.builder().analysis(analysis).rank(i + 1)
                         .applicationNumber(match.applicationNumber()).name(match.name()).category(match.category())
-                        .similarity(match.similarity()).imagePath(match.imagePath()).build());
+                        .similarity(match.similarity()).imagePath(match.imagePath()).note(match.note()).build());
             }
             analysis.setStatus(TrademarkAnalysis.Status.SUCCEEDED);
             analysis.getProject().setStatus(ProjectStatus.COMPLETED);

@@ -24,11 +24,19 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class LogoGenerationService {
+    private static final Set<String> INDUSTRIES = Set.of(
+            "COSMETICS", "FASHION", "FOOD", "HEALTH_WELLNESS", "TECH", "EDUCATION", "PET", "OTHER");
+    private static final Set<String> LOGO_STYLES = Set.of("symbol", "wordmark", "combination", "lettermark");
+    private static final Set<String> TARGET_AGES = Set.of("10~20", "30~40", "50~60", "전 연령층");
+    private static final Pattern HEX_COLOR = Pattern.compile("#[0-9A-Fa-f]{6}");
+
     private final ProjectLookupService projectLookup;
     private final CiProjectRepository ciProjectRepository;
     private final BiProjectRepository biProjectRepository;
@@ -43,7 +51,6 @@ public class LogoGenerationService {
             throw new ApiException(ErrorCode.VALIDATION_ERROR, "Idempotency-Key 헤더가 필요합니다(최대 100자).");
         }
         ProjectLike project = projectLookup.requireOwned(projectPublicId, memberId);
-        validateTextLogoName(project);
         boolean isCi = project instanceof CiProject;
 
         LogoGeneration existing = (isCi
@@ -51,6 +58,7 @@ public class LogoGenerationService {
                 : generationRepository.findByBiProjectIdAndIdempotencyKey(project.getId(), idempotencyKey))
                 .orElse(null);
         if (existing != null) return toResponse(existing);
+        validateGenerationInputs(project);
         if (project.getStatus() == ProjectStatus.GENERATING || project.getStatus() == ProjectStatus.ANALYZING) {
             throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "이미 진행 중인 작업이 있습니다.");
         }
@@ -219,6 +227,42 @@ public class LogoGenerationService {
             throw new ApiException(ErrorCode.VALIDATION_ERROR,
                     "워드마크와 레터마크를 생성하려면 브랜드명 또는 기업명이 필요합니다.");
         }
+    }
+
+    private void validateGenerationInputs(ProjectLike project) {
+        String industry;
+        String colorMode;
+        if (project instanceof CiProject ci) {
+            industry = ci.getIndustry();
+            colorMode = ci.getColorMode();
+        } else if (project instanceof BiProject bi) {
+            industry = bi.getIndustry();
+            colorMode = bi.getColorMode();
+            if (bi.getTargetAge() == null || !TARGET_AGES.contains(bi.getTargetAge())) {
+                throw new ApiException(ErrorCode.VALIDATION_ERROR, "지원하지 않는 타깃 연령입니다.");
+            }
+        } else {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "지원하지 않는 프로젝트 유형입니다.");
+        }
+
+        if (industry == null || !INDUSTRIES.contains(industry)) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "지원하지 않는 업종입니다.");
+        }
+        if (project.getLogoStyle() == null || !LOGO_STYLES.contains(project.getLogoStyle())) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "지원하지 않는 로고 스타일입니다.");
+        }
+        if (colorMode == null || !Set.of("TONE", "MANUAL").contains(colorMode)) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "지원하지 않는 색상 선택 방식입니다.");
+        }
+        if ("MANUAL".equals(colorMode)) {
+            if (project.colorList().isEmpty()) {
+                throw new ApiException(ErrorCode.VALIDATION_ERROR, "직접 선택 색상은 한 개 이상 필요합니다.");
+            }
+            if (project.colorList().stream().anyMatch(color -> !HEX_COLOR.matcher(color).matches())) {
+                throw new ApiException(ErrorCode.VALIDATION_ERROR, "직접 선택 색상은 #RRGGBB 형식이어야 합니다.");
+            }
+        }
+        validateTextLogoName(project);
     }
 
     private String svgUrl(LogoCandidate candidate) {

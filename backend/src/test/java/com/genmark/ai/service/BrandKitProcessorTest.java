@@ -48,7 +48,8 @@ class BrandKitProcessorTest {
                     && "010-1111-2222".equals(cardInfo.get("phone"))
                     && "kim@example.com".equals(cardInfo.get("email"))
                     && "Gwangju".equals(cardInfo.get("address"));
-        }))).thenReturn(List.of("front-png", "back-png"));
+        }))).thenReturn(new BrandKitAiClient.Result(
+                List.of("front-png", "back-png"), true, List.of("AI 연출 배경 미적용")));
         when(storage.store(anyString(), eq(1), eq("front-png")))
                 .thenReturn(new LogoFileStorage.StoredImage("brand-kits/front.png", 100, 100));
         when(storage.store(anyString(), eq(2), eq("back-png")))
@@ -58,6 +59,8 @@ class BrandKitProcessorTest {
 
         assertThat(kit.getStatus()).isEqualTo(BrandKit.Status.SUCCEEDED);
         assertThat(kit.getStorageKey()).isEqualTo("brand-kits/front.png");
+        assertThat(kit.isPreliminary()).isTrue();
+        assertThat(kit.getWarnings()).containsExactly("AI 연출 배경 미적용");
         verify(storage).read("logos/original.png");
         verify(storage).store("brand-kits/kit-1", 1, "front-png");
         verify(storage).store("brand-kits/kit-1", 2, "back-png");
@@ -79,7 +82,8 @@ class BrandKitProcessorTest {
                 .status(BrandKit.Status.QUEUED).build();
         when(repository.findById(10L)).thenReturn(Optional.of(kit));
         when(storage.read("logos/original.png")).thenReturn(new byte[]{1, 2, 3});
-        when(aiClient.generate(anyMap())).thenReturn(List.of("front-only"));
+        when(aiClient.generate(anyMap())).thenReturn(
+                new BrandKitAiClient.Result(List.of("front-only"), false, List.of()));
 
         new BrandKitProcessor(repository, aiClient, storage).process(10L);
 
