@@ -17,7 +17,7 @@ const TRADEMARK_SCORE_FALLBACK = 23
 const MYPAGE_MOCK_MODE = true
 
 type ViewMode = 'home' | 'hero' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'brand-kit' | 'edit' | 'login' | 'mypage' | 'survey'
-type LoginDestination = 'home' | 'industry' | 'choice'
+type LoginDestination = 'home' | 'industry' | 'choice' | 'mypage'
 type LoginReturnMode = 'hero' | 'home'
 type OnboardingOption = 'online' | 'social' | 'offline'
 type AudienceOption = 'company' | 'owner' | 'hobby' | 'sidejob'
@@ -158,7 +158,7 @@ const getModeFromUrl = (): ViewMode => {
   if (requestedView === 'edit' || requestedView === 'logo-edit' || requestedView === 'logo-editor') return 'edit'
   if (requestedView === 'mypage' || requestedView === 'my-page' || requestedView === 'profile') return 'mypage'
   if (requestedView === 'survey' || requestedView === 'feedback' || requestedView === 'satisfaction') return 'survey'
-  return 'hero'
+  return 'home'
 }
 
 // TEMP_RESULT_PREVIEW: 결과 후보가 없을 때 결과 화면 레이아웃을 생성 API 없이
@@ -319,6 +319,7 @@ function BrandLogo({ className = '' }: { className?: string }) {
 function CustomerApp() {
   const [mode, setModeState] = useState<ViewMode>(getModeFromUrl)
   const [loggedIn, setLoggedIn] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [authLoading, setAuthLoading] = useState(false)
   const [authRestoring, setAuthRestoring] = useState(true)
@@ -787,6 +788,19 @@ function CustomerApp() {
   const businessCardGalleryDragStartScrollLeft = useRef(0)
   const isDraggingBusinessCardGallery = useRef(false)
 
+  const [curationActiveDot, setCurationActiveDot] = useState(0)
+  const [productActiveDot, setProductActiveDot] = useState(0)
+  const [businessCardActiveDot, setBusinessCardActiveDot] = useState(0)
+
+  // 카드 4개를 한 페이지로 보고, 스크롤 위치 비율로 몇 번째 페이지인지 계산한다.
+  const computeActiveDot = (track: HTMLDivElement, itemCount: number) => {
+    const dotCount = Math.max(1, Math.ceil(itemCount / 4))
+    const maxScroll = track.scrollWidth - track.clientWidth
+    if (maxScroll <= 0) return 0
+    const ratio = track.scrollLeft / maxScroll
+    return Math.min(dotCount - 1, Math.round(ratio * (dotCount - 1)))
+  }
+
   const filteredItems = activeCategory === '전체'
     ? galleryItems
     : galleryItems.filter((item) => item.category === activeCategory)
@@ -889,6 +903,24 @@ function CustomerApp() {
     isDraggingBusinessCardGallery.current = false
     if (track.hasPointerCapture(event.pointerId)) track.releasePointerCapture(event.pointerId)
     track.classList.remove('is-dragging')
+  }
+
+  const handleGalleryScroll = () => {
+    const track = galleryRef.current
+    if (!track) return
+    setCurationActiveDot(computeActiveDot(track, filteredItems.length))
+  }
+
+  const handleProductGalleryScroll = () => {
+    const track = productGalleryRef.current
+    if (!track) return
+    setProductActiveDot(computeActiveDot(track, productGalleryItems.length))
+  }
+
+  const handleBusinessCardGalleryScroll = () => {
+    const track = businessCardGalleryRef.current
+    if (!track) return
+    setBusinessCardActiveDot(computeActiveDot(track, businessCardGalleryItems.length))
   }
 
   const toggleSurveyImprovement = (item: SurveyImprovement) => {
@@ -1097,11 +1129,18 @@ function CustomerApp() {
   }
 
   const handleLogout = () => {
-    const returnMode = mode === 'login' ? 'home' : mode
-    setAuthUser(null)
-    setLoggedIn(false)
-    setMode(returnMode, { replace: true })
-    void logout()
+    // 같은 화면이라도 뭔가 전환되는 느낌을 주려고, 짧게 화면을 덮었다가 걷어내는
+    // 동안 실제 로그아웃 상태 변경을 처리한다 (사용자에게는 순간이동이 아니라
+    // 페이지가 넘어가는 것처럼 보임).
+    setLoggingOut(true)
+    window.setTimeout(() => {
+      const returnMode = mode === 'login' ? 'home' : mode
+      setAuthUser(null)
+      setLoggedIn(false)
+      setMode(returnMode, { replace: true })
+      void logout()
+      window.setTimeout(() => setLoggingOut(false), 260)
+    }, 260)
   }
 
   const startOnboarding = async () => {
@@ -2333,15 +2372,6 @@ function CustomerApp() {
       <div className="featured-dots" aria-label="대표 큐레이션 진행 상태">
         <span className="active" /><span /><span /><span />
       </div>
-      <div className="hero-create-bar">
-        <div>
-          <strong>5분 만에 완성하는</strong>
-          <span>프리미엄 브랜드 로고</span>
-        </div>
-        <button className="gradient-button hero-create-button" type="button" onClick={startOnboarding} disabled={authRestoring}>
-          <Sparkle /> 로고 생성 시작
-        </button>
-      </div>
     </section>
   )
 
@@ -3205,32 +3235,32 @@ function CustomerApp() {
   }
 
   const renderMypageScreen = () => {
+    if (!authRestoring && !loggedIn) {
+      const goToLogin = () => { setLoginDestination('mypage'); setLoginReturnMode('home'); setMode('login') }
+      return (
+        <main className="mypage-screen" aria-labelledby="mypage-title">
+          <header className="main-header">
+            <a className="main-brand" href="#home" aria-label="GenMark AI 홈" onClick={() => setMode('home')}>
+              <BrandLogo />
+              <span>GenMark AI</span>
+            </a>
+          </header>
+          <section className="mypage-content mypage-login-gate">
+            <div className="mypage-login-gate-icon"><UserRound aria-hidden="true" size={30} strokeWidth={1.6} /></div>
+            <h1 id="mypage-title">로그인을 진행해주세요.</h1>
+            <p>마이페이지는 로그인 후 이용하실 수 있어요.</p>
+            <button className="gradient-button" type="button" onClick={goToLogin}>
+              로그인하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} />
+            </button>
+          </section>
+        </main>
+      )
+    }
     const useMypageMock = MYPAGE_MOCK_MODE && !authRestoring && !loggedIn
     const displayUserName = useMypageMock ? '김명은' : authUser?.name?.trim() || '사용자'
     const displayEmail = useMypageMock ? '연결된 이메일 정보가 없어요. tkss1217@gmail.com' : authUser?.email?.trim() || '연결된 이메일 정보가 없어요.'
     const displayCompanyName = useMypageMock ? '육하원칙' : companyName.trim() || '아직 입력된 회사명이 없어요.'
     const displayCompanyMotto = useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : companyMotto.trim() || '브랜드 프로젝트에서 회사 모토를 입력해보세요.'
-    const selectedLogo = logoCandidates.find((candidate) => candidate.id === selectedCandidateId)
-      ?? logoCandidates.find((candidate) => candidate.selected)
-    const projectName = (brandKind === 'ci' ? companyName : brandName).trim()
-    const projectDescription = (brandKind === 'ci' ? companyMotto : brandValueDescription).trim()
-    const selectedIndustry = industryOptions.find((option) => option.id === industrySelection)?.title ?? '업종 미입력'
-    const selectedStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? '스타일 미입력'
-    const completedProjects = useMypageMock ? [{
-      id: 'mypage-mock-completed-brand',
-      name: '육하원칙',
-      detail: '뷰티 · 콤비네이션',
-      description: '완성된 브랜드 로고 목업',
-      candidate: { id: 'mypage-mock-completed-candidate', storageKey: 'mypage/mock-completed-brand.png' } as LogoCandidate,
-    }] : projectId && selectedLogo && projectName
-      ? [{
-          id: projectId,
-          name: projectName,
-          detail: `${selectedIndustry} · ${selectedStyle}`,
-          description: projectDescription,
-          candidate: selectedLogo,
-        }]
-      : []
     const displayDownloadHistory: DownloadRecord[] = useMypageMock ? [
       {
         downloadId: -1,
@@ -3349,27 +3379,8 @@ function CustomerApp() {
             </form>
           </section>
 
-          <section className="mypage-section" aria-labelledby="completed-title">
-            <div className="section-title-row"><div><h2 id="completed-title">완성한 브랜드</h2><p>생성한 로고와 분석 결과를 다시 확인할 수 있어요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
-            {completedProjects.length > 0 ? completedProjects.map((project) => (
-              <article className="completed-project-card" key={project.id}>
-                <div className="completed-project-preview"><img src={useMypageMock ? '/mypage/mock-completed-brand.png' : getLogoCandidateImageUrl(project.candidate.storageKey)} alt={`${project.name} 선택 로고`} /></div>
-                <div className="completed-project-info"><div className="project-info-heading"><strong>{project.name}</strong><span className="project-status"><Check size={14} strokeWidth={2.3} /> 로고 선택 완료</span></div><p>{project.detail}</p>{project.description && <p className="project-description">{project.description}</p>}<div className="project-status-list"><span><Check size={14} strokeWidth={2} /> 로고 생성 완료</span><span className={trademarkAnalysisCompleted ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 상표 분석 {trademarkAnalysisCompleted ? '완료' : '미완료'}</span><span className={brandKit?.status === 'SUCCEEDED' ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 브랜드킷 {brandKit?.status === 'SUCCEEDED' ? '완료' : '미완료'}</span></div></div>
-                <div className="project-action-grid">
-                  <button type="button" onClick={() => setMode('result')}><ImageIcon size={19} strokeWidth={1.8} />결과 보기</button>
-                  <button type="button" disabled={!trademarkAnalysisCompleted} onClick={() => setMode('trademark-result')}><Search size={19} strokeWidth={1.8} />유사도 결과</button>
-                  <button type="button" onClick={() => requestLogoDownload({ name: project.name, subtitle: selectedIndustry, candidateId: project.candidate.id, storageKey: project.candidate.storageKey, svgUrl: project.candidate.svgUrl })}><Download size={19} strokeWidth={1.8} />로고 다운로드</button>
-                  <button type="button" onClick={openBrandKitSelection}><FolderCheck size={19} strokeWidth={1.8} />브랜드킷 만들기</button>
-                  <button type="button" onClick={() => setMode('style')}><RefreshCw size={19} strokeWidth={1.8} />다시 생성하기</button>
-                </div>
-              </article>
-            )) : (
-              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 완성한 브랜드가 없어요</h3><p>로고를 생성하고 최종 후보를 선택하면 이곳에 표시돼요.</p><button className="gradient-button" type="button" onClick={startOnboarding} disabled={authRestoring}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
-            )}
-          </section>
-
           <section className="mypage-section" aria-labelledby="download-history-title">
-            <div className="section-title-row"><div><h2 id="download-history-title">내 다운로드 목록</h2><p>CI·BI 유형별로 최근 20개까지 보관돼요. 한도를 넘으면 오래된 기록부터 자동으로 정리됩니다.</p></div><Download aria-hidden="true" size={27} strokeWidth={1.8} /></div>
+            <div className="section-title-row"><div><h2 id="download-history-title">내 다운로드 목록</h2><p>CI·BI 유형별로 최근 20개까지 보관돼요. 한도를 넘으면 오래된 기록부터 자동으로 정리됩니다.</p></div></div>
             {displayDownloadHistory.length > 0 ? (
               useMypageMock ? (
                 <div className="download-logo-grid">
@@ -3395,7 +3406,7 @@ function CustomerApp() {
           </section>
 
           <section className="mypage-section" aria-labelledby="pinned-title">
-              <div className="section-title-row"><div><h2 id="pinned-title">찜한 로고</h2><p>찜한 로고는 3일 동안 잠시 보관돼요. 기간이 지나면 목록에서 자동으로 사라집니다.</p></div><Heart aria-hidden="true" size={27} strokeWidth={1.8} /></div>
+              <div className="section-title-row"><div><h2 id="pinned-title">찜한 로고</h2><p>찜한 로고는 3일 동안 잠시 보관돼요. 기간이 지나면 목록에서 자동으로 사라집니다.</p></div></div>
             {displayPinnedLogos.length > 0 ? (
               <div className="pinned-logo-grid">
                 {displayPinnedLogos.map((item) => (
@@ -3409,7 +3420,7 @@ function CustomerApp() {
           </section>
 
           <section className="mypage-section" aria-labelledby="brand-kit-list-title">
-            <div className="section-title-row"><div><h2 id="brand-kit-list-title">내 브랜드킷</h2><p>선택한 로고로 만든 명함과 제품 썸네일을 확인하세요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
+            <div className="section-title-row"><div><h2 id="brand-kit-list-title">내 브랜드킷</h2><p>선택한 로고로 만든 명함과 제품 썸네일을 확인하세요.</p></div></div>
             {useMypageMock ? (
               <div className="pinned-logo-grid brand-kit-mock-grid">
                 {mockBrandKitItems.map((item) => (
@@ -3626,7 +3637,6 @@ function CustomerApp() {
             <span>{authLoading ? '로그인 처리 중…' : 'Google로 계속하기'}</span>
           </button>
         </div>
-        <p className="login-terms">계속하면 GenMark AI의 <a href="#terms">이용약관</a>과<br /><a href="#privacy">개인정보 처리방침</a>에 동의하게 됩니다.</p>
         <button className="skip-login" type="button" onClick={() => setMode(loginReturnMode)}>나중에 할게요 <span aria-hidden="true">›</span></button>
       </section>
     </main>
@@ -3634,10 +3644,10 @@ function CustomerApp() {
 
   return (
     <div className="app-shell light-shell">
+      {loggingOut && <div className="page-transition-overlay" aria-hidden="true" />}
       {mode === 'login' ? (
         <header className="login-header">
           <button className="login-back" type="button" onClick={() => setMode(loginReturnMode)}>‹ <span>{loginReturnMode === 'hero' ? '랜딩' : '홈'}</span></button>
-          <span className="login-header-state">안전하게 저장하기</span>
         </header>
       ) : mode === 'onboarding' || mode === 'industry' || mode === 'brand-details' || mode === 'company-details' || mode === 'hero' || mode === 'choice' || mode === 'tone' || mode === 'style' || mode === 'final' || mode === 'loading' || mode === 'trademark-loading' || mode === 'trademark-selection' || mode === 'trademark-result' || mode === 'result' || mode === 'brand-kit' || mode === 'edit' || mode === 'mypage' || mode === 'survey' ? null : (
         <header className="main-header">
@@ -3650,7 +3660,9 @@ function CustomerApp() {
             setLoginDestination('home')
             setMode('login')
           }}>
-            {authRestoring ? '확인 중…' : loggedIn ? '로그아웃' : '로그인'}
+            <span key={authRestoring ? 'checking' : loggedIn ? 'logout' : 'login'} className="outline-login-label">
+              {authRestoring ? '확인 중…' : loggedIn ? '로그아웃' : '로그인'}
+            </span>
           </button>
         </header>
       )}
@@ -3683,6 +3695,7 @@ function CustomerApp() {
               onPointerMove={handleGalleryPointerMove}
               onPointerUp={handleGalleryPointerUp}
               onPointerCancel={handleGalleryPointerUp}
+              onScroll={handleGalleryScroll}
             >
               {filteredItems.map((item) => {
                 const liked = likedIds.includes(item.id)
@@ -3692,20 +3705,16 @@ function CustomerApp() {
                       <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
                         <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
                       </button>
-                      <span className="visual-tag">{item.category}</span>
-                    </div>
-                    <div className="gallery-meta">
-                      <div>
-                        <h3>{item.name}</h3>
-                        <p>{item.meta}</p>
-                      </div>
-                      <div className="like-count"><Heart aria-hidden="true" size={17} strokeWidth={1.8} fill="currentColor" />{item.likes}</div>
                     </div>
                   </article>
                 )
               })}
             </div>
-            <div className="gallery-dots" aria-hidden="true"><span className="active" /><span /><span /><span /><span /></div>
+            <div className="gallery-dots" aria-hidden="true">
+              {Array.from({ length: Math.max(1, Math.ceil(filteredItems.length / 4)) }).map((_, index) => (
+                <span key={index} className={index === curationActiveDot ? 'active' : undefined} />
+              ))}
+            </div>
           </section>
 
           <section className="curation-section product-gallery-section" aria-labelledby="product-gallery-title">
@@ -3723,29 +3732,21 @@ function CustomerApp() {
               onPointerMove={handleProductGalleryPointerMove}
               onPointerUp={handleProductGalleryPointerUp}
               onPointerCancel={handleProductGalleryPointerUp}
+              onScroll={handleProductGalleryScroll}
             >
               {productGalleryItems.map((item) => {
-                const liked = likedIds.includes(item.id)
                 return (
                   <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }}>
-                      <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
-                        <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
-                      </button>
-                      <span className="visual-tag">{item.category}</span>
-                    </div>
-                    <div className="gallery-meta">
-                      <div>
-                        <h3>{item.name}</h3>
-                        <p>{item.meta}</p>
-                      </div>
-                      <div className="like-count"><Heart aria-hidden="true" size={17} strokeWidth={1.8} fill="currentColor" />{item.likes}</div>
-                    </div>
+                    <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
                   </article>
                 )
               })}
             </div>
-            <div className="gallery-dots" aria-hidden="true"><span className="active" /><span /><span /><span /><span /></div>
+            <div className="gallery-dots" aria-hidden="true">
+              {Array.from({ length: Math.max(1, Math.ceil(productGalleryItems.length / 4)) }).map((_, index) => (
+                <span key={index} className={index === productActiveDot ? 'active' : undefined} />
+              ))}
+            </div>
           </section>
 
           <section className="curation-section business-card-gallery-section" aria-labelledby="business-card-gallery-title">
@@ -3763,29 +3764,21 @@ function CustomerApp() {
               onPointerMove={handleBusinessCardGalleryPointerMove}
               onPointerUp={handleBusinessCardGalleryPointerUp}
               onPointerCancel={handleBusinessCardGalleryPointerUp}
+              onScroll={handleBusinessCardGalleryScroll}
             >
               {businessCardGalleryItems.map((item) => {
-                const liked = likedIds.includes(item.id)
                 return (
                   <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual business-card-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }}>
-                      <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
-                        <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
-                      </button>
-                      <span className="visual-tag">{item.category}</span>
-                    </div>
-                    <div className="gallery-meta">
-                      <div>
-                        <h3>{item.name}</h3>
-                        <p>{item.meta}</p>
-                      </div>
-                      <div className="like-count"><Heart aria-hidden="true" size={17} strokeWidth={1.8} fill="currentColor" />{item.likes}</div>
-                    </div>
+                    <div className={`gallery-visual business-card-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
                   </article>
                 )
               })}
             </div>
-            <div className="gallery-dots" aria-hidden="true"><span className="active" /><span /><span /><span /><span /></div>
+            <div className="gallery-dots" aria-hidden="true">
+              {Array.from({ length: Math.max(1, Math.ceil(businessCardGalleryItems.length / 4)) }).map((_, index) => (
+                <span key={index} className={index === businessCardActiveDot ? 'active' : undefined} />
+              ))}
+            </div>
           </section>
         </main>
       ) : null}
@@ -3793,6 +3786,9 @@ function CustomerApp() {
       {!['loading', 'trademark-loading', 'hero', 'login'].includes(mode) && <nav className="bottom-nav" aria-label="주요 메뉴">
         <button className={mode === 'home' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setMode('home')}>
           <House className="nav-icon" aria-hidden="true" size={26} strokeWidth={1.8} /><span>홈</span>
+        </button>
+        <button className="nav-item nav-item-create" type="button" onClick={startOnboarding} disabled={authRestoring}>
+          <Sparkles className="nav-icon" aria-hidden="true" size={26} strokeWidth={1.8} /><span>로고 생성</span>
         </button>
         <button className={mode === 'mypage' || mode === 'survey' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setMode('mypage')}>
           <UserRound className="nav-icon" aria-hidden="true" size={26} strokeWidth={1.8} /><span>마이페이지</span>
