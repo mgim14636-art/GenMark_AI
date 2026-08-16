@@ -893,6 +893,14 @@ def build_prompt_brief(survey: dict, variant_index: int = 0) -> str:
     if subject and subject not in _SUBJECT_PLACEHOLDERS:
         lines.insert(1, f"The mark depicts {subject}.")
 
+    # 브랜드 가치·모토. CI 화면의 "회사 모토"가 여기로 들어온다
+    # (프론트 companyMotto -> 백엔드 coreValues -> company_values_text).
+    # 원문 한국어를 그대로 넣지 않는다 - 텍스트 인코더가 못 읽고 프롬프트만
+    # 길어진다. value_keyword_service가 뽑아 둔 영어 키워드를 쓴다.
+    values = _resolve_values(survey)
+    if values:
+        lines.append(values)
+
     tone_words = BRIEF_TONE.get(survey.get("tone", ""), "")
     if tone_words:
         lines.append(f"{tone_words.capitalize()} feeling.")

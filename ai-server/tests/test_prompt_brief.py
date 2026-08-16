@@ -41,8 +41,11 @@ def _p(vi=0, **extra):
 
 
 def test_brief_is_short():
-    """기존 프롬프트는 1,150자였다. 길이 자체가 지시를 희석했다."""
-    assert len(_p()) < 350, _p()
+    """기존 프롬프트는 1,150자였다. 길이 자체가 지시를 희석했다.
+
+    늘릴 때마다 실측으로 조형이 나빠지지 않는지 확인한 뒤에만 올린다.
+    """
+    assert len(_p()) < 450, _p()
 
 
 @pytest.mark.parametrize("phrase", HARMFUL)
@@ -154,3 +157,28 @@ def test_translation_placeholder_is_dropped():
 
 def test_no_shape_means_no_depicts_line():
     assert "The mark depicts" not in _p()
+
+
+# --- 브랜드 가치 / 회사 모토 -------------------------------------------------
+# CI 화면의 "회사 모토"가 companyMotto -> coreValues -> company_values_text로
+# 흘러 들어온다. 브리프를 새로 쓰면서 이 문장을 빠뜨려, 사용자가 적은 모토가
+# 프롬프트에 한 글자도 반영되지 않았다(실측 확인됨).
+def test_brand_values_reach_the_prompt():
+    prompt = _p(value_keywords_en=["natural beauty", "authenticity"])
+    assert "The brand values are natural beauty, authenticity." in prompt
+
+
+def test_no_values_means_no_line():
+    assert "brand values" not in _p(value_keywords_en=[])
+
+
+def test_korean_motto_is_not_pasted_raw():
+    """한국어 원문을 그대로 넣으면 텍스트 인코더에 노이즈다."""
+    prompt = _p(company_values_text="있는 그대로의 아름다움을 발견하다")
+    assert "아름다움" not in prompt
+
+
+def test_values_capped_at_five():
+    prompt = _p(value_keywords_en=[f"v{i}" for i in range(8)])
+    line = [l for l in prompt.splitlines() if "brand values" in l][0]
+    assert line.count(",") == 4
