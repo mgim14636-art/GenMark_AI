@@ -30,12 +30,12 @@ type TrademarkMatchImage = { rank: number; src: string }
 
 const categories = ['전체', '심볼마크', '워드마크', '콤비네이션', '레터마크']
 
-const toneOptions: Array<{ id: ToneOption; label: string; description: string; colors: [string, string] }> = [
-  { id: 'friendly', label: '친근하고 다정한', description: '편안하고 부드러운 인상', colors: ['#f39bbd', '#b9d3f7'] },
-  { id: 'professional', label: '전문적이고 신뢰감 있는', description: '정돈되고 믿음직한 인상', colors: ['#17185b', '#a45c72'] },
-  { id: 'warm', label: '감성적이고 따뜻한', description: '섬세하고 따뜻한 인상', colors: ['#d29474', '#f2eadc'] },
-  { id: 'trendy', label: '유니크하고 트렌디한', description: '개성 있고 감각적인 인상', colors: ['#171713', '#f2f2f4'] },
-  { id: 'minimal', label: '미니멀하고 직관적인', description: '군더더기 없이 명확한 인상', colors: ['#396fc8', '#dde4ff'] },
+const toneOptions: Array<{ id: ToneOption; label: string; description: string; colors: [string] }> = [
+  { id: 'friendly', label: '친근하고 다정한', description: '편안하고 부드러운 인상', colors: ['#f39bbd'] },
+  { id: 'professional', label: '전문적이고 신뢰감 있는', description: '정돈되고 믿음직한 인상', colors: ['#17185b'] },
+  { id: 'warm', label: '감성적이고 따뜻한', description: '섬세하고 따뜻한 인상', colors: ['#d29474'] },
+  { id: 'trendy', label: '유니크하고 트렌디한', description: '개성 있고 감각적인 인상', colors: ['#171713'] },
+  { id: 'minimal', label: '미니멀하고 직관적인', description: '군더더기 없이 명확한 인상', colors: ['#396fc8'] },
 ]
 
 const coreValueIds = new Set<CoreValue>(['vegan', 'lowIrritation', 'derma', 'cleanBeauty', 'natural', 'premium', 'sustainable', 'scientific', 'reasonable'])
@@ -355,10 +355,11 @@ function CustomerApp() {
   const [brandValueDescription, setBrandValueDescription] = useState('')
   const [toneSelection, setToneSelection] = useState<ToneOption | null>(null)
   const [toneMode, setToneMode] = useState<'recommended' | 'direct'>('recommended')
+  const [directTone, setDirectTone] = useState('')
   const [tonePaletteTarget, setTonePaletteTarget] = useState<{ toneId: ToneOption; slot: number } | null>(null)
   const [tonePaletteDraft, setTonePaletteDraft] = useState<{ toneId: ToneOption; colors: string[] } | null>(null)
   const [customToneColors, setCustomToneColors] = useState<Partial<Record<ToneOption, string[]>>>({})
-  const [manualColors, setManualColors] = useState<string[]>([])
+  const [manualColors, setManualColors] = useState<string[]>(['#9765e9'])
   const [manualColorsSelected, setManualColorsSelected] = useState(false)
   const [manualColorSlot, setManualColorSlot] = useState(0)
   const [colorSelectionMode, setColorSelectionMode] = useState<'tone' | 'manual'>('tone')
@@ -964,21 +965,20 @@ function CustomerApp() {
       setLogoShapePrompt(project.logoShape ?? extractLogoShapeRequirement(project.additionalRequirements))
       if (project.tone && toneOptions.some((option) => option.id === project.tone)) setToneSelection(project.tone as ToneOption)
       else setToneSelection(null)
+      setDirectTone(project.colorMode?.toUpperCase() === 'MANUAL' ? project.tone ?? '' : '')
       if (project.colors?.length) {
-        setManualColors(project.colors.slice(0, 4))
-        const matchingTone = project.colors.length >= 2
-          ? toneOptions.find((option) => option.colors[0].toLowerCase() === project.colors?.[0]?.toLowerCase() && option.colors[1].toLowerCase() === project.colors?.[1]?.toLowerCase())
-          : undefined
+        setManualColors(project.colors.slice(0, 1))
+        const matchingTone = toneOptions.find((option) => option.colors[0].toLowerCase() === project.colors?.[0]?.toLowerCase())
         if (project.colorMode) {
           const manual = project.colorMode.toUpperCase() === 'MANUAL'
           setColorSelectionMode(manual ? 'manual' : 'tone')
           setToneMode(manual ? 'direct' : 'recommended')
-          setManualColorsSelected(Boolean(manual && project.colors.length >= 2))
+          setManualColorsSelected(Boolean(manual && project.colors.length >= 1))
           if (!manual && matchingTone) setToneSelection(matchingTone.id)
         } else {
           setColorSelectionMode(matchingTone ? 'tone' : 'manual')
           setToneMode(matchingTone ? 'recommended' : 'direct')
-          setManualColorsSelected(Boolean(!matchingTone && project.colors.length >= 2))
+          setManualColorsSelected(Boolean(!matchingTone && project.colors.length >= 1))
           if (matchingTone) setToneSelection(matchingTone.id)
         }
       }
@@ -1266,21 +1266,8 @@ function CustomerApp() {
     })
   }
 
-  // 색을 1개로 줄일 수 있어야 단색 로고를 만들 수 있다. 지금까지 슬롯에 추가(+)만
-  // 있고 삭제가 없어, 직접 지정 모드가 항상 2색으로 시작한 뒤 줄일 방법이 없었다.
-  // 그 결과 AI 서버의 단색 강제 분기가 한 번도 실행되지 않았다(실측 확인됨).
-  const removeManualColor = (slot: number) => {
-    setManualColors((current) => {
-      if (current.length <= 1) return current
-      const next = current.filter((_, index) => index !== slot)
-      setManualColorSlot((active) => Math.min(active, next.length - 1))
-      return next
-    })
-    setManualColorsSelected(true)
-  }
-
   const resetManualColors = () => {
-    setManualColors(['#9765e9', '#dcaff5'])
+    setManualColors(['#9765e9'])
     setManualColorSlot(0)
     setManualColorsSelected(false)
   }
@@ -1289,29 +1276,15 @@ function CustomerApp() {
     setTonePaletteDraft((current) => {
       const base = current?.toneId === toneId
         ? current.colors
-        : customToneColors[toneId] ?? toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#eadfff', '#ffe1ef']
+        : customToneColors[toneId] ?? toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#eadfff']
       const next = [...base]
       next[slot] = hex
       return { toneId, colors: next }
     })
   }
 
-  // 추천 톤 팔레트도 색을 1개로 줄일 수 있어야 한다. 직접 지정 탭에만 삭제를
-  // 넣었더니, 추천 톤으로 진행한 사용자는 여전히 2색이 넘어가 단색 강제가
-  // 동작하지 않았다(실측 확인됨 - 저장된 SVG에 6색이 남았다).
-  const removeToneColor = (toneId: ToneOption, slot: number) => {
-    const base = tonePaletteDraft?.toneId === toneId
-      ? tonePaletteDraft.colors
-      : customToneColors[toneId] ?? toneOptions.find((tone) => tone.id === toneId)?.colors ?? []
-    if (base.length <= 1) return
-    const next = base.filter((_, index) => index !== slot)
-    setCustomToneColors((current) => ({ ...current, [toneId]: next }))
-    setTonePaletteDraft({ toneId, colors: next })
-    setTonePaletteTarget({ toneId, slot: Math.min(slot, next.length - 1) })
-  }
-
   const resetToneColors = (toneId: ToneOption) => {
-    const original = toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#eadfff', '#ffe1ef']
+    const original = toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#eadfff']
     setCustomToneColors((current) => {
       const next = { ...current }
       delete next[toneId]
@@ -1323,12 +1296,12 @@ function CustomerApp() {
 
   const getSelectedColors = () => {
     if (colorSelectionMode === 'tone' && toneSelection) {
-      return customToneColors[toneSelection]
+      return (customToneColors[toneSelection]
         ?? toneOptions.find((option) => option.id === toneSelection)?.colors
-        ?? toneOptions[0].colors
+        ?? toneOptions[0].colors).slice(0, 1)
     }
 
-    return manualColors
+    return manualColors.slice(0, 1)
   }
 
   const buildProjectInput = (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review'): ProjectInput => {
@@ -1348,7 +1321,7 @@ function CustomerApp() {
     }
 
     if (step === 'tone') {
-      input.tone = toneSelection ?? undefined
+      input.tone = (toneMode === 'direct' ? directTone.trim() : toneSelection) || undefined
       const customizedRecommendedPalette = Boolean(toneSelection && customToneColors[toneSelection])
       input.colorMode = colorSelectionMode === 'manual' || customizedRecommendedPalette ? 'MANUAL' : 'TONE'
       input.colors = getSelectedColors()
@@ -2171,7 +2144,7 @@ function CustomerApp() {
               role="tab"
               aria-selected={toneMode === 'direct'}
               className={toneMode === 'direct' ? 'tone-mode-tab active' : 'tone-mode-tab'}
-              onClick={() => { setToneMode('direct'); setColorSelectionMode('manual'); setManualColors((current) => current.length >= 2 ? current : ['#9765e9', '#dcaff5']); setManualColorsSelected(false); setColorPickerOpen(true); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
+              onClick={() => { setToneMode('direct'); setToneSelection(null); setColorSelectionMode('manual'); setManualColors((current) => current.length ? current.slice(0, 1) : ['#9765e9']); setManualColorsSelected(false); setColorPickerOpen(false); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
             >직접 지정</button>
           </div>
           <h1 id="tone-selection-title">톤앤매너와<br />색상을 골라주세요</h1>
@@ -2182,8 +2155,7 @@ function CustomerApp() {
         <section className="tone-options" aria-label="톤앤매너 선택">
           {toneOptions.map((tone) => {
             const selected = toneSelection === tone.id
-            const toneColors = customToneColors[tone.id] ?? tone.colors
-            const canAddColor = toneColors.length < 4
+            const toneColor = (customToneColors[tone.id] ?? tone.colors)[0]
             return (
               <div className="tone-option-shell" key={tone.id}>
               <button
@@ -2193,7 +2165,7 @@ function CustomerApp() {
                  onClick={() => { setToneSelection((current) => current === tone.id ? null : tone.id); setColorSelectionMode('tone') }}
               >
                 <span className="tone-swatches" aria-hidden="true">
-                  {toneColors.map((color, index) => <i key={`${tone.id}-${index}-${color}`} style={{ background: color }} />)}
+                  <i style={{ background: toneColor }} />
                 </span>
                 <span className="tone-option-copy">
                   <strong>{tone.label}</strong>
@@ -2204,7 +2176,7 @@ function CustomerApp() {
               <button
                 className="tone-custom-trigger"
                 type="button"
-                aria-label={`${tone.label} 색상 직접 지정`}
+                aria-label={`${tone.label} 색상 편집`}
                 aria-expanded={tonePaletteTarget?.toneId === tone.id}
               onClick={() => {
                 if (tonePaletteTarget?.toneId === tone.id) {
@@ -2212,36 +2184,15 @@ function CustomerApp() {
                   setTonePaletteDraft(null)
                   return
                 }
-                const currentColors = customToneColors[tone.id] ?? tone.colors
-                if (!canAddColor) {
-                  setTonePaletteDraft({ toneId: tone.id, colors: [...currentColors] })
-                  setTonePaletteTarget({ toneId: tone.id, slot: 0 })
-                  return
-                }
-                setTonePaletteDraft({ toneId: tone.id, colors: [...currentColors, '#eadfff'] })
-                setTonePaletteTarget({ toneId: tone.id, slot: currentColors.length })
+                setTonePaletteDraft({ toneId: tone.id, colors: [toneColor] })
+                setTonePaletteTarget({ toneId: tone.id, slot: 0 })
               }}
-              ><Plus aria-hidden="true" size={20} strokeWidth={1.9} /></button>
+              ><Pencil aria-hidden="true" size={13} strokeWidth={2} /> Edit</button>
               {tonePaletteTarget?.toneId === tone.id && (
                 <div className="tone-inline-picker" role="group" aria-label={`${tone.label} 색상 지정`}>
-                  <div className="tone-inline-picker-heading"><strong>색상을 선택하세요</strong><span>기존 색상을 조정하거나 새 색상을 하나씩 추가할 수 있어요.</span></div>
-                  <div className="tone-picker-slots">
-                    {(tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors).map((_, slot) => {
-                      const colors = tonePaletteDraft?.toneId === tone.id
-                        ? tonePaletteDraft.colors
-                        : customToneColors[tone.id] ?? tone.colors
-                      return (
-                        <span key={slot} className="tone-picker-slot-wrap">
-                          <button type="button" className={tonePaletteTarget.slot === slot ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setTonePaletteTarget({ toneId: tone.id, slot })}><i style={{ background: colors[slot] }} /><span>{slot < 2 ? `${slot + 1}번째 색` : `추가 색상 ${slot - 1}`}</span></button>
-                          {colors.length > 1 && (
-                            <button type="button" className="tone-picker-slot-remove" aria-label={`${slot + 1}번째 색 삭제`} onClick={() => removeToneColor(tone.id, slot)}>×</button>
-                          )}
-                        </span>
-                      )
-                    })}
-                  </div>
+                  <div className="tone-inline-picker-heading"><strong>색상을 선택하세요</strong><span>톤에 어울리는 대표 색상 1개를 조정할 수 있어요.</span></div>
                   <ToneColorPalette
-                    value={hexToRgb((tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors)[tonePaletteTarget.slot])}
+                    value={hexToRgb((tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors)[0])}
                     onChange={(color) => updateToneColorFromHex(tone.id, tonePaletteTarget.slot, rgbToHex(color))}
                     onComplete={() => {
                       if (tonePaletteDraft?.toneId === tone.id) {
@@ -2253,7 +2204,7 @@ function CustomerApp() {
                     ariaLabel={`${tone.label} 색상 팔레트`}
                   />
                   <div className="tone-inline-picker-footer">
-                    <span>선택한 색상 · {(tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors).join(' / ')}</span>
+                    <span>선택한 색상 · {(tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors)[0]}</span>
                     <button type="button" className="tone-inline-reset" onClick={() => resetToneColors(tone.id)}>초기화</button>
                   </div>
                 </div>
@@ -2264,76 +2215,56 @@ function CustomerApp() {
         </section>
         )}
 
-        {toneMode === 'direct' && (<section className="tone-color-card tone-direct-card" aria-label="직접 색상 지정">
+        {toneMode === 'direct' && (<section className="tone-color-card tone-direct-card" aria-label="직접 색상과 분위기 지정">
           <div className="tone-direct-swatches" aria-label="직접 선택한 색상">
-            {manualColors.map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
+            <i style={{ background: manualColors[0] ?? '#9765e9' }} />
             <button
-              className="tone-direct-custom-trigger"
+              className="tone-direct-edit-trigger"
               type="button"
-              aria-label={manualColors.length < 4 ? '색상 추가' : '색상 편집'}
+              aria-label="직접 지정 색상 편집"
               aria-expanded={colorPickerOpen}
               onClick={() => {
-                if (manualColors.length >= 4) {
-                  setManualColorSlot(0)
-                  setColorPickerOpen(true)
-                  return
-                }
-                setManualColors((current) => [...current, '#eadfff'])
-                setManualColorSlot(manualColors.length)
+                setManualColorSlot(0)
                 setColorPickerOpen(true)
               }}
-            ><Plus aria-hidden="true" size={19} strokeWidth={1.9} /></button>
+            ><Pencil aria-hidden="true" size={13} strokeWidth={2} /> Edit</button>
           </div>
-          <div>
-            <h2>직접 색상 지정</h2>
-            <p>원하는 색상을 직접 지정할 수 있어요</p>
+          <div className="tone-direct-copy">
+            <h2>색상과 분위기 직접 지정</h2>
+            <p>원하는 색상과 분위기를 직접 지정할 수 있어요</p>
+            <label className="tone-direct-mood-field">
+              <span>원하는 분위기 <small>필수</small></span>
+              <input
+                type="text"
+                value={directTone}
+                maxLength={100}
+                placeholder="예: 친근하고 다정한, 차분하고 고급스러운"
+                aria-label="직접 입력할 분위기"
+                onChange={(event) => setDirectTone(event.target.value)}
+              />
+            </label>
           </div>
-          <button
-            className="tone-auto-chip tone-picker-trigger"
-            type="button"
-            aria-expanded={colorPickerOpen}
-            aria-controls="tone-color-picker"
-            onClick={() => {
-              setColorSelectionMode('manual')
-              if (!colorPickerOpen) setManualColorSlot(0)
-              setColorPickerOpen((current) => !current)
-            }}
-          >
-            <span className="tone-picker-summary" aria-hidden="true">{manualColors.map((color, index) => <i className="tone-picker-swatch" key={`${color}-${index}`} style={{ background: color }} />)}</span>
-            직접
-          </button>
-
           {colorPickerOpen && (
             <div className="tone-color-picker tone-color-picker-inline" id="tone-color-picker" role="group" aria-label="RGB 색상 선택">
               <div className="tone-color-picker-heading">
                 <strong>원하는 색상 선택</strong>
                 <button type="button" aria-label="색상 팔레트 닫기" onClick={() => setColorPickerOpen(false)}>×</button>
               </div>
-              <div className="tone-picker-slots direct-slots">
-                {manualColors.map((color, slot) => (
-                  <span key={slot} className="tone-picker-slot-wrap">
-                    <button type="button" className={manualColorSlot === slot ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setManualColorSlot(slot)}><i style={{ background: color }} /><span>{slot < 2 ? `${slot + 1}번째 색` : `추가 색상 ${slot - 1}`}</span></button>
-                    {manualColors.length > 1 && (
-                      <button type="button" className="tone-picker-slot-remove" aria-label={`${slot + 1}번째 색 삭제`} onClick={() => removeManualColor(slot)}>×</button>
-                    )}
-                  </span>
-                ))}
-              </div>
               <ToneColorPalette
-                value={hexToRgb(manualColors[manualColorSlot] ?? manualColors[0])}
+                value={hexToRgb(manualColors[0] ?? '#9765e9')}
               onChange={(color) => { updateManualColorFromHex(rgbToHex(color)); setManualColorsSelected(true) }}
                 onComplete={() => setColorPickerOpen(false)}
                 ariaLabel="색상 팔레트"
               />
               <div className="tone-color-picker-footer">
-                <span>선택한 색상 · {manualColors.join(' / ')}</span>
+                <span>선택한 색상 · {manualColors[0] ?? '#9765e9'}</span>
                 <button type="button" className="tone-inline-reset" onClick={resetManualColors}>초기화</button>
               </div>
             </div>
           )}
         </section>)}
 
-        <button className="tone-next" type="button" onClick={() => void saveProjectStep('tone', 'style')} disabled={projectSaving || (toneMode === 'recommended' ? !toneSelection : !manualColorsSelected)}>
+        <button className="tone-next" type="button" onClick={() => void saveProjectStep('tone', 'style')} disabled={projectSaving || (toneMode === 'recommended' ? !toneSelection : !manualColorsSelected || !directTone.trim())}>
           {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
         </button>
         {projectError && <p className="project-error" role="alert">{projectError}</p>}
@@ -2410,7 +2341,7 @@ function CustomerApp() {
 
   const renderFeaturedHero = () => (
     <section className="featured-hero" aria-label="NOVAIRE STUDIO 브랜드 로고 소개">
-      <img className="featured-art" src="/home/lunee-studio.png" alt="LUNÉE 금색 로고 이미지" />
+      <img className="featured-art" src="/home/lunee-studio-white.png" alt="LUNÉE 금색 로고 이미지" />
       <div className="featured-scrim" />
       <div className="featured-dots" aria-label="대표 큐레이션 진행 상태">
         <span className="active" /><span /><span /><span />
@@ -2569,7 +2500,9 @@ function CustomerApp() {
 
   const renderFinalRequestScreen = () => {
     const displayValue = (value: string | undefined, fallback = '입력하지 않음') => value?.trim() || fallback
-    const selectedToneLabel = toneOptions.find((option) => option.id === toneSelection)?.label ?? toneSelection
+    const selectedToneLabel = toneMode === 'direct'
+      ? displayValue(directTone)
+      : toneOptions.find((option) => option.id === toneSelection)?.label ?? displayValue(toneSelection ?? undefined)
     const selectedLogoStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? '선택하지 않음'
     const selectedBrandValues = coreValues.length > 0
       ? coreValues.map((value) => coreValueLabels[value] ?? value).join(', ')
@@ -3017,8 +2950,6 @@ function CustomerApp() {
           <div className="logo-result-complete"><CircleCheck aria-hidden="true" size={21} strokeWidth={1.8} /> 로고 후보가 완성됐어요</div>
           <h1 id="logo-result-title">가장 마음에 드는 로고를 선택해주세요</h1>
           <p className="logo-result-lead">후보를 비교하고 색상이나 글씨체를 수정할 수 있어요.</p>
-          <div className="logo-result-counter" aria-label={`로고 ${resultCandidate + 1} / ${candidates.length}`}>{resultCandidate + 1} / {candidates.length}</div>
-
           <section className="logo-candidate-panel" aria-label="로고 후보 미리보기">
             <button className={resultLiked ? 'logo-candidate-action like liked' : 'logo-candidate-action like'} type="button" aria-label={resultLiked ? '찜 취소' : '찜'} aria-pressed={resultLiked} onClick={() => isResultPreview ? setResultLiked((current) => !current) : void toggleCandidatePin(candidate)}>
               <Heart size={22} strokeWidth={1.9} fill={resultLiked ? 'currentColor' : 'none'} />
@@ -3038,16 +2969,60 @@ function CustomerApp() {
           </section>
           {candidate.pinnedAt ? <p className="logo-pin-expiry">찜한 로고예요. 3일 뒤 자동으로 사라져요.</p> : null}
           {pinError && <p className="project-error" role="alert">{pinError}</p>}
-          <div className="logo-result-dots" aria-label="후보 선택">
-            {candidates.map((item, index) => <button key={item.id} className={index === resultCandidate ? 'active' : ''} type="button" aria-label={`후보 ${index + 1}`} aria-pressed={index === resultCandidate} onClick={() => isResultPreview ? setResultCandidate(index) : void selectLogoCandidate(item, index)} />)}
-          </div>
+          {(() => {
+            const displayValue = (value: string | undefined, fallback = '입력하지 않음') => value?.trim() || fallback
+            const selectedToneLabel = toneMode === 'direct'
+              ? displayValue(directTone)
+              : toneOptions.find((option) => option.id === toneSelection)?.label ?? displayValue(toneSelection ?? undefined)
+            const selectedLogoStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? '선택하지 않음'
+            const selectedBrandValues = coreValues.length > 0
+              ? coreValues.map((value) => coreValueLabels[value] ?? value).join(', ')
+              : displayValue(brandValueDescription)
+            const summaryRows = brandKind === 'ci'
+              ? [
+                  { key: 'company-name', label: '회사명', value: displayValue(companyName), icon: 'name' },
+                  { key: 'company-motto', label: '회사 모토', value: displayValue(companyMotto), icon: 'value' },
+                  { key: 'mood', label: '원하는 분위기', value: selectedToneLabel, icon: 'mood' },
+                ]
+              : [
+                  { key: 'brand-name', label: '브랜드명', value: displayValue(brandName), icon: 'name' },
+                  { key: 'audience', label: '주요 고객', value: displayValue(targetAgeOptions.find((option) => option.id === targetAge)?.label), icon: 'audience' },
+                  { key: 'value', label: '핵심 가치', value: selectedBrandValues, icon: 'value' },
+                  { key: 'mood', label: '분위기', value: selectedToneLabel, icon: 'mood' },
+                ]
 
-          <section className="logo-result-details" aria-label="로고 디자인 상세">
-            <div className="logo-result-detail-row"><span className="result-detail-icon compass" aria-hidden="true"><Compass size={23} strokeWidth={1.8} /></span><strong>디자인 방향</strong><span>{candidate.direction}</span></div>
-            <div className="logo-result-detail-row"><span className="result-detail-icon type" aria-hidden="true"><TypeIcon size={23} strokeWidth={1.8} /></span><strong>추천 글씨체</strong><span>우아한 세리프 + 깔끔한 산세리프</span></div>
-            <div className="logo-result-detail-row"><span className="result-detail-icon drop" aria-hidden="true"><Droplets size={23} strokeWidth={1.8} /></span><strong>브랜드 컬러</strong><span className="result-color-swatches"><i /><i /><i /><i /></span></div>
-            <div className="logo-result-detail-row feeling"><span className="result-detail-icon heart" aria-hidden="true"><Heart size={26} strokeWidth={1.8} /></span><strong>이 로고가 전달하는 느낌</strong><span>부드럽고 깨끗하면서도<br />프리미엄한 스킨케어 브랜드 이미지</span></div>
-          </section>
+            return (
+              <section className="logo-result-details result-summary-details" aria-label="로고 생성 조건">
+                {summaryRows.map((row) => {
+                  const SummaryIcon = finalSummaryIconMap[row.icon] ?? Shapes
+                  return (
+                    <div className="logo-result-detail-row" key={row.key}>
+                      <span className="result-detail-icon" aria-hidden="true"><SummaryIcon size={22} strokeWidth={1.8} /></span>
+                      <strong>{row.label}</strong>
+                      <span>{row.value}</span>
+                    </div>
+                  )
+                })}
+                <div className="logo-result-detail-row">
+                  <span className="result-detail-icon" aria-hidden="true"><Palette size={22} strokeWidth={1.8} /></span>
+                  <strong>선호 색상</strong>
+                  <span className="result-color-swatches" aria-label="선호 색상 4개">
+                    {getSelectedColors().map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
+                  </span>
+                </div>
+                <div className="logo-result-detail-row">
+                  <span className="result-detail-icon" aria-hidden="true"><TypeIcon size={22} strokeWidth={1.8} /></span>
+                  <strong>로고 타입</strong>
+                  <span>{selectedLogoStyle}{logoStyle === 'combination' && <em>추천</em>}</span>
+                </div>
+                <div className="logo-result-detail-row">
+                  <span className="result-detail-icon" aria-hidden="true"><Shapes size={22} strokeWidth={1.8} /></span>
+                  <strong>원하는 로고 모양</strong>
+                  <span>{displayValue(logoShapePrompt)}</span>
+                </div>
+              </section>
+            )
+          })()}
 
           <section className={trademarkAnalysisCompleted ? 'logo-result-trademark analyzed' : 'logo-result-trademark'} aria-label="상표 이미지 유사도">
             <span className="trademark-result-icon" aria-hidden="true"><Search size={44} strokeWidth={1.8} /></span>

@@ -505,7 +505,6 @@
 .logo-result-complete span { display: grid; width: 24px; height: 24px; place-items: center; border: 2px solid currentColor; border-radius: 50%; font-size: 15px; line-height: 1; }
 .logo-result-content h1 { margin: 0; color: #182039; font-size: clamp(29px, 4vw, 43px); font-weight: 800; line-height: 1.25; letter-spacing: -.1em; }
 .logo-result-lead { margin: 12px 0 18px; color: #66708a; font-size: clamp(17px, 2vw, 23px); line-height: 1.45; letter-spacing: -.08em; }
-.logo-result-counter { display: inline-flex; min-width: 144px; align-items: center; justify-content: center; min-height: 46px; border: 1.5px solid #c8a9ff; border-radius: 999px; color: #9257ec; padding: 5px 21px; font-size: 21px; font-weight: 600; letter-spacing: -.04em; }
 .logo-candidate-panel { position: relative; display: grid; min-height: 450px; place-items: center; margin: 18px auto 14px; border: 1px solid #e8e3f7; border-radius: 28px; background: rgb(255 255 255 / .88); box-shadow: 0 11px 28px rgb(86 64 144 / .1), inset 0 1px 0 #fff; }
 .logo-candidate-art { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 426px; color: #2b2c3b; }
 .logo-candidate-image { display: block; width: min(84%, 430px); height: 360px; object-fit: contain; }
@@ -547,9 +546,6 @@
 .logo-candidate-action.like.liked { color: #e35eae; border-color: #e6a4ca; background: #fff7fc; }
 .logo-candidate-action.download { right: 18px; bottom: 18px; }
 .logo-candidate-action svg { display: block; }
-.logo-result-dots { display: flex; justify-content: center; gap: 13px; margin: 9px 0 20px; }
-.logo-result-dots button { width: 13px; height: 13px; border: 0; border-radius: 50%; padding: 0; background: #e3e2e8; }
-.logo-result-dots button.active { background: #9058ed; box-shadow: 0 0 0 5px rgb(145 88 237 / .12); }
 .logo-result-details { overflow: hidden; border: 1px solid #ebe7f4; border-radius: 23px; background: #fff; box-shadow: 0 7px 19px rgb(81 61 130 / .08); text-align: left; }
 .logo-result-detail-row { display: grid; grid-template-columns: 38px 245px minmax(0, 1fr); align-items: center; min-height: 63px; gap: 13px; margin: 0 19px; border-bottom: 1px solid #ebe7f4; color: #17203a; font-size: clamp(16px, 1.9vw, 23px); letter-spacing: -.07em; }
 .logo-result-detail-row:last-child { border-bottom: 0; }
@@ -622,7 +618,6 @@
   .logo-result-complete span { width: 20px; height: 20px; font-size: 12px; }
   .logo-result-content h1 { font-size: clamp(26px, 7.8vw, 38px); line-height: 1.33; }
   .logo-result-lead { margin: 9px 0 14px; font-size: 16px; }
-  .logo-result-counter { min-height: 38px; min-width: 110px; font-size: 17px; }
   .logo-candidate-panel { min-height: 350px; margin-top: 14px; border-radius: 20px; }
   .logo-candidate-art { min-height: 330px; }
   .logo-candidate-image { width: min(86%, 300px); height: 235px; }
@@ -4593,6 +4588,59 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 .tone-direct-card > .tone-color-picker-inline { grid-column: 1 / -1; }
 
+.tone-direct-copy {
+  min-width: 0;
+}
+
+.tone-direct-mood-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 15px;
+  color: #535c74;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.tone-direct-mood-field span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tone-direct-mood-field small {
+  color: #b24f98;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tone-direct-mood-field input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #d8c8f5;
+  border-radius: 12px;
+  padding: 10px 13px;
+  color: #303443;
+  background: rgb(255 255 255 / 0.82);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  outline: none;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.tone-direct-mood-field input::placeholder {
+  color: #a09aac;
+  font-weight: 400;
+}
+
+.tone-direct-mood-field input:focus {
+  border-color: #9c70e8;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgb(156 112 232 / 0.16);
+}
+
 .tone-color-card h2 {
   margin: 0;
   color: #303443;
@@ -5315,6 +5363,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .tone-direct-swatches { gap: 7px; }
   .tone-direct-swatches i { width: 38px; height: 38px; }
   .tone-direct-custom-trigger { width: 29px; height: 29px; }
+  .tone-direct-mood-field { margin-top: 12px; font-size: 12px; }
+  .tone-direct-mood-field input { min-height: 42px; padding: 9px 11px; font-size: 13px; }
   .tone-color-card h2 { font-size: 18px; }
   .tone-color-card p { margin-top: 4px; font-size: 13px; }
   .tone-auto-chip { padding: 6px 12px; font-size: 14px; }
@@ -9106,12 +9156,13 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .main-home .featured-hero {
   min-height: 420px;
   border-radius: 20px;
+  background: #fff;
 }
 
 .main-home .featured-art {
   object-position: center;
   object-fit: contain;
-  background: #000;
+  background: #fff;
   filter: saturate(1.04) brightness(1.03) contrast(1.02);
 }
 
@@ -9585,36 +9636,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
     min-height: 44px;
   }
 
-  .logo-result-dots {
-    gap: 0;
-  }
-
-  .logo-result-dots button,
-  .logo-result-dots button.active {
-    position: relative;
-    width: 44px;
-    height: 44px;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .logo-result-dots button::after {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 13px;
-    height: 13px;
-    border-radius: 50%;
-    background: #e3e2e8;
-    content: '';
-    transform: translate(-50%, -50%);
-  }
-
-  .logo-result-dots button.active::after {
-    background: #9058ed;
-    box-shadow: 0 0 0 5px rgb(145 88 237 / .12);
-  }
-
   .modal-backdrop,
   .brand-choice-info-backdrop {
     padding-top: max(12px, env(safe-area-inset-top));
@@ -9760,6 +9781,81 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .trademark-reference-visual {
     width: 88px;
     height: 88px;
+  }
+}
+
+/* Tone selection uses one representative color per mood. The edit control sits
+   directly beneath the swatch so the single-color rule is obvious in both modes. */
+.tone-option-shell .tone-custom-trigger {
+  display: inline-flex;
+  position: absolute;
+  top: 88px;
+  left: 28px;
+  z-index: 2;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: auto;
+  min-width: 44px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: #7651c6;
+  background: #f7f1ff;
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 700;
+  transform: none;
+  transition: color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.tone-option-shell .tone-custom-trigger:hover,
+.tone-option-shell .tone-custom-trigger[aria-expanded='true'] {
+  color: #fff;
+  background: #8c59df;
+  transform: translateY(-1px);
+}
+
+.tone-direct-swatches {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 72px;
+}
+
+.tone-direct-edit-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 24px;
+  border: 0;
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: #7651c6;
+  background: #f7f1ff;
+  font-size: 11px;
+  font-weight: 700;
+  transition: color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.tone-direct-edit-trigger:hover,
+.tone-direct-edit-trigger[aria-expanded='true'] {
+  color: #fff;
+  background: #8c59df;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 480px) {
+  .tone-option-shell .tone-custom-trigger {
+    top: 75px;
+    left: 27px;
+  }
+
+  .tone-direct-swatches {
+    min-width: 58px;
   }
 }
 
