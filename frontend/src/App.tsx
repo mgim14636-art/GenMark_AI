@@ -1022,11 +1022,13 @@ function CustomerApp() {
   }
 
   /** 이어쓸 만한 초안이 있을 때, 곧장 이어쓰지 않고 "이어서 작성하시겠습니까?" 확인창부터 보여준다. */
-  const presentResumePrompt = async (resumeId: string, fallback: () => void) => {
+  const presentResumePrompt = async (resumeId: string, fallback: () => void, options: { skipSilentResume?: boolean } = {}) => {
     try {
       const project = await projectsApi.get(resumeId)
-      if (project.status === 'COMPLETED') {
-        // 완전히 끝난 프로젝트는 더 이상 이어쓰기 대상이 아니다 — 새로고침 없이도 새 프로젝트를 시작할 수 있게 비워준다.
+      const alreadyHasResult = project.status === 'RESULT_READY' || project.status === 'GENERATING' || project.status === 'ANALYZING'
+      if (project.status === 'COMPLETED' || (options.skipSilentResume && alreadyHasResult)) {
+        // 완전히 끝났거나(COMPLETED) 이미 생성 결과가 있는 프로젝트는 더 이상 이어쓰기 대상이 아니다
+        // — 새로고침 없이도 새 프로젝트를 시작할 수 있게 비워준다.
         setProjectId(null)
         window.localStorage.removeItem('genmark-project-id')
         fallback()
@@ -1110,7 +1112,7 @@ function CustomerApp() {
        } else if (session.resumeProjectId) {
          const destination = loginDestination
          setMode('home')
-         await presentResumePrompt(session.resumeProjectId, () => setMode(destination))
+         await presentResumePrompt(session.resumeProjectId, () => setMode(destination), { skipSilentResume: true })
          setLoginDestination('home')
        } else {
          setMode(loginDestination)
@@ -1157,7 +1159,7 @@ function CustomerApp() {
       return
     }
     if (projectId) {
-      await presentResumePrompt(projectId, () => { setIndustryBackMode('home'); setMode('industry') })
+      await presentResumePrompt(projectId, () => { setIndustryBackMode('home'); setMode('industry') }, { skipSilentResume: true })
       return
     }
     setIndustryBackMode('home')
@@ -3281,6 +3283,27 @@ function CustomerApp() {
     const displayEmail = useMypageMock ? '연결된 이메일 정보가 없어요. tkss1217@gmail.com' : authUser?.email?.trim() || '연결된 이메일 정보가 없어요.'
     const displayCompanyName = useMypageMock ? '육하원칙' : companyName.trim() || '아직 입력된 회사명이 없어요.'
     const displayCompanyMotto = useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : companyMotto.trim() || '브랜드 프로젝트에서 회사 모토를 입력해보세요.'
+    const selectedLogo = logoCandidates.find((candidate) => candidate.id === selectedCandidateId)
+      ?? logoCandidates.find((candidate) => candidate.selected)
+    const projectName = (brandKind === 'ci' ? companyName : brandName).trim()
+    const projectDescription = (brandKind === 'ci' ? companyMotto : brandValueDescription).trim()
+    const selectedIndustry = industryOptions.find((option) => option.id === industrySelection)?.title ?? '업종 미입력'
+    const selectedStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? '스타일 미입력'
+    const completedProjects = useMypageMock ? [{
+      id: 'mypage-mock-completed-brand',
+      name: '육하원칙',
+      detail: '뷰티 · 콤비네이션',
+      description: '완성된 브랜드 로고 목업',
+      candidate: { id: 'mypage-mock-completed-candidate', storageKey: 'mypage/mock-completed-brand.png' } as LogoCandidate,
+    }] : projectId && selectedLogo && projectName
+      ? [{
+          id: projectId,
+          name: projectName,
+          detail: `${selectedIndustry} · ${selectedStyle}`,
+          description: projectDescription,
+          candidate: selectedLogo,
+        }]
+      : []
     const displayDownloadHistory: DownloadRecord[] = useMypageMock ? [
       {
         downloadId: -1,
@@ -3397,6 +3420,25 @@ function CustomerApp() {
                 </div>
               </dl>
             </form>
+          </section>
+
+          <section className="mypage-section" aria-labelledby="completed-title">
+            <div className="section-title-row"><div><h2 id="completed-title">완성한 브랜드</h2><p>생성한 로고와 분석 결과를 다시 확인할 수 있어요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
+            {completedProjects.length > 0 ? completedProjects.map((project) => (
+              <article className="completed-project-card" key={project.id}>
+                <div className="completed-project-preview"><img src={useMypageMock ? '/mypage/mock-completed-brand.png' : getLogoCandidateImageUrl(project.candidate.storageKey)} alt={`${project.name} 선택 로고`} /></div>
+                <div className="completed-project-info"><div className="project-info-heading"><strong>{project.name}</strong><span className="project-status"><Check size={14} strokeWidth={2.3} /> 로고 선택 완료</span></div><p>{project.detail}</p>{project.description && <p className="project-description">{project.description}</p>}<div className="project-status-list"><span><Check size={14} strokeWidth={2} /> 로고 생성 완료</span><span className={trademarkAnalysisCompleted ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 상표 분석 {trademarkAnalysisCompleted ? '완료' : '미완료'}</span><span className={brandKit?.status === 'SUCCEEDED' ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 브랜드킷 {brandKit?.status === 'SUCCEEDED' ? '완료' : '미완료'}</span></div></div>
+                <div className="project-action-grid">
+                  <button type="button" onClick={() => setMode('result')}><ImageIcon size={19} strokeWidth={1.8} />결과 보기</button>
+                  <button type="button" disabled={!trademarkAnalysisCompleted} onClick={() => setMode('trademark-result')}><Search size={19} strokeWidth={1.8} />유사도 결과</button>
+                  <button type="button" onClick={() => requestLogoDownload({ name: project.name, subtitle: selectedIndustry, candidateId: project.candidate.id, storageKey: project.candidate.storageKey, svgUrl: project.candidate.svgUrl })}><Download size={19} strokeWidth={1.8} />로고 다운로드</button>
+                  <button type="button" onClick={openBrandKitSelection}><FolderCheck size={19} strokeWidth={1.8} />브랜드킷 만들기</button>
+                  <button type="button" onClick={() => setMode('style')}><RefreshCw size={19} strokeWidth={1.8} />다시 생성하기</button>
+                </div>
+              </article>
+            )) : (
+              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 완성한 브랜드가 없어요</h3><p>로고를 생성하고 최종 후보를 선택하면 이곳에 표시돼요.</p><button className="gradient-button" type="button" onClick={startOnboarding} disabled={authRestoring}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+            )}
           </section>
 
           <section className="mypage-section" aria-labelledby="download-history-title">
