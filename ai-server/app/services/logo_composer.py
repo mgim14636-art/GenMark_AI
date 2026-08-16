@@ -279,6 +279,26 @@ def _adjust_for_contrast(rgb: tuple, bg_rgb: tuple) -> tuple:
     return tuple(round(c * (1 - t)) for c in rgb)
 
 
+def _composite_on_white(image: Image.Image) -> Image.Image:
+    """투명 배경을 흰색 위에 합성해 RGB로 만든다.
+
+    logo_gen_service.strip_background()가 SVG 배경 path를 제거해 투명 배경을
+    돌려준다(다운로드·색 치환 편집용). 그 이미지를 그대로 convert("RGB")하면
+    투명 픽셀이 (0,0,0)이 되고, 아래 _flatten_background는 모서리 색으로 배경을
+    추정하므로 캔버스 전체를 검정으로 칠해버린다(실측 확인됨 — 선 스타일 결과의
+    86%가 검정). 알파가 있으면 흰색과 먼저 합성한다.
+    """
+    has_alpha = image.mode in ("RGBA", "LA") or (
+        image.mode == "P" and "transparency" in image.info
+    )
+    if not has_alpha:
+        return image.convert("RGB")
+    rgba = image.convert("RGBA")
+    canvas = Image.new("RGB", rgba.size, (255, 255, 255))
+    canvas.paste(rgba, mask=rgba.getchannel("A"))
+    return canvas
+
+
 def _flatten_background(logo: Image.Image, thresh: int = 40):
     """네 모서리에 닿아있는 배경 영역을 찾아, 그 배경의 실제 평균색으로 균일하게
     정리한다. 반환값은 (정리된 이미지, 배경색 RGB 튜플).
@@ -291,7 +311,7 @@ def _flatten_background(logo: Image.Image, thresh: int = 40):
     블러링한 사본을 쓰고(노이즈로 인한 연결 끊김 방지), 실제 색 교체는 원본
     선명한 이미지 위에 그 영역(마스크)만큼만 적용해 심볼 디테일은 그대로 둔다.
     """
-    rgb = logo.convert("RGB")
+    rgb = _composite_on_white(logo)
     w, h = rgb.size
     corners = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
     corner_colors = [rgb.getpixel(c) for c in corners]
