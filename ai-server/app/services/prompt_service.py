@@ -405,6 +405,28 @@ def _resolve_values(survey: dict) -> str:
     return f"The brand values are {', '.join(dict.fromkeys(usable))}."
 
 
+def _usable_user_subject(survey: dict) -> str:
+    """사용자가 지정한 형태(logo_shape/추가요구사항) 중 프롬프트에 실을 수 있는 값.
+
+    번역이 실패해 한글이 남았으면 영어 프롬프트에 그대로 흘리지 않는다(빈 문자열).
+
+    이 판정을 _resolve_motif와 build_prompt_from_survey가 각자 하다가 서로
+    어긋났다. 한글 입력이 오면 모티프는 "the exact user-requested subject"로
+    고정되는데 그 subject가 뭔지 설명하는 문장은 삭제돼, 모델이 정체불명의 지시만
+    받았다(실측 확인됨 — "달 모양"을 넣었는데 프롬프트에 한 글자도 안 실림).
+    게다가 모티프 풀 폴백까지 건너뛰어 시안이 전부 같은 프롬프트로 나갔다.
+    두 곳이 반드시 같은 답을 쓰도록 여기 한 곳으로 모은다.
+    """
+    raw = (
+        survey.get("logo_shape_en")
+        or survey.get("logo_shape")
+        or survey.get("additional_requirements")
+        or ""
+    )
+    text = " ".join(str(raw).split())[:200]  # 개행 제거 및 과도한 길이 방지
+    return "" if _HANGUL.search(text) else text
+
+
 def _raw_motif_categories(survey: dict) -> list:
     """설문 화면(FR-06)의 '모티프 카테고리' 칩 원본 값 목록(복수 선택 가능)."""
     raw = survey.get("motif_category")
@@ -433,14 +455,7 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
 
     MVP 범위가 뷰티 한정이므로 실제 서비스 경로는 위쪽이다.
     """
-    explicit = (
-        survey.get("logo_shape_en")
-        or survey.get("logo_shape")
-        or survey.get("additional_requirements")
-        or ""
-    )
-    explicit = " ".join(str(explicit).split())[:200]
-    if explicit:
+    if _usable_user_subject(survey):
         return "the exact user-requested subject"
 
     category_pool = []
@@ -571,20 +586,107 @@ def _resolve_colors(survey: dict, tone: str) -> str:
     지정해도 결과가 전부 무채색 단색으로만 나옴). "and"로 명시적으로 묶어 두 색이
     함께 쓰여야 하는 조합임을 분명히 한다.
     """
-    color_mode = survey.get("color_mode", "ai")
-    if color_mode == "manual":
-        manual_colors = survey.get("color_manual") or survey.get("colors")
-        if isinstance(manual_colors, str):
-            manual_colors = [manual_colors]
-        if manual_colors:
-            named = [_hex_to_color_name(c) for c in manual_colors]
-            named = [c for c in dict.fromkeys(named) if c]
-            if len(named) == 1:
-                return named[0]
-            if len(named) == 2:
-                return f"{named[0]} and {named[1]}"
-            return ", ".join(named[:-1]) + f", and {named[-1]}"
+    named = _manual_color_names(survey)
+    if named:
+        if len(named) == 1:
+            return named[0]
+        if len(named) == 2:
+            return f"{named[0]} and {named[1]}"
+        return ", ".join(named[:-1]) + f", and {named[-1]}"
     return TONE_COLOR_MAP.get(tone, "pastel muted tones")
+
+
+def _manual_color_names(survey: dict) -> list:
+    """color_mode=MANUAL 일 때 사용자가 직접 지정한 색 이름 목록. 없으면 빈 목록.
+
+    V25에서 color_mode(TONE|MANUAL)가 DB 컬럼이 됐다. TONE이면 톤 프리셋을 쓰므로
+    여기서 빈 목록을 돌려주고, MANUAL이면 color_1~4 중 채워진 것만 넘어오므로
+    길이가 곧 "사용자가 고른 색의 수"다.
+    """
+    if str(survey.get("color_mode", "ai")).lower() != "manual":
+        return []
+    manual_colors = survey.get("color_manual") or survey.get("colors")
+    if isinstance(manual_colors, str):
+        manual_colors = [manual_colors]
+    if not manual_colors:
+        return []
+    named = [_hex_to_color_name(c) for c in manual_colors]
+    return [c for c in dict.fromkeys(named) if c]
+
+
+# 로고 마감 — 면(solid)이냐 선(outline)이냐.
+#
+# logo_shape(사용자가 원하는 형태 자유 입력)와는 다른 축이다. logo_shape이 "무엇을"
+# 그릴지라면 이쪽은 "어떻게" 그릴지다.
+#
+# 기본값은 solid. 지금까지 나온 시안이 전부 면이라 바꾸면 기존 결과가 통째로 달라진다.
+# 화면에 선택 항목이 생기기 전까지 LOGO_FINISH 환경변수로 전체 기본값을 바꿔 실험한다.
+#
+# 주의: MOTIF_MAP 항목 상당수가 "... silhouette"으로 끝난다. silhouette은 꽉 찬 면을
+# 뜻해 선 지시와 정면으로 충돌하므로 outline일 때 _strip_fill_words가 떼어낸다.
+LOGO_FINISH_SOLID = "solid"
+LOGO_FINISH_OUTLINE = "outline"
+
+DEFAULT_LOGO_FINISH = os.environ.get("LOGO_FINISH", LOGO_FINISH_SOLID).strip().lower()
+
+_FINISH_ALIASES = {
+    "solid": LOGO_FINISH_SOLID, "fill": LOGO_FINISH_SOLID, "filled": LOGO_FINISH_SOLID,
+    "면": LOGO_FINISH_SOLID, "면형": LOGO_FINISH_SOLID,
+    "outline": LOGO_FINISH_OUTLINE, "line": LOGO_FINISH_OUTLINE,
+    "line_art": LOGO_FINISH_OUTLINE, "lineart": LOGO_FINISH_OUTLINE,
+    "stroke": LOGO_FINISH_OUTLINE,
+    "선": LOGO_FINISH_OUTLINE, "선형": LOGO_FINISH_OUTLINE,
+}
+
+FINISH_SENTENCE = {
+    LOGO_FINISH_SOLID: (
+        "Use a strong silhouette, intentional negative space, balanced proportions, "
+        "and clean geometry."
+    ),
+    LOGO_FINISH_OUTLINE: (
+        "Draw it as clean line art: every shape is an open outline stroke of uniform "
+        "weight, never filled in. Keep the interior empty so the white background shows "
+        "through, with balanced proportions and clean geometry."
+    ),
+}
+
+_FILL_WORDS = (" silhouette", " emblem", " badge")
+
+
+def _resolve_finish(survey: dict) -> str:
+    """면/선 마감. 설문값이 없으면 LOGO_FINISH 환경변수 기본값을 쓴다."""
+    raw = str(survey.get("logo_finish") or survey.get("finish") or "").strip().lower()
+    if raw in _FINISH_ALIASES:
+        return _FINISH_ALIASES[raw]
+    return _FINISH_ALIASES.get(DEFAULT_LOGO_FINISH, LOGO_FINISH_SOLID)
+
+
+def _strip_fill_words(motif: str) -> str:
+    """모티프 문구에서 면을 전제하는 꼬리말을 뗀다.
+
+    "a single botanical leaf silhouette" -> "a single botanical leaf"
+    """
+    out = motif
+    for w in _FILL_WORDS:
+        if out.endswith(w):
+            out = out[: -len(w)]
+    return out.strip() or motif
+
+
+def _color_clause(survey: dict, tone: str) -> str:
+    """core 문장에 들어갈 색상 구절.
+
+    색이 하나일 때 "in a deep navy color palette"라고 쓰면 'palette'라는 단어가
+    여러 색을 암시해 모델이 보조색을 끼워 넣는다(실측 확인됨 — 남색 1색 의도였는데
+    남색+산호색으로 생성됨). 단색 의도는 단색이라고 명시해야 한다.
+    """
+    named = _manual_color_names(survey)
+    if len(named) == 1:
+        noun = ("single stroke color"
+                if _resolve_finish(survey) == LOGO_FINISH_OUTLINE else "single flat color")
+        return f"rendered strictly in {named[0]} as the {noun}"
+    color_kw = _resolve_colors(survey, tone)
+    return f"in {_article(color_kw)} {color_kw} color palette"
 
 
 def _fit_to_budget(core: str, optional_parts: list) -> str:
@@ -680,23 +782,18 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     tone = _normalize_tone(survey.get("tone", ""))
     tone_kw = _resolve_tone(tone)
     aesthetic_kw = TONE_AESTHETIC_MAP.get(tone, "")
-    color_kw = _resolve_colors(survey, tone)
+    color_clause = _color_clause(survey, tone)
+    single_color = len(_manual_color_names(survey)) == 1
+    finish = _resolve_finish(survey)
     value_kw = _resolve_values(survey)
     age_kw = TARGET_AGE_MODIFIER.get(survey.get("target_age", ""), "")
     motif_kw = _resolve_motif(industry_key, survey, variant_index)
+    if finish == LOGO_FINISH_OUTLINE:
+        motif_kw = _strip_fill_words(motif_kw)
     concreteness_kw = CONCRETENESS_MAP.get(survey.get("concreteness", ""), "")
     style_sentence = STYLE_MAP.get(style_key, STYLE_MAP["심볼"])
 
-    extra = (
-        survey.get("logo_shape_en")
-        or survey.get("logo_shape")
-        or survey.get("additional_requirements")
-        or ""
-    )
-    extra = " ".join(str(extra).split())[:200]  # 개행 제거 및 과도한 길이 방지
-    if _HANGUL.search(extra):
-        # 번역 서비스가 실패한 자유 입력을 영어 프롬프트에 그대로 흘리지 않는다.
-        extra = ""
+    extra = _usable_user_subject(survey)
 
     user_motif_lead = ""
     if extra:
@@ -727,9 +824,9 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     core = (
         user_motif_lead
         + f"A distinctive professional flat vector logo for {industry} "
-        f"in {_article(color_kw)} {color_kw} color palette, "
+        f"{color_clause}, "
         f"built from one to three cohesive shapes around {motif_kw}. "
-        f"Use a strong silhouette, intentional negative space, balanced proportions, and clean geometry. "
+        f"{FINISH_SENTENCE[finish]} "
         f"The mark must be scalable and legible at small sizes, with a memorable custom character rather than a generic stock-icon look. "
         f"{style_sentence} "
         + (f"The shape is {concreteness_kw}. " if concreteness_kw else "")
@@ -738,8 +835,13 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
         # 된다(실측 확인됨). 문구를 그대로 문장으로 세운다.
         + f"The design conveys {tone_kw or 'a clean, balanced character'}. "
         f"It is flat 2D, with no gradients, shadows, or 3D rendering. "
-        f"Centered on a plain white background, with no readable letters or words, "
-        f"finished and complete rather than a sketch."
+        + (
+            "Every shape in the mark is the exact same single color; "
+            "no second color or tint appears anywhere. "
+            if single_color else ""
+        )
+        + "Centered on a plain white background, with no readable letters or words, "
+        "finished and complete rather than a sketch."
     )
 
     # 부가 설명은 예산이 남는 만큼만 순서대로 붙인다. value_kw(사용자가 직접 고른 기업
