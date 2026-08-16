@@ -24,6 +24,7 @@ export type ProjectInput = {
   tone?: string
   colorMode?: string
   colors?: string[]
+  paletteReplace?: boolean
   logoStyle?: string
   logoShape?: string
   additionalRequirements?: string
@@ -95,6 +96,20 @@ export type SurveyStatus = {
   creditBalance: number
 }
 
+export type SurveyImprovement =
+  | '로고 생성·재생성'
+  | '브랜드 맞춤 로고'
+  | '로고 수정'
+  | '유사 상표 확인'
+  | '로고 저장·활용'
+  | '기타'
+
+export type SurveySubmitInput = {
+  rating: 1 | 5
+  improvements?: SurveyImprovement[]
+  comment?: string
+}
+
 export type BrandKit = {
   id: string
   candidateId: string
@@ -105,6 +120,8 @@ export type BrandKit = {
   storageKeys?: string[]
   errorCode: string | null
   errorMessage?: string | null
+  preliminary?: boolean
+  warnings?: string[]
 }
 
 export type BusinessCardInfoInput = {
@@ -172,6 +189,7 @@ export type TrademarkMatch = {
   similarity: number
   imagePath: string | null
   imageUrl?: string
+  note?: string | null
 }
 
 export const getLogoCandidateImageUrl = (storageKey: string) => {
@@ -218,12 +236,29 @@ type BackendProjectResponse = {
   updatedAt: string
 }
 
-const colorFields = (colors: string[] | undefined) => ({
-  color1: colors?.[0],
-  color2: colors?.[1],
-  color3: colors?.[2],
-  color4: colors?.[3],
-})
+const normalizeHexColor = (color: string | null | undefined) => {
+  if (color == null) return color
+  const normalized = color.trim().toUpperCase()
+  return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : color
+}
+
+const colorFields = (colors: string[] | undefined, replace = false) => {
+  if (replace) {
+    return {
+      color1: normalizeHexColor(colors?.[0] ?? null),
+      color2: normalizeHexColor(colors?.[1] ?? null),
+      color3: normalizeHexColor(colors?.[2] ?? null),
+      color4: normalizeHexColor(colors?.[3] ?? null),
+    }
+  }
+
+  return {
+    ...(colors?.[0] !== undefined ? { color1: normalizeHexColor(colors[0]) } : {}),
+    ...(colors?.[1] !== undefined ? { color2: normalizeHexColor(colors[1]) } : {}),
+    ...(colors?.[2] !== undefined ? { color3: normalizeHexColor(colors[2]) } : {}),
+    ...(colors?.[3] !== undefined ? { color4: normalizeHexColor(colors[3]) } : {}),
+  }
+}
 
 const toCiProjectRequest = (input: ProjectInput) => ({
   industry: input.industry,
@@ -231,7 +266,8 @@ const toCiProjectRequest = (input: ProjectInput) => ({
   coreValues: input.brandValuesText ?? input.companyMotto ?? input.brandValues?.join(', '),
   tone: input.tone,
   colorMode: input.colorMode,
-  ...colorFields(input.colors),
+  paletteReplace: input.paletteReplace,
+  ...colorFields(input.colors, input.paletteReplace === true),
   logoStyle: input.logoStyle,
   logoShape: input.logoShape,
   additionalRequirements: input.additionalRequirements,
@@ -247,7 +283,8 @@ const toBiProjectRequest = (input: ProjectInput) => ({
   targetAge: input.targetAge,
   tone: input.tone,
   colorMode: input.colorMode,
-  ...colorFields(input.colors),
+  paletteReplace: input.paletteReplace,
+  ...colorFields(input.colors, input.paletteReplace === true),
   logoStyle: input.logoStyle,
   logoShape: input.logoShape,
   additionalRequirements: input.additionalRequirements,
@@ -384,8 +421,9 @@ export const projectsApi = {
 export const meApi = {
   getCredits: () => apiRequest<{ balance: number }>('/me/credits'),
   getSurvey: () => apiRequest<SurveyStatus>('/me/survey'),
-  submitSurvey: () => apiRequest<SurveyStatus>('/me/survey', {
+  submitSurvey: (input: SurveySubmitInput) => apiRequest<SurveyStatus>('/me/survey', {
     method: 'POST',
+    body: JSON.stringify(input),
   }),
   getPins: () => apiRequest<PinnedLogo[]>('/me/pins'),
   getBrandKits: () => apiRequest<BrandKit[]>('/me/brand-kits'),

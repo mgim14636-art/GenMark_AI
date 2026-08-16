@@ -37,9 +37,8 @@ type AdminDashboardProps = {
 
 const defaultAdminId = 'admin@genmark.ai'
 const ADMIN_TOKEN_KEY = 'genmark-admin-access-token'
-// Temporarily keep the admin dashboard available for screen review without login.
-// Restore this to true when the admin authentication flow is ready for deployment.
-const ADMIN_LOGIN_REQUIRED = false
+// Require a valid administrator session before rendering the dashboard.
+const ADMIN_LOGIN_REQUIRED = true
 
 type AdminMemberTableRow = AdminMember & {
   ciDownloads?: number

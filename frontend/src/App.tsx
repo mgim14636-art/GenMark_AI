@@ -5,7 +5,7 @@ import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
 import { AiLoader } from './components/ui/ai-loader'
 import { apiBlobRequest, AuthError, type AuthProvider, type AuthUser, downloadAuthenticatedFile, loginWithProvider, logout, restoreSession } from './auth'
-import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type BusinessCardInfoInput, type DownloadRecord, type LogoCandidate, type PinnedLogo, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
+import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type BusinessCardInfoInput, type DownloadRecord, type LogoCandidate, type PinnedLogo, type SurveyImprovement, type SurveySubmitInput, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
 import { buildEditedSvg } from './lib/svgEditor'
 
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
@@ -134,7 +134,7 @@ const businessCardGalleryItems = [
   { id: 'aurion-card', name: 'AURION', category: '명함', meta: '네이비 · 프리미엄', likes: '980', image: '/business-card-gallery/aurion.png', position: '50% 50%', tone: 'aurion' },
 ]
 
-const surveyImprovementOptions = ['로고 생성·재생성', '브랜드 맞춤 로고', '로고 수정', '유사 상표 확인', '로고 저장·활용', '기타']
+const surveyImprovementOptions: SurveyImprovement[] = ['로고 생성·재생성', '브랜드 맞춤 로고', '로고 수정', '유사 상표 확인', '로고 저장·활용', '기타']
 
 const getModeFromUrl = (): ViewMode => {
   const requestedView = new URLSearchParams(window.location.search).get('view')
@@ -385,6 +385,7 @@ function CustomerApp() {
   const [trademarkEntry, setTrademarkEntry] = useState<'generation' | 'result'>('generation')
   const [trademarkAnalysisCompleted, setTrademarkAnalysisCompleted] = useState(false)
   const [projectId, setProjectId] = useState<string | null>(() => window.localStorage.getItem('genmark-project-id'))
+  const [projectColors, setProjectColors] = useState<string[]>([])
   const [generationId, setGenerationId] = useState<string | null>(null)
   const [generationError, setGenerationError] = useState('')
   const [generationLoading, setGenerationLoading] = useState(false)
@@ -419,7 +420,7 @@ function CustomerApp() {
   const [trademarkRiskLabel, setTrademarkRiskLabel] = useState('')
   const [trademarkRiskDescription, setTrademarkRiskDescription] = useState('')
   const [surveyRating, setSurveyRating] = useState(0)
-  const [surveyImprovements, setSurveyImprovements] = useState<string[]>([])
+  const [surveyImprovements, setSurveyImprovements] = useState<SurveyImprovement[]>([])
   const [surveyComment, setSurveyComment] = useState('')
   const [surveySubmitted, setSurveySubmitted] = useState(false)
   const [remainingCredits, setRemainingCredits] = useState(2)
@@ -890,7 +891,7 @@ function CustomerApp() {
     track.classList.remove('is-dragging')
   }
 
-  const toggleSurveyImprovement = (item: string) => {
+  const toggleSurveyImprovement = (item: SurveyImprovement) => {
     setSurveyImprovements((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])
   }
 
@@ -913,6 +914,7 @@ function CustomerApp() {
     try {
       const project = await projectsApi.get(resumeId)
       setProjectId(project.id)
+      setProjectColors(project.colors?.slice(0, 4) ?? [])
       window.localStorage.setItem('genmark-project-id', project.id)
 
       const nextBrandKind = project.brandType === 'CI' ? 'ci' : project.brandType === 'BI' ? 'bi' : null
@@ -1282,6 +1284,7 @@ function CustomerApp() {
       const customizedRecommendedPalette = Boolean(toneSelection && customToneColors[toneSelection])
       input.colorMode = colorSelectionMode === 'manual' || customizedRecommendedPalette ? 'MANUAL' : 'TONE'
       input.colors = getSelectedColors()
+      input.paletteReplace = true
     }
 
     if (step === 'logo-style') {
@@ -1307,7 +1310,8 @@ function CustomerApp() {
     const input = buildProjectInput(step)
     if (projectId) {
       try {
-        await projectsApi.updateStep(projectId, step, input)
+        const project = await projectsApi.updateStep(projectId, step, input)
+        setProjectColors(project.colors?.slice(0, 4) ?? (input.colors?.slice(0, 4) ?? []))
         return projectId
       } catch (error) {
         if (!(error instanceof AuthError) || error.status !== 404) throw error
@@ -1318,8 +1322,10 @@ function CustomerApp() {
 
     const project = await projectsApi.create(buildProjectCreateInput(step))
     setProjectId(project.id)
+    setProjectColors(project.colors?.slice(0, 4) ?? [])
     window.localStorage.setItem('genmark-project-id', project.id)
-    await projectsApi.updateStep(project.id, step, input)
+    const updatedProject = await projectsApi.updateStep(project.id, step, input)
+    setProjectColors(updatedProject.colors?.slice(0, 4) ?? (input.colors?.slice(0, 4) ?? []))
     return project.id
   }
 
@@ -1390,7 +1396,16 @@ function CustomerApp() {
         : editorSvgSource
       await projectsApi.saveCandidateSvg(candidate.svgUrl, editedSvg)
       if (editorColorChanged) {
-        await projectsApi.patch(projectId, { brandType: brandKind === 'bi' ? 'BI' : 'CI', colors: [editorColor] })
+        const currentPalette = projectColors.length > 0 ? projectColors : getSelectedColors()
+        const nextPalette = [...currentPalette]
+        if (nextPalette.length === 0) nextPalette.push(editorColor)
+        else nextPalette[0] = editorColor
+        const patchedProject = await projectsApi.patch(projectId, {
+          brandType: brandKind === 'bi' ? 'BI' : 'CI',
+          colors: nextPalette,
+          paletteReplace: true,
+        })
+        setProjectColors(patchedProject.colors?.slice(0, 4) ?? nextPalette.slice(0, 4))
       }
       assetEpochRef.current += 1
       setEditorSvgSource(editedSvg)
@@ -1715,7 +1730,13 @@ function CustomerApp() {
   }
 
   const submitSurveyResponse = async () => {
-    const result = await meApi.submitSurvey()
+    if (surveyRating !== 1 && surveyRating !== 5) throw new Error('만족도를 선택해주세요.')
+    const input: SurveySubmitInput = {
+      rating: surveyRating,
+      improvements: surveyImprovements,
+      comment: surveyComment.trim() || undefined,
+    }
+    const result = await meApi.submitSurvey(input)
     setRemainingCredits(result.creditBalance)
     setSurveySubmitted(true)
   }
@@ -2752,9 +2773,9 @@ function CustomerApp() {
     const generatedLogoSrc = selectedCandidate ? getLogoCandidateImageUrl(selectedCandidate.storageKey) : resultPreviewImageUrl
     const scoreTone = displayedTrademarkScore >= 60 ? 'caution' : 'low'
     const scoreLabel = trademarkRiskLabel || (scoreTone === 'caution' ? '확인이 필요해요' : '낮은 유사도')
-    const comparisonInsight = scoreTone === 'caution'
+    const comparisonInsight = topMatch?.note?.trim() || (scoreTone === 'caution'
       ? '원형 배치와 곡선 중심의 실루엣에서 비슷한 요소가 비교적 뚜렷하게 보였어요.'
-      : '원형 배치와 곡선 중심의 실루엣에서 일부 비슷한 요소를 발견했어요.'
+      : '원형 배치와 곡선 중심의 실루엣에서 일부 비슷한 요소를 발견했어요.')
 
     return (
       <main className="trademark-result-screen trademark-result-screen-redesign" aria-labelledby="trademark-result-title">
@@ -2860,6 +2881,7 @@ function CustomerApp() {
                     <strong>{match.name}</strong>
                     <span>{match.category}</span>
                     <p>출원번호 {match.applicationNumber}</p>
+                    {match.note?.trim() && <p className="trademark-match-note">{match.note}</p>}
                   </div>
                   <strong className="trademark-match-score">{match.similarity}점</strong>
                 </article>
@@ -3035,8 +3057,14 @@ function CustomerApp() {
               </div>
               <div className="brand-kit-result-copy">
                 <span>브랜드 키트 완성</span>
+                {completedBrandKit.preliminary && <span className="brand-kit-preliminary-badge">임시 결과</span>}
                 <h2 id="brand-kit-result-title">{completedBrandKit.kitType === 'BUSINESS_CARD' ? '명함' : '제품 썸네일'} 시안이 준비됐어요.</h2>
                 <p>{missingBusinessCardBack ? '이 결과는 이전 방식으로 만든 앞면만 있어요. 아래 버튼으로 뒷면까지 바로 만들 수 있어요.' : completedBrandKit.kitType === 'BUSINESS_CARD' ? '앞면과 뒷면을 확인한 뒤 ZIP 파일 하나로 함께 받을 수 있어요.' : '선택한 로고가 실제 활용 이미지에 적용된 결과예요.'}</p>
+                {completedBrandKit.warnings?.length ? (
+                  <ul className="brand-kit-warnings" aria-label="브랜드 키트 경고">
+                    {completedBrandKit.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                  </ul>
+                ) : null}
                 {completedBrandKit.kitType === 'BUSINESS_CARD' && !missingBusinessCardBack && (
                   <button className="brand-kit-download-button" type="button" disabled={brandKitDownloading} onClick={() => void downloadBrandKitArchive(completedBrandKit)}>
                     <Download aria-hidden="true" size={18} strokeWidth={1.9} />
