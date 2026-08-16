@@ -39,7 +39,7 @@ class LogoCandidateRetrievalServiceTest {
         generationRepository = mock(LogoGenerationRepository.class);
         candidateRepository = mock(LogoCandidateRepository.class);
         service = new LogoGenerationService(projectLookup, mock(CiProjectRepository.class), mock(BiProjectRepository.class),
-                generationRepository, candidateRepository, mock(LogoGenerationWorker.class), new ObjectMapper());
+                generationRepository, candidateRepository, mock(LogoGenerationWorker.class), mock(CreditService.class), new ObjectMapper());
         project = CiProject.builder().id(PROJECT_ID).publicId("project-1").build();
         when(projectLookup.requireOwned("project-1", MEMBER_ID)).thenReturn(project);
     }

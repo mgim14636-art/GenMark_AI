@@ -53,6 +53,7 @@ class CreditFreeFlowTest {
                 generationRepository,
                 candidateRepository,
                 worker,
+                mock(CreditService.class),
                 new ObjectMapper());
 
         var response = service.create(project.getPublicId(), member.getId(), "credit-free");

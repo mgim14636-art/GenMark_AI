@@ -627,7 +627,12 @@ def _manual_color_names(survey: dict) -> list:
     if not manual_colors:
         return []
     named = [_hex_to_color_name(c) for c in manual_colors]
-    return [c for c in dict.fromkeys(named) if c]
+    result = []
+    seen = set()
+    for color in named:
+        if color and color.casefold() not in seen:
+            result.append(color); seen.add(color.casefold())
+    return result
 
 
 # 로고 마감 — 면(solid)이냐 선(outline)이냐.

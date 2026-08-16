@@ -151,12 +151,13 @@ def _source_fields(survey: dict) -> tuple[list[object], list[str]]:
 def enrich_value_keywords(survey: dict) -> dict:
     """Return a copy enriched once with up to five English value keywords.
 
-    Known chips and exact free-text tokens are handled locally. OpenRouter is called at
-    most once, only when Korean prose remains. Every failure returns the local
-    fallback so logo generation can continue.
+    Korean sources are sent to OpenRouter once before local mappings are used.
+    Safe English tokens stay local; empty or failed model output falls back to
+    the dictionary so logo generation can continue.
     """
     enriched = dict(survey)
-    keywords: list[str] = []
+    fallback_keywords: list[str] = []
+    english_keywords: list[str] = []
     chips, free_values = _source_fields(survey)
 
     for chip in chips:
@@ -165,28 +166,31 @@ def enrich_value_keywords(survey: dict) -> dict:
             continue
         mapped = VALUE_KEYWORD_MAP.get(value)
         if mapped:
-            _append_unique(keywords, [mapped])
+            _append_unique(fallback_keywords, [mapped])
         elif not HANGUL.search(value):
-            _append_unique(keywords, _sanitize_generated([value]))
-
-    korean_prose = []
+            _append_unique(english_keywords, _sanitize_generated([value]))
     for free_text in free_values:
-        unresolved = False
         for token in (part.strip() for part in _SPLIT.split(free_text)):
             if not token:
                 continue
             mapped = VALUE_KEYWORD_MAP.get(token)
             if mapped:
-                _append_unique(keywords, [mapped])
+                _append_unique(fallback_keywords, [mapped])
             elif HANGUL.search(token):
-                unresolved = True
+                continue
             else:
-                _append_unique(keywords, _sanitize_generated([token]))
-        if unresolved:
-            korean_prose.append(free_text)
+                _append_unique(english_keywords, _sanitize_generated([token]))
 
-    if korean_prose and len(keywords) < MAX_KEYWORDS:
-        _append_unique(keywords, _call_openrouter("\n".join(korean_prose)))
+    # Preserve the first spelling while de-duplicating case-insensitively.
+    sources = []
+    seen = set()
+    for value in [str(v).strip() for v in chips] + free_values:
+        if HANGUL.search(value) and value.casefold() not in seen:
+            sources.append(value); seen.add(value.casefold())
+    translated = _call_openrouter("\n".join(sources)) if sources else []
+    keywords = list(translated)
+    _append_unique(keywords, english_keywords)
+    _append_unique(keywords, fallback_keywords)
 
     enriched["value_keywords_en"] = keywords[:MAX_KEYWORDS]
     return enriched

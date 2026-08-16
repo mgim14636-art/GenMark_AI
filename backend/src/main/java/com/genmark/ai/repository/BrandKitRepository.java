@@ -22,6 +22,9 @@ public interface BrandKitRepository extends JpaRepository<BrandKit, Long> {
     Optional<BrandKit> findFirstByCandidateIdAndKitTypeAndStatusOrderByCompletedAtDesc(
             Long candidateId, BrandKit.KitType kitType, BrandKit.Status status);
 
+    Optional<BrandKit> findFirstByCandidateIdAndKitTypeAndRenderSpecHashAndStatusOrderByCompletedAtDesc(
+            Long candidateId, BrandKit.KitType kitType, String renderSpecHash, BrandKit.Status status);
+
     /** 서버 재시작으로 멈춰버린 작업 복구용 (StaleAiJobRecovery와 같은 목적). */
     List<BrandKit> findByStatusAndStartedAtBefore(BrandKit.Status status, LocalDateTime threshold);
 }

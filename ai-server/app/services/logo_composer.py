@@ -696,6 +696,21 @@ def compose_final_logo(
     style_key = survey.get("style", "심볼")
     brand_name = " ".join((survey.get("brand_name") or "").strip().split())
 
+    # 워드마크·레터마크는 원격 심볼 없이 로컬 타이포그래피로 완성한다.
+    # _wants_text_overlay()는 모델이 워드마크를 직접 그리는지 여부를 판단하는
+    # 함수라서 이 경로를 먼저 처리하지 않으면 symbol=None을 배경 평탄화기에
+    # 넘기게 된다(실제 생성 라우트도 이 함수를 None으로 호출한다).
+    if style_key in ("워드마크", "레터마크"):
+        tone = survey.get("tone", "")
+        return compose_logo(
+            None,
+            brand_name,
+            style=style_key,
+            text_color=_resolve_text_color(survey, tone),
+            tone=tone,
+            variant_index=variant_index,
+        )
+
     if not _wants_text_overlay(survey, style_key, brand_name):
         flattened, _ = _flatten_background(symbol)
         return flattened.convert("RGBA")

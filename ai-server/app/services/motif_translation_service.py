@@ -158,11 +158,6 @@ def enrich_logo_shape(survey: dict) -> dict:
     if not HANGUL.search(shape):
         safe = _sanitize(shape)
     else:
-        # Common product examples are deterministic and free; arbitrary Korean is
-        # translated once, then falls back to the local dictionary on failure.
-        # LLM을 먼저 쓴다. 사전은 낱말 하나만 집어내므로 "A와 B를 조화롭게"
-        # 같은 조합 요청을 표현하지 못한다. 문장 전체를 읽는 쪽이 우선이고,
-        # 호출이 실패하거나 느릴 때만 사전으로 내려간다.
         safe = _call_openrouter(shape) or _local_fallback(shape)
 
     logger.info("Motif translated: %r -> %r", shape[:60], safe)

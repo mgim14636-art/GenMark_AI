@@ -8,6 +8,7 @@ import com.genmark.ai.entity.LogoCandidate;
 import com.genmark.ai.entity.LogoGeneration;
 import com.genmark.ai.entity.ProjectLike;
 import com.genmark.ai.entity.ProjectStatus;
+import com.genmark.ai.entity.CreditHistory;
 import com.genmark.ai.repository.BiProjectRepository;
 import com.genmark.ai.repository.CiProjectRepository;
 import com.genmark.ai.repository.LogoCandidateRepository;
@@ -43,6 +44,7 @@ public class LogoGenerationService {
     private final LogoGenerationRepository generationRepository;
     private final LogoCandidateRepository candidateRepository;
     private final LogoGenerationWorker worker;
+    private final CreditService creditService;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -76,6 +78,7 @@ public class LogoGenerationService {
                 .orElse(null);
         if (previous != null) {
             survey.put("variant_offset", regenerationOffset(previous));
+            creditService.consume(memberId, 1, CreditHistory.Reason.GENERATE);
         }
 
         LogoGeneration generation = LogoGeneration.builder()

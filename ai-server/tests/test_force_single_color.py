@@ -9,7 +9,7 @@ import re
 
 import pytest
 
-from app.services.logo_gen_service import _single_manual_color, force_single_color
+from app.services.logo_gen_service import _colors_of, _single_manual_color, force_palette_colors, force_single_color
 
 TEAL = "#0f5f66"
 
@@ -86,6 +86,26 @@ def test_invalid_color_is_a_noop(bad):
 )
 def test_single_manual_color(survey, expected):
     assert _single_manual_color(survey) == expected
+
+
+def test_case_insensitive_duplicate_hex_is_one_palette_color():
+    survey = {"color_manual": ["#0F5F66", "#0f5f66"]}
+    assert _colors_of(survey) == ["#0F5F66"]
+    assert _single_manual_color(survey) == "#0F5F66"
+
+
+def test_palette_maps_visible_fill_and_gradient_to_selected_colors():
+    out = force_palette_colors('<path fill="#111111"/><path stroke="url(#g)"/><path fill="#ffffff"/>', [TEAL, "#ff00aa"])
+    assert '#111111' not in out.lower()
+    assert 'url(#g)' not in out.lower()
+    assert '#ffffff' in out.lower()
+    assert TEAL.lower() in out.lower() and '#ff00aa' in out.lower()
+
+
+def test_palette_normalizes_pale_model_fill_to_white():
+    out = force_palette_colors('<path fill="#eef5f4"/>', [TEAL, "#ff00aa"])
+    assert '#eef5f4' not in out.lower()
+    assert '#ffffff' in out.lower()
 
 
 def test_gradient_reference_is_replaced():

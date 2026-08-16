@@ -145,29 +145,29 @@ def _luma(c):
     return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
 
 
-def test_front_bg_is_the_selected_color():
-    assert _card_front_bg({"color_manual": ["#0f5f66"]}) == (15, 95, 102)
+def test_front_bg_equals_the_logo_ink():
+    """앞면 바탕과 뒷면 로고가 같은 색이어야 한다.
+
+    실측: 색을 두 개 이상 고르면 단색 강제가 걸리지 않아, 로고 잉크와 설문 첫
+    색이 서로 다른 파랑이 됐다. 앞면 바탕과 뒷면 로고 색이 미묘하게 어긋났다.
+    """
+    im = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+    ImageDraw.Draw(im).ellipse((30, 30, 170, 170), fill=TEAL + (255,))
+    assert _card_front_bg(im) == TEAL
 
 
-def test_front_bg_reads_backend_key_too():
-    """백엔드는 colors, /generate 스키마는 color_manual로 보낸다."""
-    assert _card_front_bg({"colors": ["#0f5f66"]}) == (15, 95, 102)
+def test_front_bg_ignores_the_survey():
+    """설문 색이 아니라 실제로 칠해진 색을 본다."""
+    im = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+    ImageDraw.Draw(im).ellipse((30, 30, 170, 170), fill=TEAL + (255,))
+    assert _card_front_bg(im) != (255, 0, 0)
 
 
-def test_light_selection_is_darkened_for_contrast():
-    """밝은 색을 그대로 깔면 흰 로고가 묻힌다."""
-    bg = _card_front_bg({"color_manual": ["#FFE1EF"]})
-    assert _luma(bg) <= 151
-
-
-def test_darkening_keeps_the_hue():
-    """대비만 확보하고 색조는 바꾸지 않는다."""
-    bg = _card_front_bg({"color_manual": ["#FFE1EF"]})
-    assert bg.index(max(bg)) == 0  # 원본에서 R이 가장 밝았다
-
-
-def test_no_color_falls_back_to_default():
-    assert _card_front_bg({}) is not None
+def test_light_logo_is_darkened_for_contrast():
+    """밝은 로고를 그대로 깔면 흰 역상 로고가 묻힌다."""
+    im = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+    ImageDraw.Draw(im).ellipse((30, 30, 170, 170), fill=(255, 225, 239, 255))
+    assert _luma(_card_front_bg(im)) <= 151
 
 
 def test_tint_solid_makes_logo_white():

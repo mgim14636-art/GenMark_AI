@@ -217,17 +217,20 @@ def _card_contact(info: Optional[CardInfo]) -> dict:
 _FRONT_BG_MAX_LUMA = 150.0
 
 
-def _card_front_bg(survey: dict) -> Tuple[int, int, int]:
-    """명함 앞면 배경색 - 사용자가 로고 생성 때 고른 색을 그대로 쓴다.
+def _card_front_bg(logo_rgba: Image.Image) -> Tuple[int, int, int]:
+    """명함 앞면 배경색 - 로고에 실제로 칠해진 대표색에서 만든다.
 
-    예전에는 로고 이미지의 대표색을 55%로 눌러 만들었다. 결과가 사용자가 고른
-    색과 미묘하게 달라서, 같은 브랜드인데 로고와 명함 바탕의 색이 어긋나 보였다.
-    설문 색이 곧 브랜드 색이므로 그것을 정본으로 삼는다.
+    설문 색(사용자가 고른 HEX)을 쓰던 때가 있었다. 색을 하나만 고른 경우에는
+    force_single_color가 로고를 그 색으로 통일하므로 둘이 정확히 일치했지만,
+    두 개 이상 고르면 강제가 걸리지 않아 로고 잉크와 설문 첫 색이 서로 다른
+    파랑이 됐다 - 앞면 바탕과 뒷면 로고의 색이 미묘하게 어긋나 보였다
+    (실측 확인됨). 눈에 보이는 것은 로고에 칠해진 색이므로 그쪽을 정본으로 삼는다.
 
-    다만 밝은 색을 고른 경우 그대로 깔면 흰 로고가 묻히므로, 대비가 확보될
-    만큼만 눌러서 쓴다.
+    밝은 로고일 때 그대로 깔면 흰 로고가 묻히므로, 대비가 확보될 만큼만 누른다.
     """
-    r, g, b = _pick_accent(survey)
+    from app.services.business_card import _dominant_logo_color
+
+    r, g, b = _dominant_logo_color(logo_rgba)
     lum = 0.299 * r + 0.587 * g + 0.114 * b
     if lum <= _FRONT_BG_MAX_LUMA:
         return (r, g, b)
@@ -265,29 +268,28 @@ def _logo_already_has_brand_name(survey: dict, brand: str) -> bool:
     return model_draws_wordmark(survey) or _wants_text_overlay(survey, style_key, brand)
 
 
-def _compose_business_card(
-    logo: Image.Image, info: Optional[CardInfo], survey: dict
-) -> Tuple[Image.Image, Image.Image]:
+def _compose_business_card(logo: Image.Image, info: Optional[CardInfo], survey: dict) -> Tuple[Image.Image, Image.Image]:
     """명함 앞면과 뒷면을 만든다.
 
-    배경색은 로고에서 자동으로 뽑는다(business_card.derive_card_bg_colors).
-    설문 색상을 쓰지 않는 이유는, 사용자가 고른 색이 두 개일 때 어느 쪽을 카드
-    바탕으로 쓸지 정할 근거가 없고 로고에 실제로 쓰인 색이 더 정확하기 때문이다.
+    앞면은 로고 대표색 바탕에 흰 로고(역상), 뒷면은 흰 바탕에 원래 색 로고다.
+    앞면 배경을 설문 색에서 뽑던 때가 있었는데, 색을 두 개 이상 고르면 로고
+    잉크와 설문 첫 색이 달라져 앞뒤 색이 어긋나 보였다(실측 확인됨). 눈에 보이는
+    것은 로고에 칠해진 색이므로 그쪽을 정본으로 삼는다.
 
     info가 없으면(백엔드가 아직 card_info를 안 보내는 상태) 인적사항 영역이 비고
     브랜드 정보만 남는다. 레이아웃은 동일하므로 값이 채워지면 그대로 명함이 된다.
     """
     from app.services.business_card import (
+        CARD_BACK_BG,
         compose_card_back,
         compose_card_front,
-        derive_card_bg_colors,
     )
 
     # 배경색 추정에는 흰색을 남긴 상태를 쓰고(대표색 계산이 흔들리지 않도록),
     # 실제로 카드에 얹는 이미지는 흰 면을 비운 버전을 쓴다.
     logo_rgba = knockout_white(_logo_rgba(logo))
-    _, back_bg = derive_card_bg_colors(logo_rgba)
-    front_bg = _card_front_bg(survey)
+    back_bg = CARD_BACK_BG
+    front_bg = _card_front_bg(logo_rgba)
     # 앞면은 브랜드 색 바탕 + 흰 로고(역상), 뒷면은 흰 바탕 + 원래 색 로고.
     logo_front = tint_solid(logo_rgba, (255, 255, 255))
 
