@@ -14,6 +14,11 @@ class CardLayout:
     brand_name_center: Tuple[int, int] = (525, 335)
     tagline_center: Tuple[int, int] = (525, 372)
     logo_box_back: Tuple[int, int, int, int] = (60, 55, 175, 155)
+    # 앞면과 같은 이유 - 로고 옆 브랜드명·태그라인을 적지 않을 때 쓰는 박스.
+    # 기존 115x100은 1050x600 카드에서 눈에 띄지 않는다(실측 확인됨). 오른쪽
+    # 이름 자리가 비므로 그 폭을 로고가 넘겨받는다. 아래 연락처 블록(y=275~)과는
+    # 겹치지 않도록 세로는 208까지만 쓴다.
+    logo_box_back_solo: Tuple[int, int, int, int] = (60, 48, 300, 208)
     brand_name_pos_back: Tuple[int, int] = (195, 75)
     tagline_pos_back: Tuple[int, int] = (195, 112)
     name_right_edge: Tuple[int, int] = (960, 275)
@@ -119,11 +124,13 @@ def compose_card_back(logo: Image.Image, brand_name: str, tagline: str, contact:
     draw = ImageDraw.Draw(card)
     text_color = _auto_text_color(bg_color)
     muted_color = tuple((max(0, min(255, c + (30 if _luma(bg_color) < 128 else -60))) for c in text_color))
-    logo_resized, pos = _resize_to_box(logo, layout.logo_box_back)
+    back_box = layout.logo_box_back if brand_name else layout.logo_box_back_solo
+    logo_resized, pos = _resize_to_box(logo, back_box)
     card.paste(logo_resized, pos, logo_resized)
-    brand_font = ImageFont.truetype(font_path_bold, 26) if font_path_bold else ImageFont.load_default()
-    draw.text(layout.brand_name_pos_back, brand_name, font=brand_font, fill=text_color)
-    if tagline:
+    if brand_name:
+        brand_font = ImageFont.truetype(font_path_bold, 26) if font_path_bold else ImageFont.load_default()
+        draw.text(layout.brand_name_pos_back, brand_name, font=brand_font, fill=text_color)
+    if brand_name and tagline:
         tag_font = ImageFont.truetype(font_path_regular, 13) if font_path_regular else ImageFont.load_default()
         draw.text(layout.tagline_pos_back, tagline, font=tag_font, fill=text_color)
     if contact.get('title') or contact.get('person_name'):

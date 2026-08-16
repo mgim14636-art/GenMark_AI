@@ -97,3 +97,39 @@ def test_named_layout_unchanged():
     """한글 브랜드처럼 로고에 이름이 없는 경우는 기존 배치를 지켜야 한다."""
     layout = CardLayout()
     assert layout.logo_box_front == (400, 110, 650, 300)
+
+
+# --- 뒷면 로고 크기 ----------------------------------------------------------
+from app.services.business_card import compose_card_back  # noqa: E402
+
+WHITE_BG = (255, 255, 255)
+CONTACT = {"person_name": "남현욱", "title": "대표", "mobile": "010-0000-0000"}
+
+
+def _back(brand, tagline=""):
+    return compose_card_back(_mark(), brand, tagline, CONTACT, WHITE_BG, None, None)
+
+
+def _logo_bbox_back(card):
+    """왼쪽 위 로고 영역만 본다 - 오른쪽 연락처 블록과 섞이지 않게."""
+    region = card.convert("RGB").crop((0, 0, 500, 240))
+    bg = Image.new("RGB", region.size, WHITE_BG)
+    diff = ImageChops.difference(region, bg).convert("L")
+    return diff.point(lambda p: 255 if p > 24 else 0).getbbox()
+
+
+def test_back_logo_is_bigger_without_brand_text():
+    solo = _logo_bbox_back(_back(""))
+    named = _logo_bbox_back(_back("Beyond", "친환경"))
+    assert (solo[3] - solo[1]) > (named[3] - named[1])
+    assert (solo[2] - solo[0]) > (named[2] - named[0])
+
+
+def test_back_logo_does_not_reach_contact_block():
+    """연락처 블록은 y=275부터다. 로고가 거기까지 내려오면 안 된다."""
+    solo = _logo_bbox_back(_back(""))
+    assert solo[3] < 275
+
+
+def test_back_named_layout_unchanged():
+    assert CardLayout().logo_box_back == (60, 55, 175, 155)
