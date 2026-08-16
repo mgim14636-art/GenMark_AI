@@ -6,6 +6,14 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 from app.services.prompt_service import _normalize_survey, _normalize_tone
 
+_TONE_TEXT_COLOR_MAP = {
+    "친근하고 다정한": "#F39BBD",
+    "전문적이고 신뢰감 있는": "#17185B",
+    "감성적이고 따뜻한": "#D29474",
+    "유니크하고 트렌디한": "#171713",
+    "미니얼하고 직관적인": "#396FC8",
+}
+
 # LOGO_FONT_PATH 환경변수가 없을 때 순서대로 시도할 폰트 후보(굵기별).
 # 배포 컨테이너(Linux)와 로컬 개발(Windows) 양쪽을 커버하기 위해 여러 경로를 둔다.
 # 한글 브랜드명을 지원하려면 이 중 하나가 실제로 존재해야 한다 — 배포 환경에는
@@ -551,8 +559,25 @@ def _wants_text_overlay(survey: dict, style_key: str, brand_name: str) -> bool:
     return style_key in ("워드마크", "레터마크", "혼합형")
 
 
+def _resolve_text_color(survey: dict, tone: str) -> str:
+    """Choose text color from explicit, manual, then tone-derived palette values."""
+    explicit = survey.get("text_color")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+
+    manual = survey.get("color_manual") or survey.get("colors")
+    if isinstance(manual, str):
+        manual = [manual]
+    if manual:
+        first = str(manual[0]).strip()
+        if first:
+            return first
+
+    return _TONE_TEXT_COLOR_MAP.get(tone, "#1a1a1a")
+
+
 def compose_final_logo(
-    symbol: Image.Image, survey: dict, variant_index: Optional[int] = None
+    symbol: Optional[Image.Image], survey: dict, variant_index: Optional[int] = None
 ) -> Image.Image:
     """생성 모델이 만든 심볼과 설문 응답을 받아 최종 로고 1장을 만든다.
 
@@ -573,8 +598,8 @@ def compose_final_logo(
         flattened, _ = _flatten_background(symbol)
         return flattened.convert("RGBA")
 
-    text_color = survey.get("text_color")
     tone = survey.get("tone", "")
+    text_color = _resolve_text_color(survey, tone)
     return compose_logo(
         symbol, brand_name, style=style_key, text_color=text_color, tone=tone,
         variant_index=variant_index,

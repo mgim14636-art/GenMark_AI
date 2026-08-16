@@ -1,6 +1,7 @@
 package com.genmark.ai.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.genmark.ai.client.SvgRasterizerClient;
 import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.LogoCandidate;
 import com.genmark.ai.entity.LogoGeneration;
@@ -18,17 +19,20 @@ import static org.mockito.Mockito.*;
 
 class LogoSvgServiceTest {
     @Test
-    void readsPreferredSvgAfterOwnershipCheck() {
+    void readsSvgRevisionRecordedInCandidateMetadataAfterOwnershipCheck() {
         ProjectLookupService projectLookup = mock(ProjectLookupService.class);
         LogoCandidateRepository candidateRepository = mock(LogoCandidateRepository.class);
         LogoFileStorage storage = mock(LogoFileStorage.class);
-        LogoSvgService service = new LogoSvgService(projectLookup, candidateRepository, storage, new ObjectMapper());
+        LogoSvgService service = new LogoSvgService(projectLookup, candidateRepository, storage,
+                mock(SvgRasterizerClient.class), new ObjectMapper());
         CiProject project = CiProject.builder().id(3L).publicId("project-1").build();
         LogoCandidate candidate = candidate(project);
+        candidate.setAiMetadataJson("{\"svgRevision\":\"revision-1\"}");
         when(projectLookup.requireOwned("project-1", 7L)).thenReturn(project);
         when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
                 "candidate-1", 3L, 7L)).thenReturn(Optional.of(candidate));
-        when(storage.readPreferredSvg("generation-1", 1)).thenReturn("<svg/>".getBytes(StandardCharsets.UTF_8));
+        when(storage.readSvg("generation-1", 1, "revision-1"))
+                .thenReturn("<svg/>".getBytes(StandardCharsets.UTF_8));
 
         byte[] result = service.read("project-1", "candidate-1", 7L);
 
@@ -40,17 +44,25 @@ class LogoSvgServiceTest {
         ProjectLookupService projectLookup = mock(ProjectLookupService.class);
         LogoCandidateRepository candidateRepository = mock(LogoCandidateRepository.class);
         LogoFileStorage storage = mock(LogoFileStorage.class);
-        LogoSvgService service = new LogoSvgService(projectLookup, candidateRepository, storage, new ObjectMapper());
+        SvgRasterizerClient rasterizerClient = mock(SvgRasterizerClient.class);
+        LogoSvgService service = new LogoSvgService(projectLookup, candidateRepository, storage,
+                rasterizerClient, new ObjectMapper());
         CiProject project = CiProject.builder().id(3L).publicId("project-1").build();
         LogoCandidate candidate = candidate(project);
         when(projectLookup.requireOwned("project-1", 7L)).thenReturn(project);
         when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
                 "candidate-1", 3L, 7L)).thenReturn(Optional.of(candidate));
+        when(rasterizerClient.rasterize("<svg><path/></svg>")).thenReturn("png-base64");
+        when(storage.storeEditedAssets("generation-1", 1, "<svg><path/></svg>", "png-base64"))
+                .thenReturn(new LogoFileStorage.StoredEditedAsset(
+                        "logos/generation-1/candidate-1-revision-1.png", "revision-1", 1024, 1024));
 
         service.saveEdited("project-1", "candidate-1", 7L, "<svg><path/></svg>");
 
-        verify(storage).storeEditedSvg("generation-1", 1, "<svg><path/></svg>");
-        assertThat(candidate.getAiMetadataJson()).contains("svgAvailable");
+        assertThat(candidate.getStorageKey()).isEqualTo("logos/generation-1/candidate-1-revision-1.png");
+        assertThat(candidate.getWidth()).isEqualTo(1024);
+        assertThat(candidate.getHeight()).isEqualTo(1024);
+        assertThat(candidate.getAiMetadataJson()).contains("\"svgRevision\":\"revision-1\"");
     }
 
     @Test
@@ -58,7 +70,8 @@ class LogoSvgServiceTest {
         ProjectLookupService projectLookup = mock(ProjectLookupService.class);
         LogoCandidateRepository candidateRepository = mock(LogoCandidateRepository.class);
         LogoFileStorage storage = mock(LogoFileStorage.class);
-        LogoSvgService service = new LogoSvgService(projectLookup, candidateRepository, storage, new ObjectMapper());
+        LogoSvgService service = new LogoSvgService(projectLookup, candidateRepository, storage,
+                mock(SvgRasterizerClient.class), new ObjectMapper());
         when(projectLookup.requireOwned("project-1", 7L))
                 .thenThrow(new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
 

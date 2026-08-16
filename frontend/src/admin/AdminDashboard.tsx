@@ -221,12 +221,10 @@ type AdminMemberIdSearchProps = {
   id: string
   value: string
   onChange: (value: string) => void
-  resultCount: number
-  totalCount: number
   placeholder?: string
 }
 
-function AdminMemberIdSearch({ id, value, onChange, resultCount, totalCount, placeholder = '회원 아이디 입력' }: AdminMemberIdSearchProps) {
+function AdminMemberIdSearch({ id, value, onChange, placeholder = '회원 아이디 입력' }: AdminMemberIdSearchProps) {
   const hasQuery = value.trim().length > 0
 
   return (
@@ -238,9 +236,7 @@ function AdminMemberIdSearch({ id, value, onChange, resultCount, totalCount, pla
           <input id={id} type="search" inputMode="email" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-label="회원 아이디 검색" />
           {hasQuery && <button className="admin-list-search-clear" type="button" aria-label="회원 아이디 검색어 지우기" onClick={() => onChange('')}><X size={15} aria-hidden="true" /></button>}
         </div>
-        <span className="admin-list-search-hint">입력한 아이디와 정확히 일치하는 회원만 표시합니다.</span>
       </div>
-      <span className="admin-list-search-result" aria-live="polite">{hasQuery ? `검색 결과 ${resultCount}명 / 전체 ${totalCount}명` : `전체 ${totalCount}명`}</span>
     </div>
   )
 }
@@ -255,7 +251,6 @@ type LogoGenerationListProps = {
 function AdminLogoGenerationList({ track, members, openPanel, setOpenPanel }: LogoGenerationListProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const getLogos = (member: LogoMemberRecord, type: 'generated' | 'downloaded') => type === 'generated' ? member.generatedLogos : member.downloadedLogos
-  const trackLabel = track === 'CI' ? '기업 로고' : '브랜드 로고'
   const filteredMembers = members.filter((member) => matchesAdminMemberSearch(searchQuery, member.memberId))
 
   return (
@@ -264,9 +259,9 @@ function AdminLogoGenerationList({ track, members, openPanel, setOpenPanel }: Lo
         <div>
           <p className="admin-eyebrow">LOGO GENERATION</p>
           <h2 id={`${track.toLowerCase()}-generation-title`}>{track} 생성 목록</h2>
-          <p>회원별 {trackLabel} 생성 및 다운로드 기록을 확인할 수 있어요.</p>
+          <p className="admin-generation-description">회원별 {track} 로고 생성·다운로드 기록을 확인합니다.</p>
         </div>
-        <AdminMemberIdSearch id={`${track.toLowerCase()}-member-search`} value={searchQuery} onChange={setSearchQuery} resultCount={filteredMembers.length} totalCount={members.length} />
+        <AdminMemberIdSearch id={`${track.toLowerCase()}-member-search`} value={searchQuery} onChange={setSearchQuery} />
       </div>
       <div className="admin-table-shell">
         <table className="admin-logo-table">
@@ -339,7 +334,7 @@ function AdminSurveyResponseTable() {
 
   return (
     <section className="admin-record-page" aria-labelledby="survey-response-title">
-      <div className="admin-section-heading"><div><p className="admin-eyebrow">USER FEEDBACK</p><h2 id="survey-response-title">개선 요청</h2><p>사용자가 선택한 개선 항목을 프로젝트 단위로 확인해요.</p></div><AdminMemberIdSearch id="survey-member-search" value={searchQuery} onChange={setSearchQuery} resultCount={filteredResponses.length} totalCount={adminSurveyResponses.length} /></div>
+      <div className="admin-section-heading"><div><p className="admin-eyebrow">USER FEEDBACK</p><h2 id="survey-response-title">개선 요청</h2><p>사용자가 선택한 개선 항목을 프로젝트 단위로 확인해요.</p></div><AdminMemberIdSearch id="survey-member-search" value={searchQuery} onChange={setSearchQuery} /></div>
       <div className="admin-table-shell">
         <table className="admin-survey-response-table">
           <caption className="admin-sr-only">개선 요청 설문 응답 목록</caption>
@@ -850,7 +845,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
             </section>
           </> : dashboardSection === 'members' ? <>
             <section className="admin-card admin-member-list-card" aria-labelledby="admin-member-list-title">
-              <div className="admin-card-heading admin-member-list-heading"><div><h2 id="admin-member-list-title">회원 목록</h2><p>회원별 생성·다운로드 현황과 잔여 크레딧을 확인합니다.</p></div><AdminMemberIdSearch id="admin-member-search" value={memberSearchQuery} onChange={setMemberSearchQuery} resultCount={displayedAdminMembers.length} totalCount={allAdminMembers.length} placeholder="회원 아이디(이메일) 입력" /></div>
+              <div className="admin-card-heading admin-member-list-heading"><div><h2 id="admin-member-list-title">회원 목록</h2><p>회원별 생성·다운로드 현황과 잔여 크레딧을 확인합니다.</p></div><AdminMemberIdSearch id="admin-member-search" value={memberSearchQuery} onChange={setMemberSearchQuery} placeholder="회원 아이디(이메일) 입력" /></div>
               <div className="admin-member-table-wrap" role="region" tabIndex={0} aria-label="회원 목록 표, 좌우로 스크롤할 수 있습니다">
                 <table className="admin-member-table admin-member-usage-table">
                   <caption className="admin-sr-only">회원별 로고 생성, 다운로드 및 잔여 크레딧 목록</caption>

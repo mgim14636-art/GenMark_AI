@@ -502,6 +502,15 @@ def test_note_provider_defaults_to_openrouter_when_key_present(monkeypatch):
     assert note_service._api_key() == "sk-test"
 
 
+def test_openrouter_note_model_defaults_to_gemini_flash_lite(monkeypatch):
+    from app.services import note_service
+
+    monkeypatch.setenv("NOTE_PROVIDER", "openrouter")
+    monkeypatch.delenv("NOTE_MODEL", raising=False)
+
+    assert note_service._model() == "google/gemini-2.5-flash-lite"
+
+
 def test_note_provider_falls_back_to_gemini_without_openrouter_key(monkeypatch):
     from app.services import note_service
 

@@ -15,7 +15,7 @@ from app.services.prompt_service import VALUE_KEYWORD_MAP, _normalize_survey
 load_dotenv()
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-nano-12b-v2-vl:free"
+DEFAULT_OPENROUTER_MODEL = "upstage/solar-pro4"
 HANGUL = re.compile(r"[가-힣]")
 _ENGLISH_KEYWORD = re.compile(r"^[A-Za-z]+(?:[ -][A-Za-z]+)*$")
 _CONTROL_LANGUAGE = re.compile(
@@ -79,7 +79,6 @@ def _sanitize_generated(raw: object) -> list[str]:
 def _model() -> str:
     return (
         os.environ.get("VALUE_KEYWORD_MODEL", "").strip()
-        or os.environ.get("NOTE_MODEL", "").strip()
         or DEFAULT_OPENROUTER_MODEL
     )
 

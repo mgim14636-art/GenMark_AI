@@ -53,6 +53,10 @@ public class CiProject implements ProjectLike {
     @Builder.Default
     private String tone = "friendly";
 
+    @Column(name = "color_mode", nullable = false, length = 20)
+    @Builder.Default
+    private String colorMode = "TONE";
+
     /**
      * brand-brief 단계만 제출한 상태에서는 아직 색상을 고르지 않아 null일 수 있다
      * (F9 이어쓰기가 이 단계부터도 동작하도록 하기 위함). 실제 로고 생성은 항상 tone
@@ -73,6 +77,9 @@ public class CiProject implements ProjectLike {
     @Column(name = "logo_style", nullable = false, length = 50)
     @Builder.Default
     private String logoStyle = "combination";
+
+    @Column(name = "logo_shape", length = 100)
+    private String logoShape;
 
     @Column(name = "additional_requirements", length = 300)
     private String additionalRequirements;
@@ -104,9 +111,12 @@ public class CiProject implements ProjectLike {
         survey.put("industry", industry);
         survey.put("company_values_text", coreValues);
         survey.put("tone", tone);
-        survey.put("color_mode", "MANUAL");
-        survey.put("color_manual", colorList());
+        boolean manualColor = "MANUAL".equalsIgnoreCase(colorMode);
+        survey.put("color_mode", manualColor ? "manual" : "ai");
+        if (manualColor) survey.put("color_manual", colorList());
         survey.put("style", logoStyle);
+        survey.put("logo_shape", logoShape);
+        survey.put("include_brand_name_in_logo", !"symbol".equalsIgnoreCase(logoStyle));
         survey.put("additional_requirements", additionalRequirements);
         survey.put("num_variants", 1);
         return survey;

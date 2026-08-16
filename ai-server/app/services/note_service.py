@@ -35,10 +35,10 @@ GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:ge
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MAX_NOTE_CHARS = 60
 
-# 기본 모델. 이미지 입력을 받는 무료 모델 중 가장 작아 응답이 빠르다.
+# 기본 모델. 이미지 입력을 받는 저가형 모델 중 작고 응답이 빠른 모델을 쓴다.
 # note는 유사도 응답에 1~3초를 더하는 부가 기능이라 크기보다 속도가 중요하다.
-# 후보 확인: python scripts/compare_llms.py --list --free --vision
-DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-nano-12b-v2-vl:free"
+# 후보 확인: python scripts/compare_llms.py --list --vision
+DEFAULT_OPENROUTER_MODEL = "google/gemini-2.5-flash-lite"
 
 
 def _provider() -> str:

@@ -20,10 +20,10 @@ public class FastApiLogoAiClient implements LogoAiClient {
     public LogoAiResult generate(Map<String, Object> survey) {
         Map<String, Object> body = restClient.post().uri("/api/v1/generation/generate")
                 .body(survey).retrieve().body(Map.class);
-        if (body == null) return new LogoAiResult(false, List.of());
+        if (body == null) return new LogoAiResult(false, null, List.of());
 
         Object rawLogos = body.get("logos");
-        if (!(rawLogos instanceof List<?> list)) return new LogoAiResult(false, List.of());
+        if (!(rawLogos instanceof List<?> list)) return new LogoAiResult(false, toNonBlankString(body.get("modelName")), List.of());
 
         List<GeneratedLogo> logos = list.stream()
                 .filter(Map.class::isInstance)
@@ -31,7 +31,7 @@ public class FastApiLogoAiClient implements LogoAiClient {
                 .map(FastApiLogoAiClient::toGeneratedLogo)
                 .filter(java.util.Objects::nonNull)
                 .toList();
-        return new LogoAiResult(!logos.isEmpty(), logos);
+        return new LogoAiResult(!logos.isEmpty(), toNonBlankString(body.get("modelName")), logos);
     }
 
     private static GeneratedLogo toGeneratedLogo(Map<?, ?> item) {

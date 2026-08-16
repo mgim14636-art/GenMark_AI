@@ -2,11 +2,13 @@ package com.genmark.ai.web.controller;
 
 import com.genmark.ai.entity.LogoDownload;
 import com.genmark.ai.security.MemberPrincipal;
+import com.genmark.ai.service.BrandKitService;
 import com.genmark.ai.service.CreditService;
 import com.genmark.ai.service.LogoDownloadService;
 import com.genmark.ai.service.LogoPinService;
 import com.genmark.ai.service.SurveyService;
 import com.genmark.ai.web.dto.ApiSuccessResponse;
+import com.genmark.ai.web.dto.brandkit.BrandKitResponse;
 import com.genmark.ai.web.dto.logo.LogoDownloadResponse;
 import com.genmark.ai.web.dto.logo.PinnedCandidateResponse;
 import com.genmark.ai.web.dto.survey.SurveyResponse;
@@ -36,6 +38,7 @@ public class MeController {
     private final LogoDownloadService downloadService;
     private final CreditService creditService;
     private final SurveyService surveyService;
+    private final BrandKitService brandKitService;
 
     /** 내 찜 목록 (CI/BI 합쳐서 최근 찜한 순). 만료된 항목은 제외된다. */
     @GetMapping("/pins")
@@ -67,6 +70,13 @@ public class MeController {
             @AuthenticationPrincipal MemberPrincipal principal) {
         return ResponseEntity.ok(ApiSuccessResponse.of(
                 Map.of("balance", creditService.balanceOf(principal.id()))));
+    }
+
+    /** 로그인 사용자가 만든 브랜드 키트를 최신순으로 조회한다. */
+    @GetMapping("/brand-kits")
+    public ResponseEntity<ApiSuccessResponse<List<BrandKitResponse>>> brandKits(
+            @AuthenticationPrincipal MemberPrincipal principal) {
+        return ResponseEntity.ok(ApiSuccessResponse.of(brandKitService.listForMember(principal.id())));
     }
 
     /** 설문조사 응답 여부 확인. 이미 응답했으면 화면에서 버튼을 감춘다. */

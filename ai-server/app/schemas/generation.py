@@ -37,6 +37,7 @@ class GenerationRequest(BaseModel):
 
     motif_category: Optional[List[str]] = Field(None, description="모티프 카테고리 칩(복수 선택 가능)")
     concreteness: Optional[str] = Field(None, description="완전 추상 | 적당히 단순화 | 사실적")
+    logo_shape: Optional[str] = Field(None, max_length=100, description="사용자가 요청한 로고 형태")
     additional_requirements: Optional[str] = None
 
     text_color: Optional[str] = Field(None, description="혼합형/워드마크/레터마크 텍스트 색상 직접 지정")
@@ -84,4 +85,15 @@ class GeneratedLogo(BaseModel):
 
 
 class GenerationResponse(BaseModel):
+    modelName: str
     logos: List[GeneratedLogo]
+
+
+class SvgRasterizeRequest(BaseModel):
+    svg: str = Field(..., min_length=1, description="편집된 SVG 문서")
+
+
+class SvgRasterizeResponse(BaseModel):
+    imageBase64: str
+    width: int = 1024
+    height: int = 1024

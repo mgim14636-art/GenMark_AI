@@ -54,10 +54,12 @@ _LEGACY_TONE_ALIASES = {
 _CURRENT_SURVEY_ALIASES = {
     "industry": {
         "COSMETICS": "뷰티",
-        "FASHION": "기타",
-        "FOOD": "기타",
-        "TECH": "기타",
-        "HEALTH_WELLNESS": "기타",
+        "FASHION": "패션",
+        "FOOD": "푸드·카페",
+        "HEALTH_WELLNESS": "헬스·웰니스",
+        "TECH": "테크",
+        "EDUCATION": "교육",
+        "PET": "펫",
         "OTHER": "기타",
     },
     "tone": {
@@ -136,15 +138,20 @@ def _normalize_tone(tone: str) -> str:
 
 # 스타일별 심볼 문장 — 브랜드명 문자는 절대 넣지 않는다(항상 logo_composer.py가 합성).
 STYLE_MAP = {
-    "심볼": "The mark is a purely graphic, abstract symbol icon with no letterforms.",
+    "심볼": "Create a standalone graphic symbol with no letterforms or typography.",
     "워드마크": "The mark is an abstract shape inspired by wordmark letterforms, without any readable text.",
-    "혼합형": "The mark combines a graphic symbol with an abstract letterform-like silhouette.",
+    "혼합형": "Create a compact graphic symbol designed to pair cleanly with a separately typeset brand name; do not draw letters.",
     "레터마크": "The mark is an elegant monogram-style abstract initial shape, without any readable text.",
 }
 
-# MVP 범위는 뷰티(G1201) 한정 — 다른 업종은 아직 구현하지 않아 목록에서 제외
 INDUSTRY_MAP = {
     "뷰티": "a beauty and cosmetics brand",
+    "패션": "a fashion and apparel brand",
+    "푸드·카페": "a food, cafe, or bakery brand",
+    "헬스·웰니스": "a health and wellness brand",
+    "테크": "a technology and software brand",
+    "교육": "an education and learning brand",
+    "펫": "a pet care and companion-animal brand",
     "기타": "a general commercial brand",
 }
 
@@ -170,6 +177,54 @@ MOTIF_MAP = {
         "a mountain peak silhouette",
         "a star burst shape",
     ],
+    "패션": [
+        "an elegant folded-fabric ribbon",
+        "a refined needle-and-thread curve",
+        "a minimal garment-label emblem",
+        "an abstract runway silhouette",
+        "a tailored geometric monogram frame",
+        "a flowing textile wave",
+    ],
+    "푸드·카페": [
+        "a warm rising-steam curve",
+        "a minimal coffee bean silhouette",
+        "a handcrafted grain or wheat emblem",
+        "a simple cup-and-saucer silhouette",
+        "an inviting table-and-plate symbol",
+        "a fresh sprout paired with a bowl shape",
+    ],
+    "헬스·웰니스": [
+        "a balanced pulse-and-leaf symbol",
+        "a calm protective heart shape",
+        "an abstract human figure in motion",
+        "a restorative sun-and-horizon emblem",
+        "a balanced circular wellness mark",
+        "a gentle shield with organic curves",
+    ],
+    "테크": [
+        "an interconnected node emblem",
+        "a modular pixel-and-orbit symbol",
+        "a precise forward-moving circuit shape",
+        "an abstract data-flow ribbon",
+        "a secure geometric network mark",
+        "a minimal layered portal symbol",
+    ],
+    "교육": [
+        "an open-book shape becoming a path",
+        "a rising spark of discovery",
+        "a structured learning-block emblem",
+        "an abstract dialogue-and-idea symbol",
+        "a guiding compass for learning",
+        "a growth staircase with a bright point",
+    ],
+    "펫": [
+        "a warm abstract paw silhouette",
+        "a protective heart around an animal profile",
+        "a playful tail-and-circle symbol",
+        "a friendly dog-and-cat negative-space mark",
+        "a simple companion-animal face emblem",
+        "a joyful pet motion curve",
+    ],
     "기타": [
         "an abstract geometric emblem",
         "a minimal circular badge shape",
@@ -185,7 +240,9 @@ MOTIF_MAP = {
 # 카테고리를 고르지 않았을 때 MOTIF_MAP의 고정 목록을 쓸 업종.
 # "기타"는 별·무한대·링처럼 상투적인 도형만 있어 강제하면 오히려 밋밋해진다
 # (94062ed에서 열린 지시로 바꾼 이유). 뷰티 풀은 업종 특화 모티프라 강제해도 좋다.
-MOTIF_POOL_INDUSTRIES = {"뷰티"}
+MOTIF_POOL_INDUSTRIES = {
+    "뷰티", "패션", "푸드·카페", "헬스·웰니스", "테크", "교육", "펫"
+}
 
 USER_MOTIF_RENDERING_APPROACHES = (
     "a bold simplified flat silhouette",
@@ -376,8 +433,14 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
 
     MVP 범위가 뷰티 한정이므로 실제 서비스 경로는 위쪽이다.
     """
-    extra = " ".join((survey.get("additional_requirements") or "").split())[:200]
-    if extra:
+    explicit = (
+        survey.get("logo_shape_en")
+        or survey.get("logo_shape")
+        or survey.get("additional_requirements")
+        or ""
+    )
+    explicit = " ".join(str(explicit).split())[:200]
+    if explicit:
         return "the exact user-requested subject"
 
     category_pool = []
@@ -386,7 +449,14 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
             if motif not in category_pool:
                 category_pool.append(motif)
 
-    # 카테고리 미선택 시, 큐레이션된 풀이 있는 업종만 고정 목록으로 폴백한다.
+    # 사용자가 고른 가치가 시각 모티프와 연결되도록 가치 기반 후보를 우선한다.
+    if not category_pool:
+        for value in _raw_value_keys(survey):
+            for motif in VALUE_MOTIF_BIAS.get(value, []):
+                if motif not in category_pool:
+                    category_pool.append(motif)
+
+    # 카테고리·가치 후보가 없을 때 업종별 큐레이션 풀로 폴백한다.
     pool = category_pool
     if not pool and industry_key in MOTIF_POOL_INDUSTRIES:
         pool = MOTIF_MAP.get(industry_key, [])
@@ -561,8 +631,16 @@ def _normalize_survey(survey: dict) -> dict:
 
     for field, aliases in _CURRENT_SURVEY_ALIASES.items():
         value = survey.get(field)
+        if isinstance(value, str):
+            value = value.strip()
+            survey[field] = value
         if value in aliases:
             survey[field] = aliases[value]
+        elif isinstance(value, str):
+            folded = value.casefold()
+            matched = next((mapped for key, mapped in aliases.items() if key.casefold() == folded), None)
+            if matched is not None:
+                survey[field] = matched
 
     # 가치 칩을 사전 키로 맞춘다. 같은 칩이 두 개 매핑되는 경우가 있어
     # (저자극·더마 → 더마·저자극) 순서를 지키며 중복을 제거한다.
@@ -609,8 +687,16 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     concreteness_kw = CONCRETENESS_MAP.get(survey.get("concreteness", ""), "")
     style_sentence = STYLE_MAP.get(style_key, STYLE_MAP["심볼"])
 
-    extra = (survey.get("additional_requirements") or "").strip()
-    extra = " ".join(extra.split())[:200]  # 개행 제거 및 과도한 길이 방지
+    extra = (
+        survey.get("logo_shape_en")
+        or survey.get("logo_shape")
+        or survey.get("additional_requirements")
+        or ""
+    )
+    extra = " ".join(str(extra).split())[:200]  # 개행 제거 및 과도한 길이 방지
+    if _HANGUL.search(extra):
+        # 번역 서비스가 실패한 자유 입력을 영어 프롬프트에 그대로 흘리지 않는다.
+        extra = ""
 
     user_motif_lead = ""
     if extra:
@@ -640,10 +726,12 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     # 바로 다음(가장 이른 위치)으로 옮겨 우선순위를 높였다.
     core = (
         user_motif_lead
-        + f"A minimalist flat vector logo icon for {industry} "
+        + f"A distinctive professional flat vector logo for {industry} "
         f"in {_article(color_kw)} {color_kw} color palette, "
-        f"drawn as one bold, large, solid-filled silhouette in {motif_kw}, with a thick, "
-        f"clean, unbroken outline that fills the canvas. {style_sentence} "
+        f"built from one to three cohesive shapes around {motif_kw}. "
+        f"Use a strong silhouette, intentional negative space, balanced proportions, and clean geometry. "
+        f"The mark must be scalable and legible at small sizes, with a memorable custom character rather than a generic stock-icon look. "
+        f"{style_sentence} "
         + (f"The shape is {concreteness_kw}. " if concreteness_kw else "")
         # tone_kw는 "a friendly, approachable feeling with ..." 처럼 이미 완결된
         # 명사구다. 뒤에 "character"를 붙이면 "...soft shapes character"라는 비문이

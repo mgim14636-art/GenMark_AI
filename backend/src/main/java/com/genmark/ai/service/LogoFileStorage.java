@@ -16,8 +16,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -112,6 +117,36 @@ public class LogoFileStorage {
         }
     }
 
+    public StoredEditedAsset storeEditedAssets(String generationPublicId, int order, String svg, String pngBase64) {
+        byte[] svgBytes = validateSvg(svg);
+        byte[] pngBytes = decodePng(pngBase64);
+        BufferedImage image = validateEditedPng(pngBytes);
+        String revision = contentRevision(svgBytes, pngBytes);
+        Path svgFile = revisionSvgPath(generationPublicId, order, revision);
+        Path pngFile = revisionPngPath(generationPublicId, order, revision);
+        try {
+            Files.createDirectories(svgFile.getParent());
+            Files.createDirectories(pngFile.getParent());
+            writeImmutable(svgFile, svgBytes);
+            writeImmutable(pngFile, pngBytes);
+            return new StoredEditedAsset(publicStorageKey(pngFile), revision,
+                    image.getWidth(), image.getHeight());
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
+    public byte[] readSvg(String generationPublicId, int order, String revision) {
+        if (revision == null || revision.isBlank()) return readPreferredSvg(generationPublicId, order);
+        Path file = revisionSvgPath(generationPublicId, order, revision);
+        if (!Files.exists(file)) throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
+        try {
+            return Files.readAllBytes(file);
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
     public byte[] readPreferredSvg(String generationPublicId, int order) {
         Path edited = svgPath(generationPublicId, order, true);
         Path original = svgPath(generationPublicId, order, false);
@@ -122,6 +157,53 @@ public class LogoFileStorage {
         } catch (IOException e) {
             throw new ApiException(ErrorCode.STORAGE_ERROR);
         }
+    }
+
+    public void storeBrandKitSourceKey(String brandKitPublicId, String sourceStorageKey) {
+        if (sourceStorageKey == null || sourceStorageKey.isBlank()) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+        Path file = brandKitSourcePath(brandKitPublicId);
+        try {
+            Files.createDirectories(file.getParent());
+            writeAtomically(file, sourceStorageKey.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
+    public boolean brandKitSourceKeyMatches(String brandKitPublicId, String sourceStorageKey) {
+        if (sourceStorageKey == null || sourceStorageKey.isBlank()) return false;
+        Path file = brandKitSourcePath(brandKitPublicId);
+        if (!Files.exists(file)) return false;
+        try {
+            return sourceStorageKey.equals(Files.readString(file, StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
+    public List<String> brandKitStorageKeys(String brandKitPublicId, String primaryStorageKey) {
+        if (brandKitPublicId == null || !SAFE_PATH_SEGMENT.matcher(brandKitPublicId).matches()) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+        Path directory = root.resolve("logos").resolve("brand-kits").resolve(brandKitPublicId).normalize();
+        if (!directory.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+
+        List<String> storageKeys = new ArrayList<>();
+        for (int order = 1; order <= 10; order += 1) {
+            Path file = directory.resolve("candidate-" + order + ".png").normalize();
+            if (!file.startsWith(root) || !Files.isRegularFile(file)) break;
+            storageKeys.add(publicStorageKey(file));
+        }
+        if (storageKeys.isEmpty() && primaryStorageKey != null && !primaryStorageKey.isBlank()) {
+            storageKeys.add(primaryStorageKey);
+        }
+        return List.copyOf(storageKeys);
+    }
+
+    public boolean brandKitHasExpectedImageCount(String brandKitPublicId, int expectedCount) {
+        return brandKitStorageKeys(brandKitPublicId, null).size() >= expectedCount;
     }
 
     /**
@@ -193,8 +275,46 @@ public class LogoFileStorage {
         return file;
     }
 
+    private Path revisionSvgPath(String generationPublicId, int order, String revision) {
+        validateRevision(revision);
+        Path legacy = svgPath(generationPublicId, order, false);
+        return legacy.resolveSibling("candidate-" + order + "-" + revision + ".svg");
+    }
+
+    private Path revisionPngPath(String generationPublicId, int order, String revision) {
+        validateRevision(revision);
+        if (generationPublicId == null || !SAFE_PATH_SEGMENT.matcher(generationPublicId).matches() || order < 1) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+        Path directory = root.resolve("logos").resolve(generationPublicId).normalize();
+        if (!directory.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+        Path file = directory.resolve("candidate-" + order + "-" + revision + ".png").normalize();
+        if (!file.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+        return file;
+    }
+
+    private Path brandKitSourcePath(String brandKitPublicId) {
+        if (brandKitPublicId == null || !SAFE_PATH_SEGMENT.matcher(brandKitPublicId).matches()) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+        Path directory = privateRoot.resolve("brand-kits").normalize();
+        Path file = directory.resolve(brandKitPublicId + ".source-key").normalize();
+        if (!file.startsWith(privateRoot)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+        return file;
+    }
+
+    private void validateRevision(String revision) {
+        if (revision == null || !revision.matches("[0-9a-f]{64}")) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
     private String privateStorageKey(Path file) {
         return privateRoot.relativize(file).toString().replace('\\', '/');
+    }
+
+    private String publicStorageKey(Path file) {
+        return root.relativize(file).toString().replace('\\', '/');
     }
 
     private byte[] validateSvg(String svg) {
@@ -229,6 +349,38 @@ public class LogoFileStorage {
         } catch (Exception e) {
             throw invalidSvg();
         }
+    }
+
+    private BufferedImage validateEditedPng(byte[] bytes) {
+        try {
+            BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
+            if (image == null || image.getWidth() != 1024 || image.getHeight() != 1024) {
+                throw new ApiException(ErrorCode.AI_INVALID_RESPONSE, "SVG 래스터 변환 결과가 올바른 PNG가 아닙니다.");
+            }
+            return image;
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.AI_INVALID_RESPONSE, "SVG 래스터 변환 PNG를 읽을 수 없습니다.");
+        }
+    }
+
+    private String contentRevision(byte[] svgBytes, byte[] pngBytes) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            updateLength(digest, svgBytes.length);
+            digest.update(svgBytes);
+            updateLength(digest, pngBytes.length);
+            digest.update(pngBytes);
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+    }
+
+    private void updateLength(MessageDigest digest, int length) {
+        digest.update((byte) (length >>> 24));
+        digest.update((byte) (length >>> 16));
+        digest.update((byte) (length >>> 8));
+        digest.update((byte) length);
     }
 
     private void validateElement(Element element) {
@@ -281,6 +433,30 @@ public class LogoFileStorage {
         }
     }
 
+    private void writeImmutable(Path target, byte[] bytes) throws IOException {
+        if (Files.exists(target)) {
+            if (!Arrays.equals(Files.readAllBytes(target), bytes)) throw new IOException("Revision content mismatch");
+            return;
+        }
+        Path temp = Files.createTempFile(target.getParent(), target.getFileName().toString(), ".tmp");
+        try {
+            Files.write(temp, bytes, StandardOpenOption.TRUNCATE_EXISTING);
+            try {
+                Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.FileAlreadyExistsException e) {
+                if (!Arrays.equals(Files.readAllBytes(target), bytes)) throw e;
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                try {
+                    Files.move(temp, target);
+                } catch (java.nio.file.FileAlreadyExistsException alreadyExists) {
+                    if (!Arrays.equals(Files.readAllBytes(target), bytes)) throw alreadyExists;
+                }
+            }
+        } finally {
+            Files.deleteIfExists(temp);
+        }
+    }
+
     private String localName(Node node) {
         return node.getLocalName() == null ? node.getNodeName() : node.getLocalName();
     }
@@ -298,4 +474,6 @@ public class LogoFileStorage {
     }
 
     public record StoredImage(String storageKey, int width, int height) {}
+
+    public record StoredEditedAsset(String storageKey, String revision, int width, int height) {}
 }

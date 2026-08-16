@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,15 +34,28 @@ public class FastApiBrandKitAiClient implements BrandKitAiClient {
 
     @Override
     @SuppressWarnings("unchecked")
-    public String generate(Map<String, Object> request) {
+    public List<String> generate(Map<String, Object> request) {
         Map<String, Object> body = restClient.post().uri(path)
                 .body(request).retrieve().body(Map.class);
         if (body == null) throw new ApiException(ErrorCode.AI_INVALID_RESPONSE, "브랜드킷 응답이 비어 있습니다.");
+
+        Object images = body.get("images");
+        if (images instanceof List<?> items) {
+            List<String> values = items.stream()
+                    .filter(Map.class::isInstance)
+                    .map(Map.class::cast)
+                    .map(item -> item.get("imageBase64"))
+                    .filter(String.class::isInstance)
+                    .map(String.class::cast)
+                    .filter(value -> !value.isBlank())
+                    .toList();
+            if (!values.isEmpty()) return values;
+        }
 
         Object image = body.get("imageBase64");
         if (!(image instanceof String value) || value.isBlank()) {
             throw new ApiException(ErrorCode.AI_INVALID_RESPONSE, "브랜드킷 응답에 imageBase64가 없습니다.");
         }
-        return value;
+        return List.of(value);
     }
 }

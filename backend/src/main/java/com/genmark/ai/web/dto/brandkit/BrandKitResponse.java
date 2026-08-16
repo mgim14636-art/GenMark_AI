@@ -1,6 +1,7 @@
 package com.genmark.ai.web.dto.brandkit;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 브랜드킷 생성 작업 상태와 결과.
@@ -14,9 +15,11 @@ import java.time.LocalDateTime;
 public record BrandKitResponse(
         String id,
         String candidateId,
+        String projectId,
         String kitType,
         String status,
         String storageKey,
+        List<String> storageKeys,
         String errorCode,
         String errorMessage,
         LocalDateTime startedAt,

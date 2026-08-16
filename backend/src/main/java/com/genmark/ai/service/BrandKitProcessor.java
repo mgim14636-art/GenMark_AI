@@ -2,6 +2,7 @@ package com.genmark.ai.service;
 
 import com.genmark.ai.client.BrandKitAiClient;
 import com.genmark.ai.entity.BrandKit;
+import com.genmark.ai.entity.BusinessCardInfo;
 import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.LogoCandidate;
 import com.genmark.ai.entity.ProjectLike;
@@ -39,9 +40,21 @@ public class BrandKitProcessor {
         kit.setStatus(BrandKit.Status.RUNNING);
         kit.setStartedAt(LocalDateTime.now());
         try {
-            String imageBase64 = brandKitAiClient.generate(buildRequest(kit));
+            String sourceStorageKey = kit.getCandidate().getStorageKey();
+            var imageBase64Values = brandKitAiClient.generate(buildRequest(kit, sourceStorageKey));
+            int expectedImageCount = kit.getKitType() == BrandKit.KitType.BUSINESS_CARD ? 2 : 1;
+            if (imageBase64Values.size() != expectedImageCount) {
+                throw new IllegalStateException("Brand kit response image count mismatch");
+            }
             // 저장 경로는 브랜드킷 public_id 아래에 둔다. 로고 후보와 섞이지 않게 하기 위함이다.
-            LogoFileStorage.StoredImage stored = storage.store("brand-kits/" + kit.getPublicId(), 1, imageBase64);
+            LogoFileStorage.StoredImage stored = null;
+            for (int index = 0; index < imageBase64Values.size(); index += 1) {
+                LogoFileStorage.StoredImage current = storage.store(
+                        "brand-kits/" + kit.getPublicId(), index + 1, imageBase64Values.get(index));
+                if (stored == null) stored = current;
+            }
+            if (stored == null) throw new IllegalStateException("Brand kit response contains no images");
+            storage.storeBrandKitSourceKey(kit.getPublicId(), sourceStorageKey);
             kit.setStorageKey(stored.storageKey());
             kit.setStatus(BrandKit.Status.SUCCEEDED);
             kit.setCompletedAt(LocalDateTime.now());
@@ -59,17 +72,29 @@ public class BrandKitProcessor {
      * <p>형식은 AI 담당자와 합의되지 않았다. 지금은 "로고 이미지 + 킷 종류 + 브랜드 컨셉"이라는
      * 최소 정보만 담아 두었고, 합의 후 이 메서드만 고치면 된다.
      */
-    private Map<String, Object> buildRequest(BrandKit kit) {
+    private Map<String, Object> buildRequest(BrandKit kit, String sourceStorageKey) {
         LogoCandidate candidate = kit.getCandidate();
         ProjectLike project = candidate.getGeneration().getProject();
 
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("kit_type", kit.getKitType().name());
-        request.put("logo_image_base64", Base64.getEncoder().encodeToString(storage.read(candidate.getStorageKey())));
+        byte[] logoPng = storage.read(sourceStorageKey);
+        request.put("logo_image_base64", Base64.getEncoder().encodeToString(logoPng));
         // 배경·분위기를 잡는 데 쓰라고 프로젝트 입력값을 그대로 넘긴다.
         // (예: 친환경 컨셉이면 제품 썸네일 배경에 풀을 넣는 식)
         request.put("survey", project.toSurvey());
         request.put("ci_bi", project instanceof CiProject ? "CI" : "BI");
+        BusinessCardInfo info = kit.getBusinessCardInfo();
+        if (kit.getKitType() == BrandKit.KitType.BUSINESS_CARD && info != null) {
+            Map<String, Object> cardInfo = new LinkedHashMap<>();
+            cardInfo.put("name", info.getName());
+            cardInfo.put("title", info.getTitle());
+            cardInfo.put("company", info.getCompany());
+            cardInfo.put("phone", info.getPhone());
+            cardInfo.put("email", info.getEmail());
+            cardInfo.put("address", info.getAddress());
+            request.put("card_info", cardInfo);
+        }
         return request;
     }
 

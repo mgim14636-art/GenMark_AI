@@ -43,6 +43,7 @@ public class LogoGenerationService {
             throw new ApiException(ErrorCode.VALIDATION_ERROR, "Idempotency-Key 헤더가 필요합니다(최대 100자).");
         }
         ProjectLike project = projectLookup.requireOwned(projectPublicId, memberId);
+        validateTextLogoName(project);
         boolean isCi = project instanceof CiProject;
 
         LogoGeneration existing = (isCi
@@ -71,7 +72,7 @@ public class LogoGenerationService {
 
         LogoGeneration generation = LogoGeneration.builder()
                 .status(LogoGeneration.Status.QUEUED)
-                .modelName("black-forest-labs/flux.2-klein-4b").requestSnapshotJson(writeJson(survey))
+                .modelName(null).requestSnapshotJson(writeJson(survey))
                 .idempotencyKey(idempotencyKey)
                 .parentGeneration(previous)
                 .build();
@@ -199,6 +200,25 @@ public class LogoGenerationService {
     private LogoCandidateResponse toResponse(LogoCandidate c) {
         return new LogoCandidateResponse(c.getPublicId(), c.getCandidateOrder(), c.getStorageKey(), svgUrl(c), svgEdited(c), c.getMimeType(),
                 c.getWidth(), c.getHeight(), c.isSelected(), c.getPinnedAt(), c.getCreatedAt());
+    }
+
+    private void validateTextLogoName(ProjectLike project) {
+        String style;
+        String name;
+        if (project instanceof CiProject ci) {
+            style = ci.getLogoStyle();
+            name = ci.getCompanyName();
+        } else if (project instanceof BiProject bi) {
+            style = bi.getLogoStyle();
+            name = bi.getBrandName();
+        } else {
+            return;
+        }
+        boolean textOnly = "wordmark".equalsIgnoreCase(style) || "lettermark".equalsIgnoreCase(style);
+        if (textOnly && (name == null || name.isBlank())) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR,
+                    "워드마크와 레터마크를 생성하려면 브랜드명 또는 기업명이 필요합니다.");
+        }
     }
 
     private String svgUrl(LogoCandidate candidate) {

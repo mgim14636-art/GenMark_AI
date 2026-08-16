@@ -1,4 +1,4 @@
--- Disposable local-db schema only. Production changes must use Flyway V1-V23.
+-- Disposable local-db schema only. Production changes must use Flyway V1-V25.
 CREATE DATABASE IF NOT EXISTS `genmark_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `genmark_db`;
 
@@ -36,16 +36,19 @@ CREATE TABLE IF NOT EXISTS ci_project (
     company_name VARCHAR(150) NULL,
     core_values VARCHAR(300) NULL,
     tone VARCHAR(100) NOT NULL DEFAULT 'friendly',
+    color_mode VARCHAR(20) NOT NULL DEFAULT 'TONE',
     color_1 VARCHAR(7) NULL,
     color_2 VARCHAR(7) NULL,
     color_3 VARCHAR(7) NULL,
     color_4 VARCHAR(7) NULL,
     logo_style VARCHAR(50) NOT NULL DEFAULT 'combination',
+    logo_shape VARCHAR(100) NULL,
     additional_requirements VARCHAR(300) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT chk_ci_project_status CHECK (status IN ('DRAFT', 'BRIEF_READY', 'GENERATING', 'RESULT_READY', 'ANALYZING', 'COMPLETED')),
     CONSTRAINT chk_ci_current_step CHECK (current_step BETWEEN 1 AND 5),
+    CONSTRAINT chk_ci_color_mode CHECK (color_mode IN ('TONE', 'MANUAL')),
     CONSTRAINT chk_ci_color_1 CHECK (color_1 IS NULL OR color_1 REGEXP '^#[0-9A-Fa-f]{6}$'),
     CONSTRAINT chk_ci_color_2 CHECK (color_2 IS NULL OR color_2 REGEXP '^#[0-9A-Fa-f]{6}$'),
     CONSTRAINT chk_ci_color_3 CHECK (color_3 IS NULL OR color_3 REGEXP '^#[0-9A-Fa-f]{6}$'),
@@ -68,17 +71,20 @@ CREATE TABLE IF NOT EXISTS bi_project (
     brand_description VARCHAR(300) NULL,
     target_age VARCHAR(20) NOT NULL DEFAULT '전 연령층',
     tone VARCHAR(100) NOT NULL DEFAULT 'friendly',
+    color_mode VARCHAR(20) NOT NULL DEFAULT 'TONE',
     color_1 VARCHAR(7) NULL,
     color_2 VARCHAR(7) NULL,
     color_3 VARCHAR(7) NULL,
     color_4 VARCHAR(7) NULL,
     logo_style VARCHAR(50) NOT NULL DEFAULT 'combination',
+    logo_shape VARCHAR(100) NULL,
     additional_requirements VARCHAR(300) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT chk_bi_project_status CHECK (status IN ('DRAFT', 'BRIEF_READY', 'GENERATING', 'RESULT_READY', 'ANALYZING', 'COMPLETED')),
     CONSTRAINT chk_bi_current_step CHECK (current_step BETWEEN 1 AND 6),
     CONSTRAINT chk_bi_target_age CHECK (target_age IN ('10~20', '30~40', '50~60', '전 연령층')),
+    CONSTRAINT chk_bi_color_mode CHECK (color_mode IN ('TONE', 'MANUAL')),
     CONSTRAINT chk_bi_color_1 CHECK (color_1 IS NULL OR color_1 REGEXP '^#[0-9A-Fa-f]{6}$'),
     CONSTRAINT chk_bi_color_2 CHECK (color_2 IS NULL OR color_2 REGEXP '^#[0-9A-Fa-f]{6}$'),
     CONSTRAINT chk_bi_color_3 CHECK (color_3 IS NULL OR color_3 REGEXP '^#[0-9A-Fa-f]{6}$'),
@@ -194,6 +200,18 @@ CREATE TABLE IF NOT EXISTS brand_kits (
     CONSTRAINT fk_kit_candidate FOREIGN KEY (candidate_id) REFERENCES logo_candidates(id) ON DELETE CASCADE,
     CONSTRAINT chk_kit_type CHECK (kit_type IN ('BUSINESS_CARD', 'THUMBNAIL')),
     INDEX idx_kit_candidate (candidate_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS business_card_infos (
+    brand_kit_id BIGINT PRIMARY KEY,
+    name VARCHAR(40) NOT NULL,
+    title VARCHAR(40) NULL,
+    company VARCHAR(60) NULL,
+    phone VARCHAR(40) NULL,
+    email VARCHAR(80) NULL,
+    address VARCHAR(120) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_business_card_info_kit FOREIGN KEY (brand_kit_id) REFERENCES brand_kits(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS trademark_analyses (

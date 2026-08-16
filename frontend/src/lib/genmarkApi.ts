@@ -1,4 +1,4 @@
-import { AuthError, apiRequest, apiRequestWithToken, apiTextRequest, downloadAuthenticatedFileWithToken } from '../auth'
+import { AuthError, apiRequest, apiRequestWithToken, apiTextRequest, downloadAuthenticatedFile, downloadAuthenticatedFileWithToken } from '../auth'
 
 export type OnboardingResponse = {
   completed: boolean
@@ -25,7 +25,7 @@ export type ProjectInput = {
   colorMode?: string
   colors?: string[]
   logoStyle?: string
-  includeBrandName?: boolean
+  logoShape?: string
   additionalRequirements?: string
 }
 
@@ -97,11 +97,27 @@ export type SurveyStatus = {
 
 export type BrandKit = {
   id: string
+  candidateId: string
+  projectId: string
   kitType: 'BUSINESS_CARD' | 'THUMBNAIL'
   status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
   storageKey: string | null
+  storageKeys?: string[]
   errorCode: string | null
   errorMessage?: string | null
+}
+
+export type BusinessCardInfoInput = {
+  name: string
+  title?: string
+  company?: string
+  phone?: string
+  email?: string
+  address?: string
+}
+
+export type BrandKitCreateInput = {
+  cardInfo?: BusinessCardInfoInput
 }
 
 export type AdminLoginResult = {
@@ -193,8 +209,10 @@ type BackendProjectResponse = {
   brandDescription?: string | null
   targetAge?: string | null
   tone: string | null
+  colorMode: string | null
   colors: string[] | null
   logoStyle: string | null
+  logoShape: string | null
   additionalRequirements: string | null
   createdAt: string
   updatedAt: string
@@ -212,8 +230,10 @@ const toCiProjectRequest = (input: ProjectInput) => ({
   companyName: input.companyName,
   coreValues: input.brandValuesText ?? input.companyMotto ?? input.brandValues?.join(', '),
   tone: input.tone,
+  colorMode: input.colorMode,
   ...colorFields(input.colors),
   logoStyle: input.logoStyle,
+  logoShape: input.logoShape,
   additionalRequirements: input.additionalRequirements,
 })
 
@@ -226,8 +246,10 @@ const toBiProjectRequest = (input: ProjectInput) => ({
   brandDescription: input.brandValuesText ?? input.companyMotto,
   targetAge: input.targetAge,
   tone: input.tone,
+  colorMode: input.colorMode,
   ...colorFields(input.colors),
   logoStyle: input.logoStyle,
+  logoShape: input.logoShape,
   additionalRequirements: input.additionalRequirements,
 })
 
@@ -241,8 +263,10 @@ const normalizeCiProject = (project: BackendProjectResponse): ProjectResponse =>
   companyMotto: project.coreValues ?? undefined,
   brandValuesText: project.coreValues ?? undefined,
   tone: project.tone ?? undefined,
+  colorMode: project.colorMode ?? undefined,
   colors: project.colors ?? undefined,
   logoStyle: project.logoStyle ?? undefined,
+  logoShape: project.logoShape ?? undefined,
   additionalRequirements: project.additionalRequirements ?? undefined,
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
@@ -260,8 +284,10 @@ const normalizeBiProject = (project: BackendProjectResponse): ProjectResponse =>
   companyMotto: project.brandDescription ?? undefined,
   targetAge: project.targetAge ?? undefined,
   tone: project.tone ?? undefined,
+  colorMode: project.colorMode ?? undefined,
   colors: project.colors ?? undefined,
   logoStyle: project.logoStyle ?? undefined,
+  logoShape: project.logoShape ?? undefined,
   additionalRequirements: project.additionalRequirements ?? undefined,
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
@@ -334,13 +360,20 @@ export const projectsApi = {
   downloadCandidate: (projectId: string, candidateId: string) => apiRequest<DownloadRecord>(`/projects/${projectId}/logo-candidates/${candidateId}/download`, {
     method: 'POST',
   }),
-  requestBrandKit: (projectId: string, candidateId: string) => apiRequest<BrandKit>(`/projects/${projectId}/logo-candidates/${candidateId}/brand-kits`, {
+  requestBrandKit: (projectId: string, candidateId: string, input?: BrandKitCreateInput) => apiRequest<BrandKit>(`/projects/${projectId}/logo-candidates/${candidateId}/brand-kits`, {
     method: 'POST',
+    body: input ? JSON.stringify(input) : undefined,
   }),
-  getBrandKit: async (projectId: string, candidateId: string) => {
+  getLatestBrandKit: async (projectId: string, candidateId: string) => {
     const kits = await apiRequest<BrandKit[]>(`/projects/${projectId}/logo-candidates/${candidateId}/brand-kits`)
     return kits[0] ?? null
   },
+  getBrandKit: (projectId: string, candidateId: string, brandKitId: string) => apiRequest<BrandKit>(
+    `/projects/${projectId}/logo-candidates/${candidateId}/brand-kits/${brandKitId}`,
+  ),
+  downloadBrandKit: (projectId: string, candidateId: string, brandKitId: string) => downloadAuthenticatedFile(
+    `/projects/${projectId}/logo-candidates/${candidateId}/brand-kits/${brandKitId}/download`,
+  ),
   createAnalysis: (projectId: string) => apiRequest<TrademarkAnalysis>(`/projects/${projectId}/trademark-analyses`, {
     method: 'POST',
   }),
@@ -355,6 +388,7 @@ export const meApi = {
     method: 'POST',
   }),
   getPins: () => apiRequest<PinnedLogo[]>('/me/pins'),
+  getBrandKits: () => apiRequest<BrandKit[]>('/me/brand-kits'),
   getDownloads: (type?: 'CI' | 'BI') => apiRequest<DownloadRecord[]>(`/me/downloads${type ? `?type=${type}` : ''}`),
 }
 

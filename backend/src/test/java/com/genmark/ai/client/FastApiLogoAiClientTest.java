@@ -26,6 +26,7 @@ class FastApiLogoAiClientTest {
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("""
                         {
+                          "modelName": "recraft/recraft-v4-vector",
                           "logos": [
                             {"imageBase64": "logo-1", "seed": 111, "variantIndex": 0, "svg": "<svg><path/></svg>"},
                             {"imageBase64": "logo-2", "seed": 222, "variantIndex": 1},
@@ -38,6 +39,7 @@ class FastApiLogoAiClientTest {
         LogoAiClient.LogoAiResult result = client.generate(Map.of("brand_name", "GenMark"));
 
         assertThat(result.success()).isTrue();
+        assertThat(result.modelName()).isEqualTo("recraft/recraft-v4-vector");
         assertThat(result.logos()).containsExactly(
                 new LogoAiClient.GeneratedLogo("logo-1", 111, 0, "<svg><path/></svg>"),
                 new LogoAiClient.GeneratedLogo("logo-2", 222, 1, null),
@@ -62,6 +64,7 @@ class FastApiLogoAiClientTest {
         LogoAiClient.LogoAiResult result = client.generate(Map.of("brand_name", "GenMark"));
 
         assertThat(result.logos()).containsExactly(new LogoAiClient.GeneratedLogo("logo-1", null, null, null));
+        assertThat(result.modelName()).isNull();
         server.verify();
     }
 }

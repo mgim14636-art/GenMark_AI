@@ -15,8 +15,10 @@ public record BiProjectResponse(
         String brandDescription,
         String targetAge,
         String tone,
+        String colorMode,
         List<String> colors,
         String logoStyle,
+        String logoShape,
         String additionalRequirements,
         LocalDateTime createdAt,
         LocalDateTime updatedAt

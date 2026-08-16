@@ -47,6 +47,9 @@ public class LogoGenerationProcessor {
             if (!result.success() || logos == null || logos.size() != EXPECTED_LOGO_COUNT) {
                 throw new ApiException(ErrorCode.AI_INCOMPLETE_RESULT);
             }
+            if (result.modelName() != null && !result.modelName().isBlank()) {
+                generation.setModelName(result.modelName());
+            }
             List<LogoFileStorage.StoredImage> images = new ArrayList<>(EXPECTED_LOGO_COUNT);
             for (int i = 0; i < EXPECTED_LOGO_COUNT; i++) {
                 images.add(storage.store(generation.getPublicId(), i + 1, logos.get(i).imageBase64()));

@@ -28,6 +28,7 @@ def test_current_survey_contract_prioritizes_explicit_flower_motif_in_all_varian
         "color_manual": ["#9765e9"],
         "style": "combination",
         "additional_requirements": "세련된 꽃 모양의 이미지를 꼭 추가해 줬으면 좋겠어",
+        "logo_shape_en": "a refined blooming flower emblem",
     }
 
     normalized = _normalize_survey(survey)
@@ -45,8 +46,9 @@ def test_current_survey_contract_prioritizes_explicit_flower_motif_in_all_varian
         # 텍스트 인코더는 헥사 코드를 색으로 해석하지 못해 색 이름으로 바꿔 넣는다
         assert "#9765e9" not in prompt
         assert "vivid lilac color palette" in prompt
-        assert "combines a graphic symbol with an abstract letterform-like silhouette" in prompt
-        assert "세련된 꽃 모양의 이미지를 꼭 추가해 줬으면 좋겠어" in prompt
+        assert "designed to pair cleanly with a separately typeset brand name" in prompt
+        assert "a refined blooming flower emblem" in prompt
+        assert "세련된 꽃 모양의 이미지를 꼭 추가해 줬으면 좋겠어" not in prompt
         assert "finished and complete rather than a sketch." in prompt
         assert not any(fallback in prompt for fallback in FALLBACK_MOTIFS)
 
@@ -54,9 +56,12 @@ def test_current_survey_contract_prioritizes_explicit_flower_motif_in_all_varian
 @pytest.mark.parametrize(
     ("field", "current_value", "canonical_value"),
     [
-        ("industry", "FASHION", "기타"),
-        ("industry", "FOOD", "기타"),
-        ("industry", "TECH", "기타"),
+        ("industry", "FASHION", "패션"),
+        ("industry", "FOOD", "푸드·카페"),
+        ("industry", "HEALTH_WELLNESS", "헬스·웰니스"),
+        ("industry", "TECH", "테크"),
+        ("industry", "EDUCATION", "교육"),
+        ("industry", "PET", "펫"),
         ("industry", "OTHER", "기타"),
         ("tone", "professional", "전문적이고 신뢰감 있는"),
         ("tone", "warm", "감성적이고 따뜻한"),
@@ -124,6 +129,44 @@ def test_default_variants_do_not_force_fixed_fallback_shapes():
     assert len(set(prompts)) == 4
     assert all("an original brand-specific subject" in prompt for prompt in prompts)
     assert all(not any(motif in prompt for motif in FALLBACK_MOTIFS) for prompt in prompts)
+
+
+@pytest.mark.parametrize(
+    ("industry", "descriptor"),
+    [
+        ("FASHION", "fashion and apparel"),
+        ("FOOD", "food, cafe, or bakery"),
+        ("HEALTH_WELLNESS", "health and wellness"),
+        ("TECH", "technology and software"),
+        ("EDUCATION", "education and learning"),
+        ("PET", "pet care and companion-animal"),
+    ],
+)
+def test_supported_industries_keep_distinct_visual_context(industry, descriptor):
+    prompt = build_prompt_from_survey({"industry": industry, "brand_name": "GenMark"})
+    assert descriptor in prompt
+    assert "an original brand-specific subject" not in prompt
+
+
+def test_logo_shape_english_is_prioritized_without_hangul_leak():
+    prompt = build_prompt_from_survey({
+        "industry": "TECH",
+        "logo_shape": "달 모양",
+        "logo_shape_en": "an elegant crescent-moon emblem",
+    })
+    assert "an elegant crescent-moon emblem" in prompt
+    assert "달 모양" not in prompt
+    assert "one to three cohesive shapes" in prompt
+    assert "generic stock-icon look" in prompt
+
+
+def test_selected_value_bias_changes_visual_motif():
+    prompt = build_prompt_from_survey({
+        "industry": "COSMETICS",
+        "brand_name": "GenMark",
+        "brand_values": ["scientific"],
+    })
+    assert any(motif in prompt for motif in VALUE_MOTIF_BIAS["과학적 검증"])
 
 
 # --- 프론트 → AI서버 값 정합성 -------------------------------------------

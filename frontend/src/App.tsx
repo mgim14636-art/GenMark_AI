@@ -1,11 +1,11 @@
 import { FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
+import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
 import { AiLoader } from './components/ui/ai-loader'
 import { apiBlobRequest, AuthError, type AuthProvider, type AuthUser, downloadAuthenticatedFile, loginWithProvider, logout, restoreSession } from './auth'
-import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type DownloadRecord, type LogoCandidate, type PinnedLogo, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
+import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type BusinessCardInfoInput, type DownloadRecord, type LogoCandidate, type PinnedLogo, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
 import { buildEditedSvg } from './lib/svgEditor'
 
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
@@ -398,9 +398,18 @@ function CustomerApp() {
   const [pinError, setPinError] = useState('')
   const [brandKit, setBrandKit] = useState<BrandKit | null>(null)
   const [brandKitError, setBrandKitError] = useState('')
+  const [brandKitDownloading, setBrandKitDownloading] = useState(false)
   const [brandKitType, setBrandKitType] = useState<BrandKit['kitType'] | null>(null)
+  const [businessCardModalOpen, setBusinessCardModalOpen] = useState(false)
+  const [businessCardInfo, setBusinessCardInfo] = useState<BusinessCardInfoInput>({
+    name: '', title: '', company: '', phone: '', email: '', address: '',
+  })
+  const [businessCardInfoErrors, setBusinessCardInfoErrors] = useState<{ name?: string; email?: string }>({})
+  const [businessCardTarget, setBusinessCardTarget] = useState<{ candidateId: string; projectId: string } | null>(null)
   const [ciProfileLoading, setCiProfileLoading] = useState(false)
   const ciProfileLoaded = useRef(false)
+  const assetEpochRef = useRef(0)
+  const brandKitRequestEpochRef = useRef(0)
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   const [analysisError, setAnalysisError] = useState('')
   const [trademarkMatches, setTrademarkMatches] = useState<TrademarkMatch[]>([])
@@ -415,6 +424,71 @@ function CustomerApp() {
   const [surveySubmitted, setSurveySubmitted] = useState(false)
   const [remainingCredits, setRemainingCredits] = useState(2)
   const [creditModal, setCreditModal] = useState<'credit' | 'survey' | null>(null)
+  const activeModalRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!creditModal && !businessCardModalOpen && !resumePromptProject) return
+
+    const modalRoot = activeModalRef.current
+    if (!modalRoot) return
+
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const backgroundElements = Array.from(document.querySelectorAll<HTMLElement>('.app-shell > main, .app-shell > .bottom-nav'))
+    const previousOverflow = document.body.style.overflow
+    const focusableSelector = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    const getFocusableElements = () => Array.from(modalRoot.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => element.offsetParent !== null)
+
+    backgroundElements.forEach((element) => element.setAttribute('inert', ''))
+    document.body.style.overflow = 'hidden'
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      const preferredTarget = modalRoot.querySelector<HTMLElement>('[autofocus]') ?? getFocusableElements()[0]
+      preferredTarget?.focus()
+    })
+
+    const handleModalKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        if (businessCardModalOpen) {
+          setBusinessCardModalOpen(false)
+          setBusinessCardTarget(null)
+          setBusinessCardInfoErrors({})
+        } else if (creditModal) {
+          setCreditModal(null)
+        } else {
+          setResumePromptProject(null)
+        }
+        return
+      }
+
+      if (event.key !== 'Tab') return
+      const focusableElements = getFocusableElements()
+      if (focusableElements.length === 0) {
+        event.preventDefault()
+        return
+      }
+
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement.focus()
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleModalKeyDown)
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', handleModalKeyDown)
+      backgroundElements.forEach((element) => element.removeAttribute('inert'))
+      document.body.style.overflow = previousOverflow
+      previouslyFocused?.focus()
+    }
+  }, [businessCardModalOpen, creditModal, resumePromptProject])
   const [choiceInfoModal, setChoiceInfoModal] = useState<'ci' | 'bi' | null>(null)
   const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; candidateId?: string; storageKey?: string; svgUrl?: string | null } | null>(null)
   const editorCandidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
@@ -654,6 +728,38 @@ function CustomerApp() {
     ])
   }, [loggedIn, mode])
 
+  useEffect(() => {
+    if (!loggedIn || (mode !== 'brand-kit' && mode !== 'mypage')) return
+    let cancelled = false
+    void meApi.getBrandKits()
+      .then((kits) => {
+        if (cancelled) return
+        const latest = selectedCandidateId
+          ? kits.find((kit) => kit.candidateId === selectedCandidateId) ?? null
+          : kits[0] ?? null
+        setBrandKit(latest)
+        if (latest) {
+          const restoredRequestEpoch = ++brandKitRequestEpochRef.current
+          setBrandKitType(latest.kitType)
+          setSelectedCandidateId(latest.candidateId)
+          setProjectId(latest.projectId)
+          if (latest.status === 'QUEUED' || latest.status === 'RUNNING') {
+            void pollBrandKit(latest, restoredRequestEpoch, () => cancelled).catch((error) => {
+              if (!cancelled && mode === 'brand-kit') {
+                setBrandKitError(error instanceof Error ? error.message : '브랜드 키트 상태를 갱신하지 못했어요.')
+              }
+            })
+          }
+        }
+      })
+      .catch((error) => {
+        if (!cancelled && mode === 'brand-kit') {
+          setBrandKitError(error instanceof Error ? error.message : '기존 브랜드 키트를 불러오지 못했어요.')
+        }
+      })
+    return () => { cancelled = true }
+  }, [loggedIn, mode, selectedCandidateId])
+
   useEffect(() => () => {
     if (onboardingTransitionTimer.current !== null) window.clearTimeout(onboardingTransitionTimer.current)
   }, [])
@@ -821,7 +927,7 @@ function CustomerApp() {
       setTargetAge(project.targetAge
         ? targetAgeOptions.find((option) => option.id === project.targetAge || option.label === project.targetAge)?.id ?? ''
         : '')
-      setLogoShapePrompt(extractLogoShapeRequirement(project.additionalRequirements))
+      setLogoShapePrompt(project.logoShape ?? extractLogoShapeRequirement(project.additionalRequirements))
       if (project.tone && toneOptions.some((option) => option.id === project.tone)) setToneSelection(project.tone as ToneOption)
       else setToneSelection(null)
       if (project.colors?.length) {
@@ -829,9 +935,18 @@ function CustomerApp() {
         const matchingTone = project.colors.length >= 2
           ? toneOptions.find((option) => option.colors[0].toLowerCase() === project.colors?.[0]?.toLowerCase() && option.colors[1].toLowerCase() === project.colors?.[1]?.toLowerCase())
           : undefined
-        setColorSelectionMode(matchingTone ? 'tone' : 'manual')
-        setManualColorsSelected(Boolean(!matchingTone && project.colors.length >= 2))
-        if (matchingTone) setToneSelection(matchingTone.id)
+        if (project.colorMode) {
+          const manual = project.colorMode.toUpperCase() === 'MANUAL'
+          setColorSelectionMode(manual ? 'manual' : 'tone')
+          setToneMode(manual ? 'direct' : 'recommended')
+          setManualColorsSelected(Boolean(manual && project.colors.length >= 2))
+          if (!manual && matchingTone) setToneSelection(matchingTone.id)
+        } else {
+          setColorSelectionMode(matchingTone ? 'tone' : 'manual')
+          setToneMode(matchingTone ? 'recommended' : 'direct')
+          setManualColorsSelected(Boolean(!matchingTone && project.colors.length >= 2))
+          if (matchingTone) setToneSelection(matchingTone.id)
+        }
       }
       if (project.logoStyle && logoStyleOptions.some((option) => option.id === project.logoStyle)) setLogoStyle(project.logoStyle as LogoStyle)
 
@@ -1070,12 +1185,6 @@ function CustomerApp() {
   }
 
   const openTrademarkSelection = (entry: 'generation' | 'result') => {
-    const candidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
-    if (entry === 'result' && candidate?.svgEdited) {
-      setAnalysisError('편집 SVG를 PNG 분석본으로 변환하는 기능이 아직 연결되지 않았어요.')
-      setMode('result')
-      return
-    }
     setTrademarkAnalysisCompleted(false)
     if (!canAnalyzeTrademark) {
       setTrademarkAnalysisSkipped(true)
@@ -1152,11 +1261,6 @@ function CustomerApp() {
     return manualColors
   }
 
-  const buildAdditionalRequirements = () => {
-    const shapeRequirement = logoShapePrompt.trim() ? `${logoShapeRequirementPrefix} ${logoShapePrompt.trim()}` : ''
-    return shapeRequirement || undefined
-  }
-
   const buildProjectInput = (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review'): ProjectInput => {
     const input: ProjectInput = {
       brandType: brandKind === 'ci' ? 'CI' : 'BI',
@@ -1175,15 +1279,16 @@ function CustomerApp() {
 
     if (step === 'tone') {
       input.tone = toneSelection ?? undefined
-      input.colorMode = colorSelectionMode === 'manual' ? 'MANUAL' : 'TONE'
+      const customizedRecommendedPalette = Boolean(toneSelection && customToneColors[toneSelection])
+      input.colorMode = colorSelectionMode === 'manual' || customizedRecommendedPalette ? 'MANUAL' : 'TONE'
       input.colors = getSelectedColors()
     }
 
     if (step === 'logo-style') {
       input.logoStyle = logoStyle ?? undefined
-      input.additionalRequirements = buildAdditionalRequirements()
+      input.logoShape = logoShapePrompt.trim()
     }
-    if (step === 'final-review') input.additionalRequirements = buildAdditionalRequirements()
+    if (step === 'final-review') input.logoShape = logoShapePrompt.trim()
 
     return input
   }
@@ -1287,6 +1392,7 @@ function CustomerApp() {
       if (editorColorChanged) {
         await projectsApi.patch(projectId, { brandType: brandKind === 'bi' ? 'BI' : 'CI', colors: [editorColor] })
       }
+      assetEpochRef.current += 1
       setEditorSvgSource(editedSvg)
       setEditorDirty(false)
       setEditorColorChanged(false)
@@ -1294,13 +1400,20 @@ function CustomerApp() {
       setLogoCandidates((current) => current.map((item) => item.id === candidate.id
         ? { ...item, svgEdited: true }
         : item))
+      setAnalysisId(null)
+      setAnalysisError('')
       setTrademarkAnalysisCompleted(false)
       setTrademarkAnalysisSkipped(false)
+      setTrademarkAnalysisRequested(false)
       setTrademarkMatches([])
+      setTrademarkMatchImages([])
       setTrademarkSimilarity(null)
       setTrademarkRiskLabel('')
       setTrademarkRiskDescription('')
+      setTrademarkDisclaimer('')
       setBrandKit(null)
+      setBrandKitError('')
+      setBrandKitType(null)
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : '편집 내용을 저장하지 못했어요.'
@@ -1362,24 +1475,23 @@ function CustomerApp() {
       setAnalysisError('먼저 로고 후보를 생성해주세요.')
       return
     }
-    if (candidate.svgEdited) {
-      setAnalysisError('편집 SVG는 현재 상표 유사도 분석과 연결되지 않았어요.')
-      setMode('result')
-      return
-    }
-
+    const requestEpoch = assetEpochRef.current
     setAnalysisError('')
     setMode('trademark-loading')
     try {
       await projectsApi.selectCandidate(projectId, candidate.id)
+      if (requestEpoch !== assetEpochRef.current) return
       setSelectedCandidateId(candidate.id)
       const analysis = await projectsApi.createAnalysis(projectId)
+      if (requestEpoch !== assetEpochRef.current) return
       setAnalysisId(analysis.id)
       const completedAnalysis = await waitForTrademarkAnalysis(projectId, analysis.id)
+      if (requestEpoch !== assetEpochRef.current) return
       if (completedAnalysis.status === 'FAILED') {
         throw new Error(completedAnalysis.errorMessage ?? '상표 분석에 실패했어요.')
       }
       const matches = await projectsApi.getMatches(projectId, analysis.id)
+      if (requestEpoch !== assetEpochRef.current) return
       setTrademarkMatches(matches)
       setTrademarkSimilarity(completedAnalysis.maxSimilarity)
       setTrademarkRiskLabel(completedAnalysis.riskLabel ?? '')
@@ -1388,50 +1500,103 @@ function CustomerApp() {
       setTrademarkAnalysisCompleted(true)
       setMode('trademark-result')
     } catch (error) {
+      if (requestEpoch !== assetEpochRef.current) return
       setAnalysisError(error instanceof Error ? error.message : '상표 분석 중 문제가 발생했어요.')
       setMode('result')
     }
   }
 
-  const requestBrandKit = async (candidateId: string | null = selectedCandidateId) => {
-    if (!projectId || !candidateId) return
-    const candidate = logoCandidates.find((item) => item.id === candidateId)
-    if (candidate?.svgEdited) {
-      setBrandKitError('편집 SVG는 현재 브랜드 키트 생성과 연결되지 않았어요.')
-      return
+  const pollBrandKit = async (initial: BrandKit, brandKitRequestEpoch: number, shouldStop?: () => boolean) => {
+    if (initial.status !== 'QUEUED' && initial.status !== 'RUNNING') return
+    const requestEpoch = assetEpochRef.current
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2_000))
+      if (shouldStop?.() || requestEpoch !== assetEpochRef.current
+          || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return
+      const next = await projectsApi.getBrandKit(initial.projectId, initial.candidateId, initial.id)
+      if (shouldStop?.() || requestEpoch !== assetEpochRef.current
+          || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return
+      setBrandKit(next)
+      if (next.status === 'SUCCEEDED' || next.status === 'FAILED') return
     }
+  }
+
+  const requestBrandKit = async (
+    candidateId: string | null = selectedCandidateId,
+    targetProjectId: string | null = projectId,
+    cardInfo?: BusinessCardInfoInput,
+  ) => {
+    if (!targetProjectId || !candidateId) return
+    const requestEpoch = assetEpochRef.current
+    const brandKitRequestEpoch = ++brandKitRequestEpochRef.current
     setBrandKitError('')
     try {
-      const requested = await projectsApi.requestBrandKit(projectId, candidateId)
+      const requested = await projectsApi.requestBrandKit(
+        targetProjectId,
+        candidateId,
+        cardInfo ? { cardInfo } : undefined,
+      )
+      if (requestEpoch !== assetEpochRef.current
+          || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return
       setBrandKit(requested)
-      if (requested.status === 'QUEUED' || requested.status === 'RUNNING') {
-        for (let attempt = 0; attempt < 60; attempt += 1) {
-          await new Promise((resolve) => window.setTimeout(resolve, 2_000))
-          const next = await projectsApi.getBrandKit(projectId, candidateId)
-          if (!next) continue
-          setBrandKit(next)
-          if (next.status === 'SUCCEEDED' || next.status === 'FAILED') break
-        }
-      }
+      await pollBrandKit(requested, brandKitRequestEpoch)
     } catch (error) {
+      if (requestEpoch !== assetEpochRef.current
+          || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return
       setBrandKitError(error instanceof Error ? error.message : '브랜드 키트를 요청하지 못했어요.')
     }
   }
 
   const openBrandKitSelection = () => {
-    const candidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
-    if (candidate?.svgEdited) {
-      setBrandKitError('편집 SVG는 현재 브랜드 키트 생성과 연결되지 않았어요.')
-      return
-    }
     setBrandKitError('')
+    setBrandKitType(brandKind === 'ci' ? 'BUSINESS_CARD' : 'THUMBNAIL')
     setMode('brand-kit')
   }
 
-  const createSelectedBrandKit = async () => {
+  const downloadBrandKitArchive = async (kit: BrandKit) => {
+    if (brandKitDownloading) return
+    setBrandKitDownloading(true)
+    setBrandKitError('')
+    try {
+      const blob = await projectsApi.downloadBrandKit(kit.projectId, kit.candidateId, kit.id)
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = kit.kitType === 'BUSINESS_CARD'
+        ? 'genmark-business-card.zip'
+        : 'genmark-thumbnail.zip'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+    } catch (error) {
+      setBrandKitError(error instanceof Error ? error.message : '브랜드 키트를 다운로드하지 못했어요.')
+    } finally {
+      setBrandKitDownloading(false)
+    }
+  }
+
+  const openBusinessCardModal = (target: { candidateId: string; projectId: string } | null = null) => {
+    setBusinessCardTarget(target)
+    setBusinessCardInfoErrors({})
+    setBusinessCardInfo((current) => ({
+      ...current,
+      name: current.name || authUser?.name?.trim() || '',
+      company: current.company || (brandKind === 'ci' ? companyName : brandName).trim(),
+      email: current.email || authUser?.email?.trim() || '',
+    }))
+    setBusinessCardModalOpen(true)
+  }
+
+  const runSelectedBrandKit = async (cardInfo?: BusinessCardInfoInput) => {
     if (!brandKitType) return
     if (!projectId) {
       setBrandKitError('로고 후보를 선택한 뒤 브랜드 키트를 만들 수 있어요.')
+      return
+    }
+
+    if (logoCandidates.length === 0 && selectedCandidateId) {
+      await requestBrandKit(selectedCandidateId, projectId, cardInfo)
       return
     }
 
@@ -1449,9 +1614,50 @@ function CustomerApp() {
         setSelectedCandidateId(selected.id)
         setLogoCandidates((current) => current.map((item) => ({ ...item, selected: item.id === selected.id })))
       }
-      await requestBrandKit(candidateId)
+      await requestBrandKit(candidateId, projectId, cardInfo)
     } catch (error) {
       setBrandKitError(error instanceof Error ? error.message : '로고 후보를 선택하지 못했어요.')
+    }
+  }
+
+  const createSelectedBrandKit = async () => {
+    if (!brandKitType) return
+    if (brandKitType === 'BUSINESS_CARD') {
+      openBusinessCardModal()
+      return
+    }
+    await runSelectedBrandKit()
+  }
+
+  const submitBusinessCardInfo = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const normalized: BusinessCardInfoInput = {
+      name: businessCardInfo.name.trim(),
+      title: businessCardInfo.title?.trim() || undefined,
+      company: businessCardInfo.company?.trim() || undefined,
+      phone: businessCardInfo.phone?.trim() || undefined,
+      email: businessCardInfo.email?.trim() || undefined,
+      address: businessCardInfo.address?.trim() || undefined,
+    }
+    const errors: { name?: string; email?: string } = {}
+    if (!normalized.name) errors.name = '명함에 표시할 이름을 입력해 주세요.'
+    if (normalized.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized.email)) {
+      errors.email = '이메일 주소 형식을 확인해 주세요.'
+    }
+    if (Object.keys(errors).length > 0) {
+      setBusinessCardInfoErrors(errors)
+      return
+    }
+
+    setBusinessCardInfo(normalized)
+    setBusinessCardInfoErrors({})
+    setBusinessCardModalOpen(false)
+    const target = businessCardTarget
+    setBusinessCardTarget(null)
+    if (target) {
+      await requestBrandKit(target.candidateId, target.projectId, normalized)
+    } else {
+      await runSelectedBrandKit(normalized)
     }
   }
 
@@ -1621,7 +1827,7 @@ function CustomerApp() {
   )
 
   const renderResumePromptModal = () => (
-    <div className="modal-backdrop" role="presentation">
+    <div ref={activeModalRef} className="modal-backdrop" role="presentation">
       <section className="credit-modal resume-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="resume-prompt-title">
         <p className="resume-prompt-brand">GenMark</p>
         <h2 id="resume-prompt-title">기존에 작성된<br /><strong>내용이 있습니다</strong></h2>
@@ -2484,7 +2690,6 @@ function CustomerApp() {
         <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => setMode(trademarkEntry === 'generation' ? 'final' : 'result')} />
         <header className="trademark-selection-header">
           <div className="trademark-selection-brand"><BrandLogo className="trademark-selection-brand-mark" /><span>GenMark AI</span></div>
-          <button className="trademark-help" type="button" aria-label="상표 분석 도움말"><CircleHelp aria-hidden="true" size={23} strokeWidth={1.8} /></button>
         </header>
 
         <section className="trademark-selection-content">
@@ -2556,7 +2761,6 @@ function CustomerApp() {
         <header className="trademark-result-header trademark-result-header-redesign">
           <button className="trademark-result-back" type="button" aria-label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={22} strokeWidth={1.8} /></button>
           <div className="trademark-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
-          <button className="trademark-result-help" type="button" aria-label="유사도 분석 안내"><CircleHelp aria-hidden="true" size={19} strokeWidth={1.8} /></button>
         </header>
 
         <section className="trademark-result-content trademark-result-content-redesign">
@@ -2614,7 +2818,6 @@ function CustomerApp() {
         <header className="trademark-result-header">
           <button className="trademark-result-back" type="button" aria-label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
           <div className="trademark-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
-          <button className="trademark-result-help" type="button" aria-label="상표 분석 도움말"><CircleHelp aria-hidden="true" size={24} strokeWidth={1.8} /></button>
         </header>
 
         <section className="trademark-result-content">
@@ -2713,7 +2916,6 @@ function CustomerApp() {
       <main className="logo-result-screen" aria-labelledby="logo-result-title">
         <header className="logo-result-header">
           <div className="logo-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
-          <button className="logo-result-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={23} strokeWidth={1.8} /></button>
         </header>
 
         <section className="logo-result-content">
@@ -2754,9 +2956,7 @@ function CustomerApp() {
 
           <section className={trademarkAnalysisCompleted ? 'logo-result-trademark analyzed' : 'logo-result-trademark'} aria-label="상표 이미지 유사도">
             <span className="trademark-result-icon" aria-hidden="true"><Search size={44} strokeWidth={1.8} /></span>
-            {candidate.svgEdited ? (
-              <div><strong>편집본 유사도 분석 준비 중</strong><p>현재 상표 분석은 생성 당시 PNG만 지원하므로, 편집 SVG에 잘못된 결과를 표시하지 않도록 분석을 막아두었어요.</p></div>
-            ) : trademarkAnalysisCompleted ? (
+            {trademarkAnalysisCompleted ? (
               <div><strong>상표 이미지 유사도 분석 완료</strong><p>가장 높은 유사도는 {trademarkSimilarity ?? TRADEMARK_SCORE_FALLBACK}점으로, 현재 <b>{trademarkRiskLabel || '낮은 유사도'}</b> 범위예요.</p><button type="button" onClick={() => setMode('trademark-result')}>유사도 분석 결과 보기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
             ) : !canAnalyzeTrademark ? (
               <div><strong>상표 이미지 유사도</strong><p>선택한 로고 스타일은 이미지 유사도 분석을 지원하지 않아요.</p></div>
@@ -2774,7 +2974,7 @@ function CustomerApp() {
 
           <div className="logo-result-utility-grid">
             <button className="utility-primary" type="button" onClick={() => void startLogoGeneration()}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />조건을 바꿔<br />다시 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
-            <button className="utility-secondary" type="button" disabled={candidate.svgEdited} onClick={openBrandKitSelection}><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />{candidate.svgEdited ? '편집본 키트 준비 중' : brandKit?.status === 'SUCCEEDED' ? '브랜드 키트 확인하기' : '브랜드 키트 만들기'}<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+            <button className="utility-secondary" type="button" onClick={openBrandKitSelection}><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />{brandKit?.status === 'SUCCEEDED' ? '브랜드 키트 확인하기' : '브랜드 키트 만들기'}<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
           </div>
           {brandKit && <p className="project-error" role="status">브랜드 키트 상태: {brandKit.status === 'QUEUED' || brandKit.status === 'RUNNING' ? '생성 중' : brandKit.status === 'SUCCEEDED' ? '완료' : '실패'}</p>}
           {brandKitError && <p className="project-error" role="alert">{brandKitError}</p>}
@@ -2784,11 +2984,21 @@ function CustomerApp() {
   }
 
   const renderBrandKitSelectionScreen = () => {
-    const options: Array<{ type: BrandKit['kitType']; title: string; caption: string; description: string; icon: typeof CreditCard }> = [
-      { type: 'BUSINESS_CARD', title: '명함', caption: '첫 인사를 더 또렷하게', description: '브랜드의 인상을 담은 명함 시안을 만들어요.', icon: CreditCard },
-      { type: 'THUMBNAIL', title: '제품 썸네일', caption: '제품을 한눈에 보여주기', description: '상품 페이지와 SNS에 쓸 썸네일 시안을 만들어요.', icon: ImageIcon },
-    ]
+    const expectedKitType: BrandKit['kitType'] = brandKind === 'ci' ? 'BUSINESS_CARD' : 'THUMBNAIL'
+    const options: Array<{ type: BrandKit['kitType']; title: string; caption: string; description: string; icon: typeof CreditCard }> = expectedKitType === 'BUSINESS_CARD'
+      ? [{ type: 'BUSINESS_CARD', title: '명함', caption: '첫 인사를 더 또렷하게', description: '기업의 인상을 담은 명함 앞·뒷면 시안을 만들어요.', icon: CreditCard }]
+      : [{ type: 'THUMBNAIL', title: '제품 썸네일', caption: '제품을 한눈에 보여주기', description: '상품 페이지와 SNS에 쓸 썸네일 시안을 만들어요.', icon: ImageIcon }]
     const selectedOption = options.find((option) => option.type === brandKitType)
+    const completedStorageKeys = brandKit?.status === 'SUCCEEDED'
+      ? brandKit.storageKeys?.length
+        ? brandKit.storageKeys
+        : brandKit.storageKey
+          ? [brandKit.storageKey]
+          : []
+      : []
+    const completedBrandKit = brandKit?.status === 'SUCCEEDED' && completedStorageKeys.length > 0 ? brandKit : null
+    const brandKitImageUrls = completedStorageKeys.map(getLogoCandidateImageUrl)
+    const missingBusinessCardBack = completedBrandKit?.kitType === 'BUSINESS_CARD' && brandKitImageUrls.length < 2
 
     return (
       <main className="brand-kit-selection-screen" aria-labelledby="brand-kit-selection-title">
@@ -2801,33 +3011,82 @@ function CustomerApp() {
             <span>필요한 활용처를 골라 주세요.</span>
           </header>
 
-          <div className="brand-kit-choice-grid" role="radiogroup" aria-label="브랜드 키트 종류 선택">
-            {options.map((option) => {
-              const Icon = option.icon
-              const selected = option.type === brandKitType
-              return (
-                <button
-                  key={option.type}
-                  className={selected ? 'brand-kit-choice selected' : 'brand-kit-choice'}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => setBrandKitType(option.type)}
-                >
-                  <span className="brand-kit-choice-visual" aria-hidden="true"><Icon size={40} strokeWidth={1.6} /></span>
-                  <span className="brand-kit-choice-copy"><strong>{option.title}</strong><em>{option.caption}</em><small>{option.description}</small></span>
-                  <span className="brand-kit-choice-radio" aria-hidden="true">{selected ? <Check size={18} strokeWidth={2.6} /> : null}</span>
-                </button>
-              )
-            })}
-          </div>
+          {completedBrandKit && brandKitImageUrls.length > 0 ? (
+            <section className="brand-kit-result-preview" aria-labelledby="brand-kit-result-title">
+              <div className="brand-kit-result-images">
+                {brandKitImageUrls.map((imageUrl, index) => {
+                  const sideLabel = completedBrandKit.kitType === 'BUSINESS_CARD'
+                    ? index === 0 ? '앞면' : '뒷면'
+                    : '완성본'
+                  return (
+                    <figure className="brand-kit-result-image" key={`${imageUrl}-${index}`}>
+                      <figcaption>
+                        <strong>{sideLabel}</strong>
+                        {completedBrandKit.kitType !== 'BUSINESS_CARD' && (
+                          <a href={imageUrl} download="genmark-thumbnail.png">
+                            <Download aria-hidden="true" size={17} strokeWidth={1.9} />다운로드
+                          </a>
+                        )}
+                      </figcaption>
+                      <img src={imageUrl} alt={`완성된 ${completedBrandKit.kitType === 'BUSINESS_CARD' ? `명함 ${sideLabel}` : '제품 썸네일'} 브랜드 키트`} />
+                    </figure>
+                  )
+                })}
+              </div>
+              <div className="brand-kit-result-copy">
+                <span>브랜드 키트 완성</span>
+                <h2 id="brand-kit-result-title">{completedBrandKit.kitType === 'BUSINESS_CARD' ? '명함' : '제품 썸네일'} 시안이 준비됐어요.</h2>
+                <p>{missingBusinessCardBack ? '이 결과는 이전 방식으로 만든 앞면만 있어요. 아래 버튼으로 뒷면까지 바로 만들 수 있어요.' : completedBrandKit.kitType === 'BUSINESS_CARD' ? '앞면과 뒷면을 확인한 뒤 ZIP 파일 하나로 함께 받을 수 있어요.' : '선택한 로고가 실제 활용 이미지에 적용된 결과예요.'}</p>
+                {completedBrandKit.kitType === 'BUSINESS_CARD' && !missingBusinessCardBack && (
+                  <button className="brand-kit-download-button" type="button" disabled={brandKitDownloading} onClick={() => void downloadBrandKitArchive(completedBrandKit)}>
+                    <Download aria-hidden="true" size={18} strokeWidth={1.9} />
+                    {brandKitDownloading ? '묶는 중…' : '앞면·뒷면 한 번에 받기'}
+                  </button>
+                )}
+                {missingBusinessCardBack && (
+                  <button className="brand-kit-regenerate-button" type="button" onClick={() => openBusinessCardModal({ candidateId: completedBrandKit.candidateId, projectId: completedBrandKit.projectId })}>
+                    앞면·뒷면 다시 만들기
+                    <RefreshCw aria-hidden="true" size={18} strokeWidth={1.9} />
+                  </button>
+                )}
+              </div>
+            </section>
+          ) : (
+            <div className="brand-kit-choice-grid" role="radiogroup" aria-label="브랜드 키트 종류 선택">
+              {options.map((option) => {
+                const Icon = option.icon
+                const selected = option.type === brandKitType
+                return (
+                  <button
+                    key={option.type}
+                    className={selected ? 'brand-kit-choice selected' : 'brand-kit-choice'}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setBrandKitType(option.type)}
+                  >
+                    <span className="brand-kit-choice-visual" aria-hidden="true"><Icon size={40} strokeWidth={1.6} /></span>
+                    <span className="brand-kit-choice-copy"><strong>{option.title}</strong><em>{option.caption}</em><small>{option.description}</small></span>
+                    <span className="brand-kit-choice-radio" aria-hidden="true">{selected ? <Check size={18} strokeWidth={2.6} /> : null}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           <div className="brand-kit-selection-footer">
-            <p aria-live="polite">{selectedOption ? `${selectedOption.title} 키트를 만들 준비가 됐어요.` : '원하는 브랜드 키트를 선택해 주세요.'}</p>
-            <button className="brand-kit-create-button" type="button" disabled={!brandKitType} onClick={createSelectedBrandKit}>
-              {selectedOption ? `${selectedOption.title} 키트 만들기` : '브랜드 키트 선택하기'}
-              <ChevronRight aria-hidden="true" size={23} strokeWidth={1.9} />
-            </button>
+            <p aria-live="polite">{brandKitImageUrls.length > 0 ? '완성된 이미지를 확인하거나 내려받을 수 있어요.' : selectedOption ? `${selectedOption.title} 키트를 만들 준비가 됐어요.` : '원하는 브랜드 키트를 선택해 주세요.'}</p>
+            {brandKitImageUrls.length > 0 ? (
+              <button className="brand-kit-create-button secondary" type="button" onClick={() => { setBrandKit(null); setBrandKitType(expectedKitType) }}>
+                새 시안 만들기
+                <ChevronRight aria-hidden="true" size={23} strokeWidth={1.9} />
+              </button>
+            ) : (
+              <button className="brand-kit-create-button" type="button" disabled={!brandKitType} onClick={createSelectedBrandKit}>
+                {selectedOption ? `${selectedOption.title} 키트 만들기` : '브랜드 키트 선택하기'}
+                <ChevronRight aria-hidden="true" size={23} strokeWidth={1.9} />
+              </button>
+            )}
             {brandKit && <p className="brand-kit-status" role="status">{brandKit.status === 'QUEUED' || brandKit.status === 'RUNNING' ? '브랜드 키트를 만들고 있어요.' : brandKit.status === 'SUCCEEDED' ? '브랜드 키트가 준비됐어요.' : '브랜드 키트 생성에 문제가 생겼어요.'}</p>}
             {brandKitError && <p className="brand-kit-error" role="alert">{brandKitError}</p>}
           </div>
@@ -2857,7 +3116,6 @@ function CustomerApp() {
           <button className="logo-editor-back" type="button" aria-label="결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
           <div className="logo-editor-brand"><BrandLogo /><strong>GenMark AI</strong></div>
           <button className="logo-editor-save" type="button" disabled={editorLoading || editorSaving || !editorSvgSource} onClick={() => void saveEditorChanges()}>{editorSaving ? '저장 중' : editorSaved ? '저장됨' : '저장'}<ChevronDown aria-hidden="true" size={16} strokeWidth={1.8} /></button>
-          <button className="logo-editor-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         </header>
 
         <section className="logo-editor-content">
@@ -2909,7 +3167,6 @@ function CustomerApp() {
 
           <div className="logo-editor-actions">
             <button className="logo-editor-apply" type="button" disabled={editorLoading || editorSaving || !editorSvgSource} onClick={() => void saveEditorChanges().then((saved) => { if (saved) setMode('result') })}>수정 적용하기</button>
-            {canAnalyzeTrademark && <p className="logo-editor-note">편집 SVG를 PNG 분석본으로 변환하는 기능이 연결되기 전까지 상표 유사도 재분석은 사용할 수 없어요.</p>}
           </div>
           {editorLoading && <p className="project-error" role="status">SVG 로고를 불러오고 있어요.</p>}
           {editorError && <p className="project-error" role="alert">{editorError}</p>}
@@ -2971,6 +3228,14 @@ function CustomerApp() {
       { candidateId: 'mypage-mock-pinned-4', projectType: 'BI', storageKey: 'mypage/pinned/vastel.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
       { candidateId: 'mypage-mock-pinned-5', projectType: 'BI', storageKey: 'mypage/pinned/rk.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
     ] : pinnedLogos
+    const savedBrandKitStorageKeys = brandKit?.status === 'SUCCEEDED'
+      ? brandKit.storageKeys?.length
+        ? brandKit.storageKeys
+        : brandKit.storageKey
+          ? [brandKit.storageKey]
+          : []
+      : []
+    const savedBrandKitImageUrls = savedBrandKitStorageKeys.map(getLogoCandidateImageUrl)
     const mockBrandKitItems = [
       { image: '/mypage/mock-brand-kit/lavenor.png', name: 'LAVENOR' },
       { image: '/mypage/mock-brand-kit/aurelis.png', name: 'AURELIS' },
@@ -3022,7 +3287,6 @@ function CustomerApp() {
         <header className="workspace-header">
           <button className="workspace-back" type="button" aria-label="홈으로 돌아가기" onClick={() => setMode('home')}><ChevronLeft aria-hidden="true" size={23} strokeWidth={1.8} /></button>
           <div className="workspace-brand"><BrandLogo /><strong>GenMark AI</strong></div>
-          <button className="workspace-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         </header>
 
         <section className="mypage-content">
@@ -3127,6 +3391,26 @@ function CustomerApp() {
                   </article>
                 ))}
               </div>
+            ) : brandKit?.status === 'SUCCEEDED' && savedBrandKitImageUrls.length > 0 ? (
+              <article className="mypage-brand-kit-result">
+                <div className="mypage-brand-kit-images">
+                  {savedBrandKitImageUrls.map((imageUrl, index) => {
+                    const label = brandKit.kitType === 'BUSINESS_CARD'
+                      ? index === 0 ? '앞면' : '뒷면'
+                      : '제품 썸네일'
+                    return (
+                      <figure className="mypage-brand-kit-image" key={`${imageUrl}-${index}`}>
+                        <figcaption>{label}</figcaption>
+                        <img src={imageUrl} alt={`완성된 ${label}`} />
+                      </figure>
+                    )
+                  })}
+                </div>
+                <button className="mypage-brand-kit-download" type="button" disabled={brandKitDownloading} onClick={() => void downloadBrandKitArchive(brandKit)}>
+                  <Download aria-hidden="true" size={18} strokeWidth={1.9} />
+                  {brandKitDownloading ? '묶는 중…' : brandKit.kitType === 'BUSINESS_CARD' ? '앞면·뒷면 한 번에 다운로드' : '다운로드'}
+                </button>
+              </article>
             ) : brandKit ? (
               <article className="brand-kit-summary-row">
                 <span className="record-icon"><FolderCheck size={20} strokeWidth={1.8} /></span>
@@ -3173,7 +3457,7 @@ function CustomerApp() {
   }
 
   const renderCreditModal = () => (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreditModal(null) }}>
+    <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreditModal(null) }}>
       <section className="credit-modal" role="dialog" aria-modal="true" aria-labelledby="credit-modal-title">
         <button className="modal-close" type="button" aria-label="크레딧 안내 닫기" onClick={() => setCreditModal(null)}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         <div className="credit-modal-icon"><Download aria-hidden="true" size={28} strokeWidth={1.8} /></div>
@@ -3189,7 +3473,7 @@ function CustomerApp() {
   )
 
   const renderCreditSurveyModal = () => (
-    <div className="modal-backdrop" role="presentation">
+    <div ref={activeModalRef} className="modal-backdrop" role="presentation">
       <section className="credit-modal survey-modal" role="dialog" aria-modal="true" aria-labelledby="credit-survey-title">
         <button className="modal-close" type="button" aria-label="설문 닫기" onClick={() => setCreditModal(null)}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         <div className="survey-modal-heading"><MessageSquare aria-hidden="true" size={24} strokeWidth={1.8} /><div><h2 id="credit-survey-title">잠깐만 의견을 들려주세요</h2><p>설문에 참여하시면 크레딧 1개를 드려요.</p></div></div>
@@ -3198,6 +3482,94 @@ function CustomerApp() {
           <div className="modal-survey-block"><h3>어떤 부분이 더 좋아졌으면 하나요?</h3><div className="modal-improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'modal-improvement-option selected' : 'modal-improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div></div>
           <div className="modal-survey-block"><h3>추가 의견</h3><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /></div>
           <button className="gradient-button modal-submit" type="submit">의견 보내고 크레딧 받기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+        </form>
+      </section>
+    </div>
+  )
+
+  const closeBusinessCardModal = () => {
+    setBusinessCardModalOpen(false)
+    setBusinessCardTarget(null)
+    setBusinessCardInfoErrors({})
+  }
+
+  const updateBusinessCardInfo = (field: keyof BusinessCardInfoInput, value: string) => {
+    setBusinessCardInfo((current) => ({ ...current, [field]: value }))
+    if (field === 'name' || field === 'email') {
+      setBusinessCardInfoErrors((current) => ({ ...current, [field]: undefined }))
+    }
+  }
+
+  const renderBusinessCardModal = () => (
+    <div
+      ref={activeModalRef}
+      className="modal-backdrop business-card-backdrop"
+      role="presentation"
+      onMouseDown={(event) => { if (event.target === event.currentTarget) closeBusinessCardModal() }}
+      onKeyDown={(event) => { if (event.key === 'Escape') closeBusinessCardModal() }}
+    >
+      <section className="credit-modal business-card-modal" role="dialog" aria-modal="true" aria-labelledby="business-card-modal-title" aria-describedby="business-card-modal-description">
+        <button className="modal-close" type="button" aria-label="명함 정보 입력 닫기" onClick={closeBusinessCardModal}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
+        <header className="business-card-modal-intro">
+          <div className="business-card-modal-icon" aria-hidden="true"><CreditCard size={30} strokeWidth={1.7} /></div>
+          <div>
+            <h2 id="business-card-modal-title">명함에 들어갈 정보를 알려주세요</h2>
+            <p id="business-card-modal-description">입력한 정보는 이번 명함 결과에 연결해 저장합니다.</p>
+          </div>
+        </header>
+        <form className="business-card-form" noValidate onSubmit={submitBusinessCardInfo}>
+          <div className="business-card-form-grid">
+            <label className="business-card-field">
+              <span>이름 <em>필수</em></span>
+              <input
+                autoFocus
+                required
+                maxLength={40}
+                autoComplete="name"
+                value={businessCardInfo.name}
+                aria-invalid={Boolean(businessCardInfoErrors.name)}
+                aria-describedby={businessCardInfoErrors.name ? 'business-card-name-error' : undefined}
+                onChange={(event) => updateBusinessCardInfo('name', event.target.value)}
+                placeholder="김명은"
+              />
+              {businessCardInfoErrors.name && <small id="business-card-name-error" className="business-card-field-error" role="alert">{businessCardInfoErrors.name}</small>}
+            </label>
+            <label className="business-card-field">
+              <span>직책</span>
+              <input maxLength={40} autoComplete="organization-title" value={businessCardInfo.title ?? ''} onChange={(event) => updateBusinessCardInfo('title', event.target.value)} placeholder="대표 / 디자이너" />
+            </label>
+            <label className="business-card-field business-card-field-wide">
+              <span>회사명</span>
+              <input maxLength={60} autoComplete="organization" value={businessCardInfo.company ?? ''} onChange={(event) => updateBusinessCardInfo('company', event.target.value)} placeholder="회사 또는 브랜드 이름" />
+            </label>
+            <label className="business-card-field">
+              <span>전화번호</span>
+              <input type="tel" maxLength={40} autoComplete="tel" value={businessCardInfo.phone ?? ''} onChange={(event) => updateBusinessCardInfo('phone', event.target.value)} placeholder="010-1234-5678" />
+            </label>
+            <label className="business-card-field">
+              <span>이메일</span>
+              <input
+                type="email"
+                maxLength={80}
+                autoComplete="email"
+                value={businessCardInfo.email ?? ''}
+                aria-invalid={Boolean(businessCardInfoErrors.email)}
+                aria-describedby={businessCardInfoErrors.email ? 'business-card-email-error' : undefined}
+                onChange={(event) => updateBusinessCardInfo('email', event.target.value)}
+                placeholder="hello@example.com"
+              />
+              {businessCardInfoErrors.email && <small id="business-card-email-error" className="business-card-field-error" role="alert">{businessCardInfoErrors.email}</small>}
+            </label>
+            <label className="business-card-field business-card-field-wide">
+              <span>주소</span>
+              <input maxLength={120} autoComplete="street-address" value={businessCardInfo.address ?? ''} onChange={(event) => updateBusinessCardInfo('address', event.target.value)} placeholder="명함에 표시할 주소" />
+            </label>
+          </div>
+          <p className="business-card-form-note"><Info aria-hidden="true" size={16} strokeWidth={1.9} /> 비워 둔 선택 정보는 명함에 표시되지 않아요.</p>
+          <div className="business-card-form-actions">
+            <button className="modal-secondary-button" type="button" onClick={closeBusinessCardModal}>취소</button>
+            <button className="gradient-button" type="submit">이 정보로 명함 만들기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.9} /></button>
+          </div>
         </form>
       </section>
     </div>
@@ -3400,6 +3772,7 @@ function CustomerApp() {
       </nav>}
 
       {creditModal === 'credit' ? renderCreditModal() : creditModal === 'survey' ? renderCreditSurveyModal() : null}
+      {businessCardModalOpen && renderBusinessCardModal()}
       {resumePromptProject && renderResumePromptModal()}
     </div>
   )

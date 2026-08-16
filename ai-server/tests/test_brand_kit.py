@@ -50,6 +50,7 @@ def test_business_card_returns_print_sized_image():
     )
 
     assert response.status_code == 200
+    assert len(response.json()["images"]) == 2
     body = response.json()
     assert body["kitType"] == "BUSINESS_CARD"
     assert body["preliminary"] is False  # 명함은 외부 API 없이 최종 품질까지 합성된다

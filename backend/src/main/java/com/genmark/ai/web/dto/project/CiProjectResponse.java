@@ -13,8 +13,10 @@ public record CiProjectResponse(
         String companyName,
         String coreValues,
         String tone,
+        String colorMode,
         List<String> colors,
         String logoStyle,
+        String logoShape,
         String additionalRequirements,
         LocalDateTime createdAt,
         LocalDateTime updatedAt

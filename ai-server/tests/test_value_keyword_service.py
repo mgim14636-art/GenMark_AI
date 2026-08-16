@@ -244,8 +244,14 @@ def test_code_fenced_openrouter_json_is_accepted(monkeypatch):
     assert enriched["value_keywords_en"] == ["trustworthy"]
 
 
-def test_value_keyword_model_falls_back_to_note_model(monkeypatch):
+def test_value_keyword_model_defaults_to_solar_independently(monkeypatch):
     monkeypatch.delenv("VALUE_KEYWORD_MODEL", raising=False)
     monkeypatch.setenv("NOTE_MODEL", "connected-text-model")
 
-    assert value_keyword_service._model() == "connected-text-model"
+    assert value_keyword_service._model() == "upstage/solar-pro4"
+
+
+def test_value_keyword_model_can_be_overridden(monkeypatch):
+    monkeypatch.setenv("VALUE_KEYWORD_MODEL", "custom/value-model")
+
+    assert value_keyword_service._model() == "custom/value-model"

@@ -15,5 +15,5 @@ public interface LogoAiClient {
      */
     record GeneratedLogo(String imageBase64, Integer seed, Integer variantIndex, String svg) {}
 
-    record LogoAiResult(boolean success, List<GeneratedLogo> logos) {}
+    record LogoAiResult(boolean success, String modelName, List<GeneratedLogo> logos) {}
 }
