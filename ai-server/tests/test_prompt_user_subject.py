@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """사용자가 지정한 형태(logo_shape / additional_requirements) 처리 정합성.
 
-_resolve_motif와 build_prompt_from_survey가 같은 입력을 다르게 판정하면
+_resolve_motif와 build_prompt_legacy가 같은 입력을 다르게 판정하면
 "the exact user-requested subject"라고만 하고 그 subject가 뭔지는 한 번도
 말하지 않는 프롬프트가 나간다. 모델은 정체불명의 지시를 받고, 모티프 풀
 폴백까지 건너뛰어 시안이 전부 같은 프롬프트가 된다.
@@ -12,7 +12,7 @@ from app.services.prompt_service import (
     MOTIF_MAP,
     _resolve_motif,
     _usable_user_subject,
-    build_prompt_from_survey,
+    build_prompt_legacy,
 )
 
 DANGLING = "the exact user-requested subject"
@@ -29,7 +29,7 @@ BASE = {
 
 
 def _prompt(vi=0, **extra):
-    return build_prompt_from_survey({**BASE, **extra}, variant_index=vi)
+    return build_prompt_legacy({**BASE, **extra}, variant_index=vi)
 
 
 # --- 번역 실패로 한글이 남은 경우 -------------------------------------------

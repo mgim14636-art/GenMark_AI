@@ -251,6 +251,26 @@ USER_MOTIF_RENDERING_APPROACHES = (
     "a balanced abstract composition",
 )
 
+# 선(outline) 마감일 때 쓰는 같은 길이의 대체 목록.
+# 위 목록 0번 "a bold simplified flat silhouette"은 꽉 찬 면을 뜻해 선 지시와
+# 충돌한다(실측 확인됨 — 선 모드 프롬프트에 silhouette이 그대로 실려 나갔다).
+# 길이를 맞춰 두어야 variant_index 순환에 따른 시안 다양성이 그대로 유지된다.
+OUTLINE_MOTIF_RENDERING_APPROACHES = (
+    "a bold simplified single-weight outline",
+    "soft organic abstract contours",
+    "a clever negative-space construction",
+    "a balanced abstract composition",
+)
+
+
+def _rendering_approach(variant_index: int, finish: str) -> str:
+    pool = (
+        OUTLINE_MOTIF_RENDERING_APPROACHES
+        if finish == LOGO_FINISH_OUTLINE
+        else USER_MOTIF_RENDERING_APPROACHES
+    )
+    return pool[variant_index % len(pool)]
+
 # 설문 화면(FR-06)의 "모티프 카테고리" 칩 — 사용자가 이걸 고르면 업종 고정 목록
 # (MOTIF_MAP) 대신 이 목록에서 모티프를 고른다. 예전엔 이 필드가 코드에서 아예 읽히지
 # 않아서 "동물/생명체"·"기하학적 도형"을 골라도 항상 잎사귀·물방울 같은 보태니컬
@@ -483,9 +503,7 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
         offset = sum(ord(c) for c in brand_name) if brand_name else 0
         return pool[(offset + variant_index) % len(pool)]
 
-    approach = USER_MOTIF_RENDERING_APPROACHES[
-        variant_index % len(USER_MOTIF_RENDERING_APPROACHES)
-    ]
+    approach = _rendering_approach(variant_index, _resolve_finish(survey))
     return f"an original brand-specific subject, rendered with {approach}"
 
 
@@ -758,7 +776,149 @@ def _normalize_survey(survey: dict) -> dict:
     return survey
 
 
-def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
+# ---------------------------------------------------------------------------
+# 브리프 프롬프트 (v4)
+#
+# 통제 실험 결과다. Recraft 사이트에서 같은 모델(V4 Vector)에 두 프롬프트를 넣어
+# 비교했다.
+#   - 사용자가 한국어로 쓴 짧은 브리프(브랜드명/업종/콤비네이션/색/무드) -> 완성도
+#     높은 락업. 심볼과 워드마크가 함께 설계됨.
+#   - 우리 프롬프트(모티프 지정 + 조형 지시) -> 동심원 선 뭉치. 브랜드와 무관한 모티프.
+# 플랫폼도 모델도 같았으므로 차이는 프롬프트뿐이다.
+#
+# 특히 해로웠던 문장들:
+#   "fine monoline line art ... as few strokes as possible"
+#       -> 서로 충돌한다. 모델은 "fine monoline"을 촘촘한 선 드로잉으로 해석해
+#          동심원을 그린다.
+#   "The mark depicts <고정 풀에서 뽑은 모티프>."
+#       -> 브랜드명과 무관하다. 브랜드가 "Tree"인데 물방울이 나온다.
+#   "legible when scaled down to 16 pixels"
+#       -> 모델이 밀도를 높이는 쪽으로 받는다.
+#   형용사 5개 나열, "Create a logo that reflects the brand identity..." 류의 군더더기
+#       -> 지시를 희석한다.
+#
+# 그래서 이 빌더는 설문에서 사용자가 실제로 고른 사실만 짧게 넘기고 조형은 모델에게
+# 맡긴다. 단색 통일은 프롬프트로 조르지 않는다 - logo_gen_service.force_single_color가
+# 생성 후에 확정적으로 처리하므로, 프롬프트에서 색을 못 박아 조형을 망칠 이유가 없다.
+
+BRIEF_TONE = {
+    "친근하고 다정한": "friendly and approachable",
+    "전문적이고 신뢰감 있는": "professional and trustworthy",
+    "감성적이고 따뜻한": "warm and emotional",
+    "유니크하고 트렌디한": "unique and trendy",
+    "미니얼하고 직관적인": "minimal and clean",
+}
+
+# 스타일별 한 줄. 한글 브랜드명일 때는 워드마크를 모델에게 맡길 수 없다 -
+# Recraft는 한글 글자를 제대로 그리지 못한다. 이 경우 심볼만 받아
+# logo_composer가 폰트로 합성한다(기존 경로).
+BRIEF_STYLE = {
+    "혼합형": 'The symbol and the brand name are designed together as one lockup.',
+    "워드마크": "A wordmark built from the brand name itself.",
+    "레터마크": "A monogram built from the brand initial.",
+    "심볼": "A standalone symbol with no letters.",
+}
+BRIEF_STYLE_NO_TEXT = "A standalone symbol with no letters, to be paired with type later."
+
+# 시안마다 바꾸는 것은 "조형 방식"이 아니라 "발상의 각도"다. 획 굵기나 도형 개수
+# 같은 조형 지시를 시안별로 바꾸면 앞서 실패한 v1으로 되돌아간다.
+BRIEF_ANGLES = (
+    "",
+    "Try an abstract interpretation.",
+    "Try a motif drawn from nature.",
+    "Try a geometric interpretation.",
+)
+
+
+def model_draws_wordmark(survey: dict) -> bool:
+    """모델이 브랜드명까지 직접 그리는가.
+
+    brief 프롬프트는 영문 브랜드명 + 텍스트를 포함하는 스타일일 때 모델에게
+    워드마크까지 맡긴다. 이때 logo_composer가 폰트로 이름을 또 얹으면 브랜드명이
+    두 번 나온다(실측 확인됨). 프롬프트와 합성이 같은 판단을 쓰도록 여기 한 곳에
+    모은다.
+
+    한글은 Recraft가 제대로 그리지 못하므로 항상 False - 심볼만 받아 합성한다.
+    legacy 프롬프트는 글자를 금지하므로 역시 False.
+    """
+    if PROMPT_STYLE in ("legacy", "v1", "old"):
+        return False
+    survey = _normalize_survey(survey)
+    if survey.get("style", "혼합형") not in ("혼합형", "워드마크", "레터마크"):
+        return False
+    brand = " ".join((survey.get("brand_name") or "").split())
+    return bool(brand) and not _HANGUL.search(brand)
+
+
+# 번역 실패 시 motif_translation_service가 넣는 자리표시자. 그 자체로는 무엇을
+# 그리라는 지시가 없어, 문맥이 짧은 브리프에서는 특히 해롭다.
+_SUBJECT_PLACEHOLDERS = (
+    "a brand-specific motif matching the user's request",
+    "the exact user-requested subject",
+)
+
+
+def build_prompt_brief(survey: dict, variant_index: int = 0) -> str:
+    """설문 사실만 담은 짧은 브리프. 조형은 모델에게 맡긴다."""
+    survey = _normalize_survey(survey)
+
+    industry = INDUSTRY_MAP.get(survey.get("industry", ""), INDUSTRY_MAP["기타"])
+    brand = " ".join((survey.get("brand_name") or "").split())
+    style_key = survey.get("style", "혼합형")
+
+    # 한글 브랜드명은 모델이 못 그린다 -> 심볼만 받는다.
+    model_can_draw_name = bool(brand) and not _HANGUL.search(brand)
+    if style_key in ("혼합형", "워드마크", "레터마크") and not model_can_draw_name:
+        style_line = BRIEF_STYLE_NO_TEXT
+    else:
+        style_line = BRIEF_STYLE.get(style_key, BRIEF_STYLE["혼합형"])
+
+    lines = []
+    if brand and model_can_draw_name:
+        lines.append(f'A logo for {industry} called "{brand}".')
+    else:
+        lines.append(f"A logo for {industry}.")
+    lines.append(style_line)
+
+    named = _manual_color_names(survey)
+    if named:
+        lines.append(f"{_join_names(named).capitalize()} palette.")
+    else:
+        lines.append(f"{TONE_COLOR_MAP.get(survey.get('tone',''), 'soft muted')} palette.")
+
+    # 사용자가 지정한 형태는 독립 문장으로, 그것도 앞쪽에 둔다.
+    # "~ feeling." 문장에 섞어 넣었더니 모델이 분위기 서술로 읽고 형태를 무시했다
+    # (실측 확인됨 - "원형 틀 안의 잎사귀"를 요청했는데 원형 틀이 빠졌다).
+    subject = _usable_user_subject(survey)
+    if subject and subject not in _SUBJECT_PLACEHOLDERS:
+        lines.insert(1, f"The mark depicts {subject}.")
+
+    tone_words = BRIEF_TONE.get(survey.get("tone", ""), "")
+    if tone_words:
+        lines.append(f"{tone_words.capitalize()} feeling.")
+
+    lines.append("Flat vector on a white background.")
+    lines.append("Keep it simple and uncluttered, with generous space around the mark.")
+
+    angle = BRIEF_ANGLES[variant_index % len(BRIEF_ANGLES)]
+    if angle:
+        lines.append(angle)
+
+    return "\n".join(lines)
+
+
+def _join_names(names: list) -> str:
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + f" and {names[-1]}"
+
+
+# 어느 빌더를 쓸지. brief가 기본이다 - 위 실험 근거 참고.
+# 예전 프롬프트로 되돌리려면 LOGO_PROMPT=legacy.
+PROMPT_STYLE = os.environ.get("LOGO_PROMPT", "brief").strip().lower()
+
+
+def build_prompt_legacy(survey: dict, variant_index: int = 0) -> str:
     """설문을 프롬프트로 변환한다.
 
     survey는 화면설계서의 CI/BI 화면 필드명(company_name/company_values 등)을 그대로
@@ -792,12 +952,14 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     style_sentence = STYLE_MAP.get(style_key, STYLE_MAP["심볼"])
 
     extra = _usable_user_subject(survey)
+    if extra and finish == LOGO_FINISH_OUTLINE:
+        # 사용자 지정 형태에도 면을 전제하는 꼬리말이 붙어 온다(번역 서비스가
+        # "...silhouette"으로 만들어 준다). 선 지시와 정면 충돌하므로 여기서도 뗀다.
+        extra = _strip_fill_words(extra)
 
     user_motif_lead = ""
     if extra:
-        approach = USER_MOTIF_RENDERING_APPROACHES[
-            variant_index % len(USER_MOTIF_RENDERING_APPROACHES)
-        ]
+        approach = _rendering_approach(variant_index, finish)
         user_motif_lead = (
             f"The primary motif must satisfy this exact user request: {extra}. "
             f"Preserve that requested subject while using {approach}. "
@@ -851,3 +1013,14 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
         f"The overall style references a {aesthetic_kw}." if aesthetic_kw else "",
     ]
     return _fit_to_budget(core, optional_parts)
+
+
+def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
+    """서비스 진입점. LOGO_PROMPT 환경변수로 빌더를 고른다.
+
+    기본은 brief(v4). legacy는 모티프·조형까지 지시하던 예전 프롬프트로,
+    비교용으로만 남긴다 - build_prompt_brief 위 주석의 실험 근거 참고.
+    """
+    if PROMPT_STYLE in ("legacy", "v1", "old"):
+        return build_prompt_legacy(survey, variant_index=variant_index)
+    return build_prompt_brief(survey, variant_index=variant_index)

@@ -14,7 +14,7 @@ from app.services.prompt_service import (
     TONE_COLOR_MAP,
     _color_clause,
     _manual_color_names,
-    build_prompt_from_survey,
+    build_prompt_legacy,
 )
 
 NAVY = "#17185b"       # -> deep navy
@@ -31,7 +31,7 @@ BASE = {
 
 
 def _prompt(colors):
-    return build_prompt_from_survey({**BASE, "color_manual": colors}, variant_index=0)
+    return build_prompt_legacy({**BASE, "color_manual": colors}, variant_index=0)
 
 
 def test_single_color_is_declared_monochrome():
