@@ -196,6 +196,8 @@ CREATE TABLE IF NOT EXISTS brand_kits (
     kit_type VARCHAR(20) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'QUEUED',
     storage_key VARCHAR(500) NULL,
+    render_spec_json TEXT NULL,
+    render_spec_hash CHAR(64) NULL,
     preliminary BOOLEAN NOT NULL DEFAULT FALSE,
     warnings_json TEXT NULL,
     error_code VARCHAR(50) NULL,
@@ -206,6 +208,7 @@ CREATE TABLE IF NOT EXISTS brand_kits (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_kit_candidate FOREIGN KEY (candidate_id) REFERENCES logo_candidates(id) ON DELETE CASCADE,
     CONSTRAINT chk_kit_type CHECK (kit_type IN ('BUSINESS_CARD', 'THUMBNAIL')),
+    INDEX idx_kit_render_spec (candidate_id, kit_type, render_spec_hash, status),
     INDEX idx_kit_candidate (candidate_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

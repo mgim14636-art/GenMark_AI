@@ -19,12 +19,15 @@ class BrandKitProcessorTest {
         BrandKitRepository repository = mock(BrandKitRepository.class);
         BrandKitAiClient aiClient = mock(BrandKitAiClient.class);
         LogoFileStorage storage = mock(LogoFileStorage.class);
-        CiProject project = CiProject.builder().build();
+        CiProject project = CiProject.builder().companyName("현재 회사명").build();
         LogoGeneration generation = LogoGeneration.builder().publicId("generation-1").ciProject(project).build();
         LogoCandidate candidate = LogoCandidate.builder().candidateOrder(1).storageKey("logos/original.png")
                 .generation(generation).build();
         BrandKit kit = BrandKit.builder().id(9L).publicId("kit-1").candidate(candidate)
                 .kitType(BrandKit.KitType.BUSINESS_CARD)
+                .renderSpecJson("""
+                        {"survey":{"company_name":"생성 당시 회사명"},"card_design":{"schema_version":1,"front":{"background_color":"#112233"}}}
+                        """)
                 .status(BrandKit.Status.QUEUED).build();
         kit.setBusinessCardInfo(BusinessCardInfo.builder()
                 .brandKit(kit)
@@ -40,8 +43,12 @@ class BrandKitProcessorTest {
         when(aiClient.generate(argThat(request -> {
             Object raw = request.get("card_info");
             if (!(raw instanceof java.util.Map<?, ?> cardInfo)) return false;
+            Object rawSurvey = request.get("survey");
+            if (!(rawSurvey instanceof java.util.Map<?, ?> survey)) return false;
             return Base64.getEncoder().encodeToString(new byte[]{1, 2, 3})
                     .equals(request.get("logo_image_base64"))
+                    && !request.containsKey("card_design")
+                    && "생성 당시 회사명".equals(survey.get("company_name"))
                     && "Kim".equals(cardInfo.get("name"))
                     && "CEO".equals(cardInfo.get("title"))
                     && "GenMark".equals(cardInfo.get("company"))

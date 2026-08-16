@@ -268,9 +268,7 @@ def _logo_already_has_brand_name(survey: dict, brand: str) -> bool:
     return model_draws_wordmark(survey) or _wants_text_overlay(survey, style_key, brand)
 
 
-def _compose_business_card(
-    logo: Image.Image, info: Optional[CardInfo], survey: dict
-) -> Tuple[Image.Image, Image.Image]:
+def _compose_business_card(logo: Image.Image, info: Optional[CardInfo], survey: dict) -> Tuple[Image.Image, Image.Image]:
     """명함 앞면과 뒷면을 만든다.
 
     앞면은 로고 대표색 바탕에 흰 로고(역상), 뒷면은 흰 바탕에 원래 색 로고다.

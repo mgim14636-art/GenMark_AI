@@ -50,6 +50,13 @@ public class BrandKit {
     @Column(name = "storage_key", length = 500)
     private String storageKey;
 
+    /** Exact, canonical rendering input used to make this kit. */
+    @Column(name = "render_spec_json", columnDefinition = "TEXT")
+    private String renderSpecJson;
+
+    @Column(name = "render_spec_hash", length = 64, columnDefinition = "CHAR(64)")
+    private String renderSpecHash;
+
     @Column(nullable = false)
     @Builder.Default
     private boolean preliminary = false;

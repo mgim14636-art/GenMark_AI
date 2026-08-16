@@ -4,6 +4,7 @@ import com.genmark.ai.entity.*;
 import com.genmark.ai.repository.BrandKitRepository;
 import com.genmark.ai.repository.LogoCandidateRepository;
 import com.genmark.ai.web.dto.brandkit.BrandKitCreateRequest;
+import com.genmark.ai.web.dto.brandkit.BrandKitResponse;
 import com.genmark.ai.web.dto.brandkit.BusinessCardInfoRequest;
 import com.genmark.ai.web.exception.ApiException;
 import com.genmark.ai.web.exception.ErrorCode;
@@ -23,9 +24,41 @@ import java.util.zip.ZipInputStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 class BrandKitServiceTest {
+
+    @Test
+    void createsRequestedThumbnailWithoutBusinessCardInfo() {
+        ProjectLookupService projectLookup = mock(ProjectLookupService.class);
+        LogoCandidateRepository candidateRepository = mock(LogoCandidateRepository.class);
+        BrandKitRepository brandKitRepository = mock(BrandKitRepository.class);
+        BrandKitWorker worker = mock(BrandKitWorker.class);
+        LogoFileStorage storage = mock(LogoFileStorage.class);
+        BrandKitService service = new BrandKitService(projectLookup, candidateRepository,
+                brandKitRepository, worker, storage);
+        Member member = Member.builder().id(7L).build();
+        CiProject project = CiProject.builder().id(3L).publicId("project-1").member(member).build();
+        LogoCandidate candidate = LogoCandidate.builder().id(4L).publicId("candidate-1")
+                .generation(LogoGeneration.builder().ciProject(project).build()).build();
+        when(projectLookup.requireOwned("project-1", 7L)).thenReturn(project);
+        when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
+                "candidate-1", 3L, 7L)).thenReturn(Optional.of(candidate));
+        when(brandKitRepository.findFirstByCandidateIdAndKitTypeAndRenderSpecHashAndStatusOrderByCompletedAtDesc(
+                any(), any(), anyString(), any())).thenReturn(Optional.empty());
+        when(brandKitRepository.save(any(BrandKit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BrandKitResponse response = service.create("project-1", "candidate-1", 7L,
+                new BrandKitCreateRequest("THUMBNAIL", null));
+
+        assertThat(response.kitType()).isEqualTo("THUMBNAIL");
+        verify(brandKitRepository).save(argThat(kit -> kit.getKitType() == BrandKit.KitType.THUMBNAIL
+                && kit.getBusinessCardInfo() == null
+                && kit.getRenderSpecJson().contains("\"kit_type\":\"THUMBNAIL\"")));
+        verify(worker).execute(any());
+    }
+
     @Test
     void listsMemberBrandKitsAcrossCiAndBiInNewestFirstOrder() {
         ProjectLookupService projectLookup = mock(ProjectLookupService.class);
@@ -82,8 +115,8 @@ class BrandKitServiceTest {
         when(projectLookup.requireOwned("project-1", 7L)).thenReturn(project);
         when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
                 "candidate-1", 3L, 7L)).thenReturn(Optional.of(candidate));
-        when(brandKitRepository.findFirstByCandidateIdAndKitTypeAndStatusOrderByCompletedAtDesc(
-                4L, BrandKit.KitType.BUSINESS_CARD, BrandKit.Status.SUCCEEDED)).thenReturn(Optional.of(stale));
+        when(brandKitRepository.findFirstByCandidateIdAndKitTypeAndRenderSpecHashAndStatusOrderByCompletedAtDesc(
+                any(), any(), anyString(), any())).thenReturn(Optional.of(stale));
         when(storage.brandKitSourceKeyMatches("kit-old", "logos/current-revision.png")).thenReturn(false);
         when(brandKitRepository.save(any(BrandKit.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -114,8 +147,8 @@ class BrandKitServiceTest {
         when(projectLookup.requireOwned("project-1", 7L)).thenReturn(project);
         when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
                 "candidate-1", 3L, 7L)).thenReturn(Optional.of(candidate));
-        when(brandKitRepository.findFirstByCandidateIdAndKitTypeAndStatusOrderByCompletedAtDesc(
-                4L, BrandKit.KitType.BUSINESS_CARD, BrandKit.Status.SUCCEEDED)).thenReturn(Optional.of(current));
+        when(brandKitRepository.findFirstByCandidateIdAndKitTypeAndRenderSpecHashAndStatusOrderByCompletedAtDesc(
+                any(), any(), anyString(), any())).thenReturn(Optional.of(current));
         when(storage.brandKitSourceKeyMatches("kit-1", "logos/current-revision.png")).thenReturn(true);
         when(storage.brandKitHasExpectedImageCount("kit-1", 2)).thenReturn(true);
 
@@ -145,8 +178,8 @@ class BrandKitServiceTest {
         when(projectLookup.requireOwned("project-1", 7L)).thenReturn(project);
         when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
                 "candidate-1", 3L, 7L)).thenReturn(Optional.of(candidate));
-        when(brandKitRepository.findFirstByCandidateIdAndKitTypeAndStatusOrderByCompletedAtDesc(
-                4L, BrandKit.KitType.BUSINESS_CARD, BrandKit.Status.SUCCEEDED)).thenReturn(Optional.of(legacy));
+        when(brandKitRepository.findFirstByCandidateIdAndKitTypeAndRenderSpecHashAndStatusOrderByCompletedAtDesc(
+                any(), any(), anyString(), any())).thenReturn(Optional.of(legacy));
         when(storage.brandKitSourceKeyMatches("kit-legacy", "logos/current-revision.png")).thenReturn(true);
         when(storage.brandKitHasExpectedImageCount("kit-legacy", 2)).thenReturn(false);
         when(brandKitRepository.save(any(BrandKit.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -174,8 +207,8 @@ class BrandKitServiceTest {
         when(projectLookup.requireOwned("project-1", 7L)).thenReturn(project);
         when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
                 "candidate-1", 3L, 7L)).thenReturn(Optional.of(candidate));
-        when(brandKitRepository.findFirstByCandidateIdAndKitTypeAndStatusOrderByCompletedAtDesc(
-                4L, BrandKit.KitType.BUSINESS_CARD, BrandKit.Status.SUCCEEDED)).thenReturn(Optional.empty());
+        when(brandKitRepository.findFirstByCandidateIdAndKitTypeAndRenderSpecHashAndStatusOrderByCompletedAtDesc(
+                any(), any(), anyString(), any())).thenReturn(Optional.empty());
         when(brandKitRepository.save(any(BrandKit.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.create("project-1", "candidate-1", 7L,
@@ -239,8 +272,9 @@ class BrandKitServiceTest {
         when(projectLookup.requireOwned("project-1", 7L)).thenReturn(project);
         when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
                 "candidate-1", 3L, 7L)).thenReturn(Optional.of(candidate));
-        when(brandKitRepository.findFirstByCandidateIdAndKitTypeAndStatusOrderByCompletedAtDesc(
-                4L, BrandKit.KitType.BUSINESS_CARD, BrandKit.Status.SUCCEEDED)).thenReturn(Optional.of(current));
+        // Changed contact data produces a different render-spec hash, so an exact cache lookup misses.
+        when(brandKitRepository.findFirstByCandidateIdAndKitTypeAndRenderSpecHashAndStatusOrderByCompletedAtDesc(
+                any(), any(), anyString(), any())).thenReturn(Optional.empty());
         when(storage.brandKitSourceKeyMatches("kit-1", "logos/current-revision.png")).thenReturn(true);
         when(storage.brandKitHasExpectedImageCount("kit-1", 2)).thenReturn(true);
         when(brandKitRepository.save(any(BrandKit.class))).thenAnswer(invocation -> invocation.getArgument(0));

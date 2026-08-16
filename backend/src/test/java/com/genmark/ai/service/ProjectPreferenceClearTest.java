@@ -17,6 +17,18 @@ import static org.mockito.Mockito.when;
 class ProjectPreferenceClearTest {
 
     @Test
+    void colorListPreservesFirstColorAndRemovesCaseInsensitiveDuplicates() {
+        CiProject project = CiProject.builder()
+                .color1("#AaBbCc")
+                .color2("#DDEEFF")
+                .color3("#aabbcc")
+                .color4("#ddeeff")
+                .build();
+
+        assertThat(project.colorList()).containsExactly("#AaBbCc", "#DDEEFF");
+    }
+
+    @Test
     void ciCanClearSavedLogoShapeAndLegacyShapeLine() {
         CiProjectRepository repository = mock(CiProjectRepository.class);
         CiProject project = CiProject.builder()

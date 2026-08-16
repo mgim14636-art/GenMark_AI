@@ -1,4 +1,4 @@
-import { FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
+import { CSSProperties, FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
 import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
@@ -27,6 +27,11 @@ type ToneOption = 'friendly' | 'professional' | 'warm' | 'trendy' | 'minimal'
 type RgbColor = { r: number; g: number; b: number }
 type LogoStyle = 'symbol' | 'wordmark' | 'combination' | 'lettermark'
 type TrademarkMatchImage = { rank: number; src: string }
+type FinalEditKind = 'identity' | 'values' | 'tone' | 'style'
+
+const uniqueColors = (colors: string[]) => Array.from(new Map(
+  colors.filter(Boolean).map((color) => [color.trim().toLowerCase(), color.trim()]),
+).values()).slice(0, 4)
 
 const categories = ['전체', '심볼마크', '워드마크', '콤비네이션', '레터마크']
 
@@ -248,7 +253,7 @@ const ToneColorPalette = ({ value, onChange, onComplete, ariaLabel }: { value: R
         onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); updateFromPointer(event) }}
         onPointerMove={(event) => { if (event.buttons === 1) updateFromPointer(event) }}
       >
-        <span className="tone-color-palette-preview" style={{ left: `${hsv.h / 3.6}%`, top: `${(1 - hsv.v) * 100}%`, background: rgbToHex(value) }} />
+        <span className="tone-color-palette-preview" style={{ '--tone-x': `${hsv.h / 3.6}%`, '--tone-y': `${(1 - hsv.v) * 100}%`, background: rgbToHex(value) } as CSSProperties} />
       </div>
       <div className="tone-palette-actions">
         <button className={advancedOpen ? 'tone-native-picker-button active' : 'tone-native-picker-button'} type="button" onClick={() => setAdvancedOpen((current) => !current)}>
@@ -426,10 +431,14 @@ function CustomerApp() {
   const [surveySubmitted, setSurveySubmitted] = useState(false)
   const [remainingCredits, setRemainingCredits] = useState(2)
   const [creditModal, setCreditModal] = useState<'credit' | 'survey' | null>(null)
+  const [finalEditModal, setFinalEditModal] = useState<FinalEditKind | null>(null)
+  const [regenerationConfirmOpen, setRegenerationConfirmOpen] = useState(false)
+  const [regenerationCreditsLoading, setRegenerationCreditsLoading] = useState(false)
+  const [finalEditDraft, setFinalEditDraft] = useState({ companyName: '', companyMotto: '', brandName: '', targetAge: '', valuesText: '', tone: '' as ToneOption | '', colors: [] as string[], logoStyle: '' as LogoStyle | '', logoShape: '' })
   const activeModalRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!creditModal && !businessCardModalOpen && !resumePromptProject) return
+    if (!creditModal && !businessCardModalOpen && !resumePromptProject && !finalEditModal && !regenerationConfirmOpen) return
 
     const modalRoot = activeModalRef.current
     if (!modalRoot) return
@@ -455,6 +464,10 @@ function CustomerApp() {
           setBusinessCardModalOpen(false)
           setBusinessCardTarget(null)
           setBusinessCardInfoErrors({})
+        } else if (finalEditModal) {
+          setFinalEditModal(null)
+        } else if (regenerationConfirmOpen) {
+          setRegenerationConfirmOpen(false)
         } else if (creditModal) {
           setCreditModal(null)
         } else {
@@ -490,7 +503,7 @@ function CustomerApp() {
       document.body.style.overflow = previousOverflow
       previouslyFocused?.focus()
     }
-  }, [businessCardModalOpen, creditModal, resumePromptProject])
+  }, [businessCardModalOpen, creditModal, finalEditModal, regenerationConfirmOpen, resumePromptProject])
   const [choiceInfoModal, setChoiceInfoModal] = useState<'ci' | 'bi' | null>(null)
   const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; candidateId?: string; storageKey?: string; svgUrl?: string | null } | null>(null)
   const editorCandidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
@@ -1262,7 +1275,7 @@ function CustomerApp() {
     setManualColors((current) => {
       const next = [...current]
       next[manualColorSlot] = hex
-      return next
+      return uniqueColors(next)
     })
   }
 
@@ -1292,7 +1305,7 @@ function CustomerApp() {
         : customToneColors[toneId] ?? toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#eadfff', '#ffe1ef']
       const next = [...base]
       next[slot] = hex
-      return { toneId, colors: next }
+      return { toneId, colors: uniqueColors(next) }
     })
   }
 
@@ -1323,12 +1336,12 @@ function CustomerApp() {
 
   const getSelectedColors = () => {
     if (colorSelectionMode === 'tone' && toneSelection) {
-      return customToneColors[toneSelection]
+      return uniqueColors(customToneColors[toneSelection]
         ?? toneOptions.find((option) => option.id === toneSelection)?.colors
-        ?? toneOptions[0].colors
+        ?? toneOptions[0].colors)
     }
 
-    return manualColors
+    return uniqueColors(manualColors)
   }
 
   const buildProjectInput = (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review'): ProjectInput => {
@@ -1617,7 +1630,7 @@ function CustomerApp() {
       const requested = await projectsApi.requestBrandKit(
         targetProjectId,
         candidateId,
-        cardInfo ? { cardInfo } : undefined,
+        { kitType: brandKitType ?? 'THUMBNAIL', ...(cardInfo ? { cardInfo } : {}) },
       )
       if (requestEpoch !== assetEpochRef.current
           || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return
@@ -1632,7 +1645,7 @@ function CustomerApp() {
 
   const openBrandKitSelection = () => {
     setBrandKitError('')
-    setBrandKitType(brandKind === 'ci' ? 'BUSINESS_CARD' : 'THUMBNAIL')
+    setBrandKitType(null)
     setMode('brand-kit')
   }
 
@@ -1737,11 +1750,8 @@ function CustomerApp() {
     setBusinessCardModalOpen(false)
     const target = businessCardTarget
     setBusinessCardTarget(null)
-    if (target) {
-      await requestBrandKit(target.candidateId, target.projectId, normalized)
-    } else {
-      await runSelectedBrandKit(normalized)
-    }
+    if (target) await requestBrandKit(target.candidateId, target.projectId, normalized)
+    else await runSelectedBrandKit(normalized)
   }
 
   const downloadLogo = async (candidate: { name: string; subtitle?: string; candidateId?: string; storageKey?: string; svgUrl?: string | null }): Promise<boolean> => {
@@ -2567,6 +2577,48 @@ function CustomerApp() {
     )
   }
 
+  const openFinalEditModal = (kind: FinalEditKind) => {
+    setFinalEditDraft({
+      companyName, companyMotto, brandName, targetAge,
+      valuesText: coreValueInputMode === 'category' ? coreValues.map((value) => coreValueLabels[value] ?? value).join(', ') : brandValueDescription,
+      tone: toneSelection ?? '', colors: [...getSelectedColors()], logoStyle: logoStyle ?? '', logoShape: logoShapePrompt,
+    })
+    setFinalEditModal(kind)
+  }
+
+  const openRegenerationConfirm = () => {
+    setRegenerationConfirmOpen(true)
+    setRegenerationCreditsLoading(true)
+    void meApi.getCredits()
+      .then((result) => setRemainingCredits(result.balance))
+      .catch(() => undefined)
+      .finally(() => setRegenerationCreditsLoading(false))
+  }
+
+  const saveFinalEditModal = () => {
+    if (!finalEditModal) return
+    if (finalEditModal === 'identity') {
+      setCompanyName(finalEditDraft.companyName)
+      setBrandName(finalEditDraft.brandName)
+      setTargetAge(finalEditDraft.targetAge)
+    } else if (finalEditModal === 'values') {
+      setCompanyMotto(finalEditDraft.companyMotto)
+      setBrandValueDescription(finalEditDraft.valuesText)
+      if (brandKind === 'bi') { setCoreValueInputMode('direct'); setCoreValues([]) }
+    } else if (finalEditModal === 'tone') {
+      setToneSelection(finalEditDraft.tone || null)
+      const colors = uniqueColors(finalEditDraft.colors)
+      setManualColors(colors)
+      setManualColorsSelected(colors.length > 0)
+      setColorSelectionMode('manual')
+      setToneMode('direct')
+    } else {
+      setLogoStyle(finalEditDraft.logoStyle || null)
+      setLogoShapePrompt(finalEditDraft.logoShape)
+    }
+    setFinalEditModal(null)
+  }
+
   const renderFinalRequestScreen = () => {
     const displayValue = (value: string | undefined, fallback = '입력하지 않음') => value?.trim() || fallback
     const selectedToneLabel = toneOptions.find((option) => option.id === toneSelection)?.label ?? toneSelection
@@ -2576,15 +2628,15 @@ function CustomerApp() {
       : displayValue(brandValueDescription)
     const summaryRows = brandKind === 'ci'
       ? [
-          { key: 'company-name', label: '회사명', value: displayValue(companyName), icon: 'name', editMode: 'company-details' as ViewMode },
-          { key: 'company-motto', label: '회사 모토', value: displayValue(companyMotto), icon: 'value', editMode: 'company-details' as ViewMode },
-          { key: 'mood', label: '원하는 분위기', value: selectedToneLabel, icon: 'mood', editMode: 'tone' as ViewMode },
+          { key: 'company-name', label: '회사명', value: displayValue(companyName), icon: 'name', editKind: 'identity' as FinalEditKind },
+          { key: 'company-motto', label: '회사 모토', value: displayValue(companyMotto), icon: 'value', editKind: 'values' as FinalEditKind },
+          { key: 'mood', label: '원하는 분위기', value: selectedToneLabel, icon: 'mood', editKind: 'tone' as FinalEditKind },
         ]
       : [
-          { key: 'brand-name', label: '브랜드명', value: displayValue(brandName), icon: 'name', editMode: 'brand-details' as ViewMode },
-          { key: 'audience', label: '주요 고객', value: displayValue(targetAgeOptions.find((option) => option.id === targetAge)?.label), icon: 'audience', editMode: 'brand-details' as ViewMode },
-          { key: 'value', label: '핵심 가치', value: selectedBrandValues, icon: 'value', editMode: 'brand-details' as ViewMode },
-          { key: 'mood', label: '분위기', value: selectedToneLabel, icon: 'mood', editMode: 'tone' as ViewMode },
+          { key: 'brand-name', label: '브랜드명', value: displayValue(brandName), icon: 'name', editKind: 'identity' as FinalEditKind },
+          { key: 'audience', label: '주요 고객', value: displayValue(targetAgeOptions.find((option) => option.id === targetAge)?.label), icon: 'audience', editKind: 'identity' as FinalEditKind },
+          { key: 'value', label: '핵심 가치', value: selectedBrandValues, icon: 'value', editKind: 'values' as FinalEditKind },
+          { key: 'mood', label: '분위기', value: selectedToneLabel, icon: 'mood', editKind: 'tone' as FinalEditKind },
         ]
 
     return (
@@ -2609,7 +2661,7 @@ function CustomerApp() {
                   })()}
                   <span className="final-summary-label">{row.label}</span>
                   <span className="final-summary-value">{row.value}</span>
-                  <button className="final-edit-button" type="button" onClick={() => setMode(row.editMode)}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+                  <button className="final-edit-button" type="button" onClick={() => openFinalEditModal(row.editKind)}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
                 </div>
               ))}
               <div className="final-summary-row">
@@ -2618,19 +2670,19 @@ function CustomerApp() {
                 <span className="final-color-swatches" aria-label="선호 색상 4개">
                   {getSelectedColors().map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
                 </span>
-                  <button className="final-edit-button" type="button" onClick={() => setMode('tone')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+                  <button className="final-edit-button" type="button" onClick={() => openFinalEditModal('tone')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
               <div className="final-summary-row">
                 <TypeIcon className="final-detail-icon" aria-hidden="true" size={22} strokeWidth={1.8} />
                 <span className="final-summary-label">로고 타입</span>
                 <span className="final-summary-value">{selectedLogoStyle}{logoStyle === 'combination' && <em>추천</em>}</span>
-                <button className="final-edit-button" type="button" onClick={() => setMode('style')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+                <button className="final-edit-button" type="button" onClick={() => openFinalEditModal('style')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
               <div className="final-summary-row">
                 <Shapes className="final-detail-icon" aria-hidden="true" size={22} strokeWidth={1.8} />
                 <span className="final-summary-label">원하는 로고 모양</span>
                 <span className="final-summary-value">{displayValue(logoShapePrompt)}</span>
-                <button className="final-edit-button" type="button" onClick={() => setMode('style')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+                <button className="final-edit-button" type="button" onClick={() => openFinalEditModal('style')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
             </div>
           </section>
@@ -3045,7 +3097,7 @@ function CustomerApp() {
           <section className="logo-result-details" aria-label="로고 디자인 상세">
             <div className="logo-result-detail-row"><span className="result-detail-icon compass" aria-hidden="true"><Compass size={23} strokeWidth={1.8} /></span><strong>디자인 방향</strong><span>{candidate.direction}</span></div>
             <div className="logo-result-detail-row"><span className="result-detail-icon type" aria-hidden="true"><TypeIcon size={23} strokeWidth={1.8} /></span><strong>추천 글씨체</strong><span>우아한 세리프 + 깔끔한 산세리프</span></div>
-            <div className="logo-result-detail-row"><span className="result-detail-icon drop" aria-hidden="true"><Droplets size={23} strokeWidth={1.8} /></span><strong>브랜드 컬러</strong><span className="result-color-swatches"><i /><i /><i /><i /></span></div>
+            <div className="logo-result-detail-row"><span className="result-detail-icon drop" aria-hidden="true"><Droplets size={23} strokeWidth={1.8} /></span><strong>브랜드 컬러</strong><span className="result-color-swatches">{getSelectedColors().map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}</span></div>
             <div className="logo-result-detail-row feeling"><span className="result-detail-icon heart" aria-hidden="true"><Heart size={26} strokeWidth={1.8} /></span><strong>이 로고가 전달하는 느낌</strong><span>부드럽고 깨끗하면서도<br />프리미엄한 스킨케어 브랜드 이미지</span></div>
           </section>
 
@@ -3068,7 +3120,7 @@ function CustomerApp() {
           </div>
 
           <div className="logo-result-utility-grid">
-            <button className="utility-primary" type="button" onClick={() => void startLogoGeneration()}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />조건을 바꿔<br />다시 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+            <button className="utility-primary" type="button" onClick={openRegenerationConfirm}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />조건을 바꿔<br />다시 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
             <button className="utility-secondary" type="button" onClick={openBrandKitSelection}><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />{brandKit?.status === 'SUCCEEDED' ? '브랜드 키트 확인하기' : '브랜드 키트 만들기'}<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
           </div>
           {brandKit && <p className="project-error" role="status">브랜드 키트 상태: {brandKit.status === 'QUEUED' || brandKit.status === 'RUNNING' ? '생성 중' : brandKit.status === 'SUCCEEDED' ? '완료' : '실패'}</p>}
@@ -3079,10 +3131,10 @@ function CustomerApp() {
   }
 
   const renderBrandKitSelectionScreen = () => {
-    const expectedKitType: BrandKit['kitType'] = brandKind === 'ci' ? 'BUSINESS_CARD' : 'THUMBNAIL'
-    const options: Array<{ type: BrandKit['kitType']; title: string; caption: string; description: string; icon: typeof CreditCard }> = expectedKitType === 'BUSINESS_CARD'
-      ? [{ type: 'BUSINESS_CARD', title: '명함', caption: '첫 인사를 더 또렷하게', description: '기업의 인상을 담은 명함 앞·뒷면 시안을 만들어요.', icon: CreditCard }]
-      : [{ type: 'THUMBNAIL', title: '제품 썸네일', caption: '제품을 한눈에 보여주기', description: '상품 페이지와 SNS에 쓸 썸네일 시안을 만들어요.', icon: ImageIcon }]
+    const options: Array<{ type: BrandKit['kitType']; title: string; caption: string; description: string; icon: typeof CreditCard }> = [
+      { type: 'BUSINESS_CARD', title: '명함', caption: '첫 인사를 더 또렷하게', description: '기업의 인상을 담은 명함 앞·뒷면 시안을 만들어요.', icon: CreditCard },
+      { type: 'THUMBNAIL', title: '제품 썸네일', caption: '제품을 한눈에 보여주기', description: '상품 페이지와 SNS에 쓸 썸네일 시안을 만들어요.', icon: ImageIcon },
+    ]
     const selectedOption = options.find((option) => option.type === brandKitType)
     const completedStorageKeys = brandKit?.status === 'SUCCEEDED'
       ? brandKit.storageKeys?.length
@@ -3178,7 +3230,7 @@ function CustomerApp() {
           <div className="brand-kit-selection-footer">
             <p aria-live="polite">{brandKitImageUrls.length > 0 ? '완성된 이미지를 확인하거나 내려받을 수 있어요.' : selectedOption ? `${selectedOption.title} 키트를 만들 준비가 됐어요.` : '원하는 브랜드 키트를 선택해 주세요.'}</p>
             {brandKitImageUrls.length > 0 ? (
-              <button className="brand-kit-create-button secondary" type="button" onClick={() => { setBrandKit(null); setBrandKitType(expectedKitType) }}>
+              <button className="brand-kit-create-button secondary" type="button" onClick={() => { setBrandKit(null); setBrandKitType(null) }}>
                 새 시안 만들기
                 <ChevronRight aria-hidden="true" size={23} strokeWidth={1.9} />
               </button>
@@ -3578,6 +3630,33 @@ function CustomerApp() {
     )
   }
 
+  const renderFinalEditModal = () => {
+    if (!finalEditModal) return null
+    const title = finalEditModal === 'identity' ? '기본 정보를 수정하세요' : finalEditModal === 'values' ? '핵심 가치를 수정하세요' : finalEditModal === 'tone' ? '분위기와 색상을 수정하세요' : '로고 타입과 모양을 수정하세요'
+    return <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFinalEditModal(null) }}>
+      <section className="credit-modal final-edit-modal" role="dialog" aria-modal="true" aria-labelledby="final-edit-title">
+        <button className="modal-close" type="button" aria-label="수정 닫기" onClick={() => setFinalEditModal(null)}><X size={22} /></button>
+        <h2 id="final-edit-title">{title}</h2>
+        {finalEditModal === 'identity' && (brandKind === 'ci' ? <label>회사명<input autoFocus value={finalEditDraft.companyName} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, companyName: event.target.value }))} /></label> : <><label>브랜드명<input autoFocus value={finalEditDraft.brandName} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, brandName: event.target.value }))} /></label><label>주요 고객<select value={finalEditDraft.targetAge} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, targetAge: event.target.value }))}>{targetAgeOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label></>)}
+        {finalEditModal === 'values' && <label>{brandKind === 'ci' ? '회사 모토' : '핵심 가치'}<textarea autoFocus value={brandKind === 'ci' ? finalEditDraft.companyMotto : finalEditDraft.valuesText} onChange={(event) => setFinalEditDraft((draft) => brandKind === 'ci' ? { ...draft, companyMotto: event.target.value } : { ...draft, valuesText: event.target.value })} maxLength={300} /></label>}
+        {finalEditModal === 'tone' && <><label>분위기<select autoFocus value={finalEditDraft.tone} onChange={(event) => { const tone = event.target.value as ToneOption; const palette = toneOptions.find((option) => option.id === tone)?.colors ?? []; setFinalEditDraft((draft) => ({ ...draft, tone, colors: uniqueColors([...palette]) })) }}>{toneOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label><div className="final-edit-color-row">{finalEditDraft.colors.map((color, index) => <input key={`${color}-${index}`} type="color" value={color} onChange={(event) => setFinalEditDraft((draft) => { const colors = [...draft.colors]; colors[index] = event.target.value; return { ...draft, colors: uniqueColors(colors) } })} />)}{finalEditDraft.colors.length < 4 && <button type="button" onClick={() => setFinalEditDraft((draft) => ({ ...draft, colors: uniqueColors([...draft.colors, '#ffffff']) }))}>색상 추가</button>}</div></>}
+        {finalEditModal === 'style' && <><label>로고 타입<select autoFocus value={finalEditDraft.logoStyle} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, logoStyle: event.target.value as LogoStyle }))}>{logoStyleOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label><label>원하는 로고 모양<textarea value={finalEditDraft.logoShape} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, logoShape: event.target.value }))} maxLength={100} /></label></>}
+        <div className="credit-modal-actions"><button className="gradient-button" type="button" onClick={saveFinalEditModal}>저장하기</button><button className="modal-secondary-button" type="button" onClick={() => setFinalEditModal(null)}>취소</button></div>
+      </section>
+    </div>
+  }
+
+  const renderRegenerationConfirmModal = () => <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRegenerationConfirmOpen(false) }}>
+    <section className="credit-modal regeneration-modal" role="dialog" aria-modal="true" aria-labelledby="regeneration-title">
+      <button className="modal-close" type="button" aria-label="재생성 취소" onClick={() => setRegenerationConfirmOpen(false)}><X size={22} /></button>
+      <h2 id="regeneration-title">새 로고를 다시 만들까요?</h2>
+      <p>재생성하면 크레딧 <strong>1개</strong>가 소모돼요.</p>
+      <p>현재 남은 크레딧은 <strong>{remainingCredits}개</strong>예요.</p>
+      {remainingCredits < 1 ? <p className="project-error" role="alert">크레딧이 부족해 재생성할 수 없어요.</p> : null}
+          <div className="credit-modal-actions"><button className="gradient-button" type="button" disabled={regenerationCreditsLoading || remainingCredits < 1 || generationLoading} onClick={() => { setRegenerationConfirmOpen(false); void startLogoGeneration() }}>{regenerationCreditsLoading ? '잔액 확인 중…' : '크레딧 사용하고 재생성'}</button><button className="modal-secondary-button" type="button" onClick={() => setRegenerationConfirmOpen(false)}>취소</button></div>
+    </section>
+  </div>
+
   const renderCreditModal = () => (
     <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreditModal(null) }}>
       <section className="credit-modal" role="dialog" aria-modal="true" aria-labelledby="credit-modal-title">
@@ -3879,6 +3958,8 @@ function CustomerApp() {
       </nav>}
 
       {creditModal === 'credit' ? renderCreditModal() : creditModal === 'survey' ? renderCreditSurveyModal() : null}
+      {finalEditModal && renderFinalEditModal()}
+      {regenerationConfirmOpen && renderRegenerationConfirmModal()}
       {businessCardModalOpen && renderBusinessCardModal()}
       {resumePromptProject && renderResumePromptModal()}
     </div>

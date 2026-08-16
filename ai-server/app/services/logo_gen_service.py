@@ -331,12 +331,61 @@ def force_single_color(svg: str, hex_color: str) -> str:
     return re.sub(r'((?:fill|stroke)\s*:\s*)([^;"}]+)', _style, svg)
 
 
+def force_palette_colors(svg: str, colors: list[str]) -> str:
+    """Map visible SVG inks onto an approved multi-color palette.
+
+    White/transparent holes remain intact. Gradient references are replaced by
+    a solid palette color so downloaded SVGs cannot retain an unapproved fill.
+    """
+    palette = [c.strip() for c in colors if re.fullmatch(r"#[0-9A-Fa-f]{6}", c.strip())]
+    if not svg or len(palette) < 2:
+        return svg
+    index = 0
+
+    def mapped(value: str):
+        nonlocal index
+        value = value.strip().lower()
+        if value in ("", "none", "transparent", "currentcolor"):
+            return None
+        if value.startswith("url("):
+            chosen = palette[index % len(palette)]; index += 1
+            return chosen
+        lum = _luma(value)
+        if lum is None:
+            return None
+        # Recraft often uses a very pale fill for a hole/highlight. Keep that
+        # visual role, but normalize it to white so an arbitrary model color
+        # cannot leak outside the user's approved palette.
+        if lum >= LIGHT_FILL_LUMA:
+            return "#ffffff"
+        chosen = palette[index % len(palette)]; index += 1
+        return chosen
+
+    def attr(match):
+        target = mapped(match.group(2))
+        return match.group(1) + target + match.group(3) if target else match.group(0)
+
+    svg = re.sub(r'(\b(?:fill|stroke)=")([^"]*)(")', attr, svg)
+
+    def style(match):
+        target = mapped(match.group(2))
+        return match.group(1) + target if target else match.group(0)
+
+    return re.sub(r'((?:fill|stroke)\s*:\s*)([^;"}]+)', style, svg)
+
+
 def _colors_of(survey: dict) -> list:
     """설문에 실제로 담겨 온 색 목록. 로그와 판정이 같은 값을 보게 한다."""
     colors = survey.get("color_manual") or survey.get("colors")
     if isinstance(colors, str):
         colors = [colors]
-    return [str(c).strip() for c in (colors or []) if str(c).strip()]
+    result = []
+    seen = set()
+    for value in (colors or []):
+        color = str(value).strip()
+        if color and color.casefold() not in seen:
+            result.append(color); seen.add(color.casefold())
+    return result
 
 
 def _single_manual_color(survey: dict):
@@ -350,7 +399,7 @@ def _single_manual_color(survey: dict):
     colors = survey.get("color_manual") or survey.get("colors")
     if isinstance(colors, str):
         colors = [colors]
-    colors = [str(c).strip() for c in (colors or []) if str(c).strip()]
+    colors = _colors_of({"color_manual": colors})
     return colors[0] if len(colors) == 1 else None
 
 
@@ -481,6 +530,12 @@ def generate_logo_variants(
             if _r is None or not _r[1]:
                 continue
             _fixed = force_single_color(_r[1], forced)
+            results[_i] = (rasterize_svg(_fixed), _fixed)
+    elif len(_colors_of(survey)) >= 2:
+        for _i, _r in enumerate(results):
+            if _r is None or not _r[1]:
+                continue
+            _fixed = force_palette_colors(_r[1], _colors_of(survey))
             results[_i] = (rasterize_svg(_fixed), _fixed)
 
     variants = [

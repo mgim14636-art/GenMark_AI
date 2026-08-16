@@ -12,12 +12,12 @@ class _Response:
         return {"choices": [{"message": {"content": self.content}}]}
 
 
-def test_common_korean_shape_uses_local_fallback_without_api(monkeypatch):
+def test_common_korean_shape_uses_openrouter_before_local_fallback(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setattr(
         motif_translation_service.requests,
         "post",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected API call")),
+        lambda *args, **kwargs: _Response("an elegant crescent-moon emblem"),
     )
 
     enriched = motif_translation_service.enrich_logo_shape({"logo_shape": "둥근 달 모양"})

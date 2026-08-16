@@ -402,6 +402,7 @@
 .brand-kit-status { color: #7552bf; }
 .brand-kit-error { color: #c74d69; }
 
+
 @media (max-width: 768px) {
   .editor-uploaded-logo-target.selected::before, .editor-uploaded-logo-target.selected::after { width: 11px; height: 11px; }
   .editor-uploaded-logo-target.selected::before { box-shadow: 212px 0 0 -1px #fff, 212px 0 0 0 #a984ff; }
@@ -4685,7 +4686,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   overflow: hidden;
   border: 1px solid #e1d8f1;
   border-radius: 15px;
-  background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, #ff0000 16%, #ffff00 33%, #00ff00 50%, #00ffff 66%, #0000ff 83%, #ff00ff);
+  background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #ff0000 0%, #ffff00 16.667%, #00ff00 33.333%, #00ffff 50%, #0000ff 66.667%, #ff00ff 83.333%, #ff0000 100%);
   cursor: pointer;
   touch-action: none;
   user-select: none;
@@ -4852,12 +4853,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   position: absolute;
   right: auto;
   bottom: auto;
-  width: 30px;
-  height: 30px;
+  width: 42px;
+  height: 42px;
   border: 3px solid rgb(255 255 255 / 0.9);
   border-radius: 50%;
   box-shadow: 0 3px 10px rgb(47 34 75 / 0.2);
   pointer-events: none;
+  left: clamp(21px, var(--tone-x), calc(100% - 21px));
+  top: clamp(21px, var(--tone-y), calc(100% - 21px));
   transform: translate(-50%, -50%);
   transition: left 120ms ease, top 120ms ease, background 120ms ease;
 }
@@ -6794,6 +6797,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 }
 
 .credit-modal > p strong { color: #7b51df; font-weight: 700; }
+.final-edit-modal { display: grid; gap: 15px; }
+.final-edit-modal > label { display: grid; gap: 7px; color: #343d57; font-size: 14px; font-weight: 700; }
+.final-edit-modal input:not([type='color']), .final-edit-modal select, .final-edit-modal textarea { width: 100%; min-height: 44px; border: 1px solid #ded7ed; border-radius: 10px; padding: 10px 12px; color: #273149; background: #fff; font: inherit; }
+.final-edit-modal textarea { min-height: 100px; resize: vertical; }
+.final-edit-color-row { display: flex; gap: 10px; }
+.final-edit-color-row input { width: 48px; height: 42px; border: 1px solid #ded7ed; border-radius: 9px; padding: 3px; }
+.final-edit-color-row button { min-height: 42px; border: 1px dashed #a477eb; border-radius: 9px; padding: 0 10px; color: #7048cb; background: #faf7ff; font: inherit; font-size: 12px; font-weight: 700; }
+.regeneration-modal { text-align: center; }
 
 .credit-modal-actions { display: grid; gap: 10px; margin-top: 24px; }
 .credit-modal-actions .gradient-button { width: 100%; }
@@ -9785,3 +9796,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
     padding-top: max(390px, 56vh);
   }
 }
+@font-face { font-family: 'GenMarkPretendard'; src: url('/fonts/card/Pretendard-Regular.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'GenMarkIBMPlexSansKR'; src: url('/fonts/card/IBMPlexSansKR-Regular.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'GenMarkNanumMyeongjo'; src: url('/fonts/card/NanumMyeongjo-Regular.ttf') format('truetype'); font-display: swap; }

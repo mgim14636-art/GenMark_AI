@@ -45,12 +45,12 @@ def test_korean_free_text_is_converted_and_used_in_prompt(monkeypatch):
     assert not value_keyword_service.HANGUL.search(prompt)
 
 
-def test_exact_chips_and_english_values_are_preserved_without_api_call(monkeypatch):
+def test_korean_chips_use_openrouter_before_dictionary_fallback(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setattr(
         value_keyword_service.requests,
         "post",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected API call")),
+        lambda *args, **kwargs: _openrouter_response(json.dumps(["premium, luxurious", "naturalistic, botanical"])),
     )
 
     chip = value_keyword_service.enrich_value_keywords(
@@ -255,3 +255,20 @@ def test_value_keyword_model_can_be_overridden(monkeypatch):
     monkeypatch.setenv("VALUE_KEYWORD_MODEL", "custom/value-model")
 
     assert value_keyword_service._model() == "custom/value-model"
+
+
+def test_duplicate_korean_source_is_sent_once_to_openrouter(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    captured = {}
+    def fake_post(*args, **kwargs):
+        captured["content"] = kwargs["json"]["messages"][1]["content"]
+        return _openrouter_response(json.dumps(["trustworthy"]))
+    monkeypatch.setattr(value_keyword_service.requests, "post", fake_post)
+
+    value_keyword_service.enrich_value_keywords({
+        "brand_values_text": "신뢰를 만듭니다",
+        "brand_description": "신뢰를 만듭니다",
+        "brand_direction": "신뢰를 만듭니다",
+    })
+
+    assert captured["content"].count("신뢰를 만듭니다") == 1

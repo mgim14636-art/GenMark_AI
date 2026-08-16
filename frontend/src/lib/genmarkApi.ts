@@ -134,6 +134,7 @@ export type BusinessCardInfoInput = {
 }
 
 export type BrandKitCreateInput = {
+  kitType: BrandKit['kitType']
   cardInfo?: BusinessCardInfoInput
 }
 
