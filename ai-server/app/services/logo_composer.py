@@ -339,6 +339,76 @@ def _foreground_bbox(rgb: Image.Image, bg_rgb: tuple, thresh: int = 24):
     return mask.getbbox()
 
 
+# 락업(lockup) 규격 — 심볼 크기와 여백을 캔버스 기준으로 고정한다.
+#
+# 생성 모델은 마크를 매번 다른 크기로 그려 준다. 어떤 시안은 캔버스를 꽉 채우고
+# 어떤 시안은 가운데 조그맣게 나오는데, 그 상태로 브랜드명을 붙이면 시안마다
+# 심볼:글자 비율이 제각각이라 "대충 얹은" 인상이 된다. 잘 만든 로고가 정돈돼
+# 보이는 이유의 상당 부분은 이 비율과 여백이 고정돼 있기 때문이다.
+#
+# 그래서 심볼을 잘라내 캔버스 대비 고정 비율로 다시 앉힌다. 값은 상용 뷰티 브랜드
+# 락업의 통상 비율에서 가져왔다 — 심볼 높이 38%, 상단 여백 13%, 심볼 최대 폭 68%.
+LOCKUP_CANVAS_PX = 1024
+LOCKUP_SYMBOL_HEIGHT_RATIO = 0.38
+LOCKUP_SYMBOL_MAX_WIDTH_RATIO = 0.68
+LOCKUP_TOP_MARGIN_RATIO = 0.13
+
+# 기본값 on. 끄면 정규화 없이 예전 배치를 그대로 쓴다(A/B 비교용).
+LOCKUP_ENABLED = os.environ.get("LOGO_LOCKUP", "on").strip().lower() not in (
+    "off", "0", "false", "no",
+)
+
+
+def normalize_lockup(flattened: Image.Image, bg_rgb: tuple):
+    """심볼을 고정 비율로 리스케일해 정사각 캔버스 상단에 앉힌다.
+
+    반환: (캔버스, 심볼 바운딩 박스). 전경을 못 찾으면 원본을 그대로 돌려준다.
+    """
+    bbox = _foreground_bbox(flattened, bg_rgb)
+    if not bbox:
+        return flattened, (0, 0, flattened.width, flattened.height)
+
+    symbol = flattened.crop(bbox)
+    if symbol.width < 2 or symbol.height < 2:
+        return flattened, bbox
+
+    canvas_px = LOCKUP_CANVAS_PX
+    scale = (canvas_px * LOCKUP_SYMBOL_HEIGHT_RATIO) / symbol.height
+    max_w = canvas_px * LOCKUP_SYMBOL_MAX_WIDTH_RATIO
+    if symbol.width * scale > max_w:
+        scale = max_w / symbol.width
+
+    new_w = max(1, round(symbol.width * scale))
+    new_h = max(1, round(symbol.height * scale))
+    resized = symbol.resize((new_w, new_h), Image.LANCZOS)
+
+    canvas = Image.new("RGB", (canvas_px, canvas_px), bg_rgb)
+    x = (canvas_px - new_w) // 2
+    y = round(canvas_px * LOCKUP_TOP_MARGIN_RATIO)
+    canvas.paste(resized, (x, y))
+    return canvas, (x, y, x + new_w, y + new_h)
+
+
+def recenter_lockup(canvas: Image.Image, bg_rgb: tuple) -> Image.Image:
+    """심볼+워드마크를 한 덩어리로 보고 캔버스 정중앙에 다시 앉힌다.
+
+    심볼을 상단 고정 여백에 놓고 그 아래 글자를 붙이면, 글자 길이에 따라 아래
+    여백만 남아 무게중심이 위로 쏠린다. 위아래 여백이 같아야 액자에 넣은 것처럼
+    보인다 — 레퍼런스 로고들이 정돈돼 보이는 이유 중 하나다.
+    """
+    bbox = _foreground_bbox(canvas, bg_rgb)
+    if not bbox:
+        return canvas
+    _, top, _, bottom = bbox
+    content_h = bottom - top
+    if content_h <= 0 or content_h >= canvas.height:
+        return canvas
+    out = Image.new("RGB", canvas.size, bg_rgb)
+    strip = canvas.crop((0, top, canvas.width, bottom))
+    out.paste(strip, (0, (canvas.height - content_h) // 2))
+    return out
+
+
 def _dominant_color(rgb: Image.Image, bg_rgb: tuple) -> str:
     """배경이 아닌 대표 색상을 뽑아 텍스트 색으로 쓴다. 배경 밝기에 맞춰 대비를
     보정하므로 어떤 배경색이 나와도 텍스트가 묻히지 않는다."""
@@ -417,9 +487,12 @@ def compose_logo_with_text(
         return logo.convert("RGBA")
 
     flattened, bg_rgb = _flatten_background(logo)
+    if LOCKUP_ENABLED:
+        flattened, bbox = normalize_lockup(flattened, bg_rgb)
+    else:
+        bbox = _foreground_bbox(flattened, bg_rgb) or (0, 0, *flattened.size)
     width, height = flattened.size
 
-    bbox = _foreground_bbox(flattened, bg_rgb) or (0, 0, width, height)
     left, top, right, bottom = bbox
     symbol_h = max(bottom - top, round(height * 0.3))
     symbol_center_x = (left + right) / 2
@@ -492,6 +565,8 @@ def compose_logo_with_text(
             draw.text((cursor_x, text_y), ch, font=font, fill=resolved_color)
             cursor_x += probe.textlength(ch, font=font) + letter_spacing
 
+    if LOCKUP_ENABLED:
+        canvas = recenter_lockup(canvas, bg_rgb)
     return canvas.convert("RGBA")
 
 
@@ -568,6 +643,13 @@ def _wants_text_overlay(survey: dict, style_key: str, brand_name: str) -> bool:
     혼합형 스타일일 때 기본적으로 텍스트를 포함한다.
     """
     if style_key == "심볼" or not brand_name:
+        return False
+
+    # 모델이 워드마크까지 그린 경우엔 우리가 또 얹으면 브랜드명이 두 번 나온다
+    # (실측 확인됨 - brief 프롬프트로 바꾼 뒤 "Tree"가 두 번 찍혔다).
+    from app.services.prompt_service import model_draws_wordmark
+
+    if model_draws_wordmark(survey):
         return False
 
     explicit = survey.get("include_brand_name_in_logo")

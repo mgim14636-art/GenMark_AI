@@ -142,6 +142,31 @@ def _logo_rgba(logo: Image.Image) -> Image.Image:
     return rgba
 
 
+# 이 밝기 이상이면 "비어 있어야 할 면"으로 본다.
+# Recraft 벡터는 stroke 없이 채운 도형으로 그려서, 글자 속·도형 안쪽이 흰색 path로
+# 온다. 흰 배경에서는 안 보이지만 유색 명함 위에 얹으면 흰 덩어리로 드러난다
+# (실측 확인됨 - 진한 청록 명함에서 워드마크가 흰 글자로 뒤집혀 보였다).
+_WHITE_KNOCKOUT_LUMA = 245
+
+
+def knockout_white(rgba: Image.Image) -> Image.Image:
+    """흰색에 가까운 불투명 픽셀을 투명하게 만든다.
+
+    _logo_rgba는 "테두리와 연결된" 영역만 지운다 - 로고 안쪽 연한 면에 구멍이
+    나는 걸 막기 위해서다. 유색 바탕에 얹을 때는 반대로 안쪽 흰 면도 비워야
+    바탕색이 비쳐 로고가 제대로 읽힌다. 흰색만 대상으로 하므로 아이보리·연분홍
+    같은 의미 있는 옅은 면은 건드리지 않는다.
+    """
+    rgba = rgba.convert("RGBA")
+    arr = np.asarray(rgba, dtype=np.int16)
+    luma = 0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
+    alpha = np.asarray(rgba.getchannel("A"), dtype=np.uint8)
+    alpha = np.where(luma >= _WHITE_KNOCKOUT_LUMA, 0, alpha).astype(np.uint8)
+    out = rgba.copy()
+    out.putalpha(Image.fromarray(alpha, "L"))
+    return out
+
+
 def _trim(img: Image.Image) -> Image.Image:
     bbox = img.getchannel("A").getbbox() if img.mode == "RGBA" else img.getbbox()
     return img.crop(bbox) if bbox else img
@@ -188,6 +213,24 @@ def _card_contact(info: Optional[CardInfo]) -> dict:
     }
 
 
+def _logo_already_has_brand_name(survey: dict, brand: str) -> bool:
+    """합성된 로고 이미지가 브랜드명을 포함하고 있는가.
+
+    /generate가 내보내는 로고는 심볼 스타일이 아닌 한 이름을 품고 있다. 판정을
+    프롬프트·로고합성과 같은 함수로 맞춰, 세 곳이 서로 다른 답을 내지 않게 한다.
+    """
+    if not brand:
+        return False
+    from app.services.logo_composer import _wants_text_overlay
+    from app.services.prompt_service import (
+        _normalize_survey,
+        model_draws_wordmark,
+    )
+
+    style_key = _normalize_survey(dict(survey)).get("style", "혼합형")
+    return model_draws_wordmark(survey) or _wants_text_overlay(survey, style_key, brand)
+
+
 def _compose_business_card(
     logo: Image.Image, info: Optional[CardInfo], survey: dict
 ) -> Tuple[Image.Image, Image.Image]:
@@ -206,13 +249,24 @@ def _compose_business_card(
         derive_card_bg_colors,
     )
 
+    # 배경색 추정에는 흰색을 남긴 상태를 쓰고(대표색 계산이 흔들리지 않도록),
+    # 실제로 카드에 얹는 이미지는 흰 면을 비운 버전을 쓴다.
     logo_rgba = _logo_rgba(logo)
     front_bg, back_bg = derive_card_bg_colors(logo_rgba)
+    logo_rgba = knockout_white(logo_rgba)
 
     brand = _brand_name(survey) or (info.company if info and info.company else "")
     tagline = (survey.get("brand_direction") or survey.get("company_values_text") or "").strip()
     # 태그라인이 길면 카드에서 잘린다. 문장이 아니라 한 줄 문구가 들어갈 자리다.
     if len(tagline) > 40:
+        tagline = ""
+
+    # 로고 이미지에 이미 브랜드명이 들어 있으면 카드에 또 적지 않는다.
+    # 모델이 워드마크를 그렸거나(영문) logo_composer가 폰트로 합성했거나(한글)
+    # 어느 쪽이든 결과는 같다 - 로고 바로 밑에 같은 이름이 한 번 더 찍힌다
+    # (실측 확인됨 - 앞뒷면 모두에서 발생).
+    if _logo_already_has_brand_name(survey, brand):
+        brand = ""
         tagline = ""
 
     front = compose_card_front(

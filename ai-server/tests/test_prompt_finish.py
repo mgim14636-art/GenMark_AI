@@ -12,7 +12,7 @@ from app.services.prompt_service import (
     LOGO_FINISH_SOLID,
     _resolve_finish,
     _strip_fill_words,
-    build_prompt_from_survey,
+    build_prompt_legacy,
 )
 
 BASE = {
@@ -27,7 +27,7 @@ BASE = {
 
 
 def _prompt(**extra):
-    return build_prompt_from_survey({**BASE, **extra}, variant_index=0)
+    return build_prompt_legacy({**BASE, **extra}, variant_index=0)
 
 
 def test_default_is_unchanged_solid():
@@ -87,3 +87,34 @@ def test_strip_fill_words():
     assert _strip_fill_words("a water droplet shape") == "a water droplet shape"
     # 통째로 사라지는 경우는 원문을 지킨다
     assert _strip_fill_words("silhouette") == "silhouette"
+
+
+# --- 사용자 지정 형태에도 면 어휘가 남으면 안 된다 --------------------------
+# 실측: logo_shape 번역 결과가 "a refined botanical leaf silhouette"으로 들어와
+# 선 지시(never filled in) 바로 앞 문장에 silhouette이 그대로 실려 나갔다.
+def test_outline_strips_fill_words_from_user_subject():
+    prompt = _prompt(logo_finish="outline", logo_shape_en="a refined botanical leaf silhouette")
+    assert "silhouette" not in prompt
+    assert "a refined botanical leaf" in prompt
+
+
+def test_solid_keeps_user_subject_verbatim():
+    prompt = _prompt(logo_finish="solid", logo_shape_en="a refined botanical leaf silhouette")
+    assert "a refined botanical leaf silhouette" in prompt
+
+
+def test_outline_rendering_approach_has_no_fill_word():
+    """사용자 형태가 없는 폴백 경로에도 면 어휘가 남으면 안 된다."""
+    for vi in range(4):
+        assert "silhouette" not in build_prompt_legacy(
+            {**BASE, "logo_finish": "outline"}, variant_index=vi
+        )
+
+
+def test_outline_keeps_variant_diversity():
+    """접근 목록을 갈아끼워도 시안 4장은 서로 달라야 한다."""
+    prompts = {
+        build_prompt_legacy({**BASE, "logo_finish": "outline"}, variant_index=vi)
+        for vi in range(4)
+    }
+    assert len(prompts) == 4
