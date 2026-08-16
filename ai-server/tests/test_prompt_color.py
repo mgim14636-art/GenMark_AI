@@ -76,7 +76,14 @@ def test_color_mode_is_case_insensitive(mode):
     assert _manual_color_names({**BASE, "color_mode": mode, "color_manual": [NAVY]})
 
 
-def test_ai_mode_ignores_manual_colors():
-    """color_mode가 manual이 아니면 톤 프리셋을 쓴다."""
+def test_ai_mode_uses_selected_recommended_palette_colors():
+    """추천 팔레트도 사용자가 고른 HEX가 있으면 일반 톤 프리셋보다 우선한다."""
     names = _manual_color_names({**BASE, "color_mode": "ai", "color_manual": [NAVY]})
-    assert names == []
+    assert names == ["deep navy"]
+
+
+def test_ai_mode_without_selected_colors_falls_back_to_tone_palette():
+    """선택 HEX가 없는 기존 데이터는 계속 tone 기본 팔레트를 사용한다."""
+    survey = {**BASE, "color_mode": "ai", "tone": "friendly"}
+    assert _manual_color_names(survey) == []
+    assert _color_clause(survey, "친근하고 다정한") == "in a soft pink and light sky blue color palette"

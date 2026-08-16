@@ -45,7 +45,8 @@ def test_current_survey_contract_prioritizes_explicit_flower_motif_in_all_varian
         assert "a friendly, approachable feeling" in prompt
         # 텍스트 인코더는 헥사 코드를 색으로 해석하지 못해 색 이름으로 바꿔 넣는다
         assert "#9765e9" not in prompt
-        assert "vivid lilac color palette" in prompt
+        assert "rendered strictly in vivid lilac as the single flat color" in prompt
+        assert "color palette" not in prompt
         assert "designed to pair cleanly with a separately typeset brand name" in prompt
         assert "a refined blooming flower emblem" in prompt
         assert "세련된 꽃 모양의 이미지를 꼭 추가해 줬으면 좋겠어" not in prompt

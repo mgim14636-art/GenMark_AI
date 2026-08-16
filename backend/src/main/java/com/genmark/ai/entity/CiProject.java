@@ -113,7 +113,8 @@ public class CiProject implements ProjectLike {
         survey.put("tone", tone);
         boolean manualColor = "MANUAL".equalsIgnoreCase(colorMode);
         survey.put("color_mode", manualColor ? "manual" : "ai");
-        if (manualColor) survey.put("color_manual", colorList());
+        var selectedColors = colorList();
+        if (!selectedColors.isEmpty()) survey.put("color_manual", selectedColors);
         survey.put("style", logoStyle);
         survey.put("logo_shape", logoShape);
         survey.put("include_brand_name_in_logo", !"symbol".equalsIgnoreCase(logoStyle));

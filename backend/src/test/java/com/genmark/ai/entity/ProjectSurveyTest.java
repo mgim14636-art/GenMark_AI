@@ -38,7 +38,8 @@ class ProjectSurveyTest {
         assertThat(survey).containsEntry("ci_bi", "CI")
                 .containsEntry("company_name", "GenMark Company")
                 .containsEntry("color_mode", "ai")
+                .containsEntry("color_manual", List.of("#ffffff"))
                 .containsEntry("include_brand_name_in_logo", false)
-                .doesNotContainKey("color_manual");
+                .containsEntry("num_variants", 1);
     }
 }

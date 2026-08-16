@@ -113,19 +113,12 @@ public class BiProjectService {
     }
 
     private void applyPalette(BiProject p, BiProjectUpsertRequest r) {
-        if (!Boolean.TRUE.equals(r.paletteReplace())) {
+        boolean replacePalette = Boolean.TRUE.equals(r.paletteReplace()) || "TONE".equals(r.colorMode());
+        if (!replacePalette) {
             if (r.color1() != null) p.setColor1(r.color1());
             if (r.color2() != null) p.setColor2(r.color2());
             if (r.color3() != null) p.setColor3(r.color3());
             if (r.color4() != null) p.setColor4(r.color4());
-            return;
-        }
-
-        if ("TONE".equals(p.getColorMode())) {
-            p.setColor1(null);
-            p.setColor2(null);
-            p.setColor3(null);
-            p.setColor4(null);
             return;
         }
 

@@ -597,14 +597,12 @@ def _resolve_colors(survey: dict, tone: str) -> str:
 
 
 def _manual_color_names(survey: dict) -> list:
-    """color_mode=MANUAL 일 때 사용자가 직접 지정한 색 이름 목록. 없으면 빈 목록.
+    """사용자가 확정한 팔레트의 색 이름 목록. 없으면 빈 목록.
 
-    V25에서 color_mode(TONE|MANUAL)가 DB 컬럼이 됐다. TONE이면 톤 프리셋을 쓰므로
-    여기서 빈 목록을 돌려주고, MANUAL이면 color_1~4 중 채워진 것만 넘어오므로
-    길이가 곧 "사용자가 고른 색의 수"다.
+    color_mode는 추천(TONE/ai)과 직접 지정(MANUAL/manual)의 선택 경로를 나타낸다.
+    어느 경로든 color_manual에 확정된 HEX가 있으면 일반 톤 프리셋보다 우선한다.
+    색상 값이 없을 때만 tone 기반 기본 팔레트를 사용한다.
     """
-    if str(survey.get("color_mode", "ai")).lower() != "manual":
-        return []
     manual_colors = survey.get("color_manual") or survey.get("colors")
     if isinstance(manual_colors, str):
         manual_colors = [manual_colors]

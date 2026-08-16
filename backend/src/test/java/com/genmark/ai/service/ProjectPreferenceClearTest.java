@@ -73,21 +73,21 @@ class ProjectPreferenceClearTest {
     }
 
     @Test
-    void biTonePaletteReplaceClearsAllManualColors() {
+    void biToneLegacyRequestReplacesStaleManualColorsWithRecommendedColors() {
         BiProjectRepository repository = mock(BiProjectRepository.class);
         BiProject project = BiProject.builder()
                 .publicId("bi-2").industry("PET").brandName("GenMark")
                 .colorMode("MANUAL")
-                .color1("#111111").color2("#222222")
+                .color1("#111111").color2("#222222").color3("#333333").color4("#444444")
                 .build();
         when(repository.findByPublicIdAndMemberId("bi-2", 1L)).thenReturn(Optional.of(project));
 
         new BiProjectService(repository).update(
                 "bi-2", 1L,
                 new BiProjectUpsertRequest(null, null, null, null, null, null, null, "따뜻한",
-                        "TONE", null, null, null, null, null, null, null, true));
+                        "TONE", "#F4A261", "#E9C46A", null, null, null, null, null, false));
 
         assertThat(project.getColorMode()).isEqualTo("TONE");
-        assertThat(project.colorList()).isEmpty();
+        assertThat(project.colorList()).containsExactly("#F4A261", "#E9C46A");
     }
 }

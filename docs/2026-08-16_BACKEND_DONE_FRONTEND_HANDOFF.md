@@ -133,8 +133,24 @@ const result = await meApi.submitSurvey({
 
 - 생략 또는 `false`: 전달한 색상 슬롯만 수정하는 기존 부분 수정
 - `true`: 4개 슬롯을 요청값으로 완전히 교체
-- `colorMode: "TONE"`와 `paletteReplace: true`: 저장된 수동 색상 모두 제거
+- `colorMode: "TONE"`와 `paletteReplace: true`: 추천 팔레트 HEX를 그대로 전체 교체 저장
 - `colorMode: "MANUAL"`와 `paletteReplace: true`: 최소 한 개의 HEX 색상이 필요
+
+`TONE`은 “추천 팔레트에서 선택했다”는 출처이고, 선택한 색상이 없다는 뜻이 아니다.
+추천 팔레트의 HEX도 DB의 `color1~4`에 저장하며 AI 요청에는 다음처럼 함께 전달한다.
+기존 프론트와의 호환을 위해 `colorMode: "TONE"` 요청은 `paletteReplace`가 없어도
+전달된 4개 색상 슬롯 전체를 교체하므로 과거 MANUAL 색상이 뒤에 남지 않는다.
+
+```json
+{
+  "tone": "friendly",
+  "color_mode": "ai",
+  "color_manual": ["#F4A261", "#E9C46A"]
+}
+```
+
+AI는 `color_manual` 값이 있으면 추천/직접 지정 구분과 관계없이 해당 색상을 우선 사용하고,
+HEX가 없을 때만 `tone`의 기본 팔레트를 사용한다.
 
 ### 4.2 타입과 요청 변환 수정
 
@@ -360,7 +376,8 @@ export type BrandKit = {
 - [ ] 좋아요/싫어요, 개선항목, 추가 의견이 설문 POST 본문에 들어간다.
 - [ ] 설문 완료 후 응답의 `creditBalance`를 화면 잔액으로 사용한다.
 - [ ] 저장된 4색을 2색으로 변경한 뒤 재조회하면 정확히 2색만 남는다.
-- [ ] TONE으로 전환 후 재조회하면 과거 MANUAL 색상이 남지 않는다.
+- [ ] 추천 팔레트를 선택하고 재조회하면 TONE과 선택한 HEX가 함께 남는다.
+- [ ] 추천 팔레트로 생성할 때 AI 요청의 `color_manual`에 선택 HEX가 포함된다.
 - [ ] 편집기에서 첫 색만 변경해도 나머지 팔레트는 보존된다.
 - [ ] 잘못된 HEX/업종/연령/스타일에 대해 422 메시지를 표시한다.
 - [ ] 유사상표 `note`가 있으면 표시하고, 없어도 화면이 깨지지 않는다.
