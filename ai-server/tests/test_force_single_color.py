@@ -52,10 +52,12 @@ def test_midtone_secondary_is_unified_to_ink():
     assert TEAL in out
 
 
-def test_none_and_url_refs_untouched():
+def test_none_is_untouched():
+    """none은 "칠하지 않음"이라 지켜야 한다. url()은 반대로 갈아끼운다 -
+    그라데이션을 남기면 단색 지정이 무너진다."""
     out = force_single_color(SVG, TEAL)
     assert 'fill="none"' in out
-    assert 'fill="url(#grad)"' in out
+    assert "url(" not in out
 
 
 def test_style_attribute_colors_also_replaced():
@@ -84,3 +86,23 @@ def test_invalid_color_is_a_noop(bad):
 )
 def test_single_manual_color(survey, expected):
     assert _single_manual_color(survey) == expected
+
+
+def test_gradient_reference_is_replaced():
+    """단색 지정인데 결과에 그라데이션이 남으면 안 된다.
+
+    실측: 저장된 로고 SVG에 url(#Gradient1)이 그대로 있었다. 그라데이션은
+    축소·단색 인쇄에서 뭉개지고 색 통일도 우회한다.
+    """
+    out = force_single_color('<path fill="url(#Gradient1)"/>', TEAL)
+    assert "url(" not in out
+    assert TEAL in out
+
+
+def test_rgb_function_notation_is_handled():
+    """Recraft 벡터는 #hex가 아니라 rgb() 표기로 색을 쓴다."""
+    out = force_single_color(
+        '<path fill="rgb(21,16,140)"/><path fill="rgb(255,255,255)"/>', TEAL
+    ).lower()
+    assert "rgb(" not in out
+    assert TEAL in out and "#ffffff" in out

@@ -1296,6 +1296,20 @@ function CustomerApp() {
     })
   }
 
+  // 추천 톤 팔레트도 색을 1개로 줄일 수 있어야 한다. 직접 지정 탭에만 삭제를
+  // 넣었더니, 추천 톤으로 진행한 사용자는 여전히 2색이 넘어가 단색 강제가
+  // 동작하지 않았다(실측 확인됨 - 저장된 SVG에 6색이 남았다).
+  const removeToneColor = (toneId: ToneOption, slot: number) => {
+    const base = tonePaletteDraft?.toneId === toneId
+      ? tonePaletteDraft.colors
+      : customToneColors[toneId] ?? toneOptions.find((tone) => tone.id === toneId)?.colors ?? []
+    if (base.length <= 1) return
+    const next = base.filter((_, index) => index !== slot)
+    setCustomToneColors((current) => ({ ...current, [toneId]: next }))
+    setTonePaletteDraft({ toneId, colors: next })
+    setTonePaletteTarget({ toneId, slot: Math.min(slot, next.length - 1) })
+  }
+
   const resetToneColors = (toneId: ToneOption) => {
     const original = toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#eadfff', '#ffe1ef']
     setCustomToneColors((current) => {
@@ -2216,7 +2230,14 @@ function CustomerApp() {
                       const colors = tonePaletteDraft?.toneId === tone.id
                         ? tonePaletteDraft.colors
                         : customToneColors[tone.id] ?? tone.colors
-                      return <button key={slot} type="button" className={tonePaletteTarget.slot === slot ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setTonePaletteTarget({ toneId: tone.id, slot })}><i style={{ background: colors[slot] }} /><span>{slot < 2 ? `${slot + 1}번째 색` : `추가 색상 ${slot - 1}`}</span></button>
+                      return (
+                        <span key={slot} className="tone-picker-slot-wrap">
+                          <button type="button" className={tonePaletteTarget.slot === slot ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setTonePaletteTarget({ toneId: tone.id, slot })}><i style={{ background: colors[slot] }} /><span>{slot < 2 ? `${slot + 1}번째 색` : `추가 색상 ${slot - 1}`}</span></button>
+                          {colors.length > 1 && (
+                            <button type="button" className="tone-picker-slot-remove" aria-label={`${slot + 1}번째 색 삭제`} onClick={() => removeToneColor(tone.id, slot)}>×</button>
+                          )}
+                        </span>
+                      )
                     })}
                   </div>
                   <ToneColorPalette

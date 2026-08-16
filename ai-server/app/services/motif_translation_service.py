@@ -76,11 +76,43 @@ def _sanitize(value: object) -> str | None:
     return phrase
 
 
+# 다른 토큰을 부분 문자열로 품는 낱말은 먼저 걸러야 한다.
+# "꽃잎"은 "잎"을 품고 있어서, 목록 순서상 "잎"이 먼저 걸리면 잎사귀로 확정되고
+# 나머지 요청이 통째로 버려졌다(실측 확인됨 - "물방울과 꽃잎"이 잎사귀만 나옴).
+_COMPOUND_MOTIFS = (
+    ("꽃잎", "a single stylised flower petal"),
+    ("나뭇잎", "a refined botanical leaf silhouette"),
+    ("물방울", "a clean water-droplet symbol"),
+    ("눈꽃", "a delicate snowflake emblem"),
+)
+
+_MAX_LOCAL_MOTIFS = 3
+
+
 def _local_fallback(shape: str) -> str | None:
+    """사전으로 만들 수 있는 모티프 문구. LLM 번역이 실패했을 때만 쓴다.
+
+    걸리는 토큰을 하나만 쓰고 끝내지 않는다 - 사용자가 둘 이상을 요청했으면
+    그대로 이어 붙인다. 겹치는 낱말(_COMPOUND_MOTIFS)을 먼저 확인해, 짧은
+    토큰이 긴 낱말을 가로채지 않게 한다.
+    """
+    found = []
+    rest = shape
+    for token, phrase in _COMPOUND_MOTIFS:
+        if token in rest:
+            found.append(phrase)
+            rest = rest.replace(token, " ")
+
     for token, phrase in _LOCAL_MOTIFS:
-        if token in shape:
-            return phrase
-    return None
+        if token in rest and phrase not in found:
+            found.append(phrase)
+
+    if not found:
+        return None
+    found = found[:_MAX_LOCAL_MOTIFS]
+    if len(found) == 1:
+        return found[0]
+    return " combined with ".join(found)
 
 
 def _call_openrouter(shape: str) -> str | None:
@@ -128,8 +160,12 @@ def enrich_logo_shape(survey: dict) -> dict:
     else:
         # Common product examples are deterministic and free; arbitrary Korean is
         # translated once, then falls back to the local dictionary on failure.
-        safe = _local_fallback(shape) or _call_openrouter(shape)
+        # LLM을 먼저 쓴다. 사전은 낱말 하나만 집어내므로 "A와 B를 조화롭게"
+        # 같은 조합 요청을 표현하지 못한다. 문장 전체를 읽는 쪽이 우선이고,
+        # 호출이 실패하거나 느릴 때만 사전으로 내려간다.
+        safe = _call_openrouter(shape) or _local_fallback(shape)
 
+    logger.info("Motif translated: %r -> %r", shape[:60], safe)
     if safe:
         enriched["logo_shape_en"] = safe
     else:

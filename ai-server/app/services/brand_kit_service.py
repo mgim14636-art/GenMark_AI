@@ -213,6 +213,40 @@ def _card_contact(info: Optional[CardInfo]) -> dict:
     }
 
 
+# 앞면 배경이 이 밝기 이상이면 흰 로고가 묻힌다. 그만큼 눌러서 대비를 확보한다.
+_FRONT_BG_MAX_LUMA = 150.0
+
+
+def _card_front_bg(survey: dict) -> Tuple[int, int, int]:
+    """명함 앞면 배경색 - 사용자가 로고 생성 때 고른 색을 그대로 쓴다.
+
+    예전에는 로고 이미지의 대표색을 55%로 눌러 만들었다. 결과가 사용자가 고른
+    색과 미묘하게 달라서, 같은 브랜드인데 로고와 명함 바탕의 색이 어긋나 보였다.
+    설문 색이 곧 브랜드 색이므로 그것을 정본으로 삼는다.
+
+    다만 밝은 색을 고른 경우 그대로 깔면 흰 로고가 묻히므로, 대비가 확보될
+    만큼만 눌러서 쓴다.
+    """
+    r, g, b = _pick_accent(survey)
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+    if lum <= _FRONT_BG_MAX_LUMA:
+        return (r, g, b)
+    scale = _FRONT_BG_MAX_LUMA / max(lum, 1.0)
+    return tuple(max(0, min(255, round(c * scale))) for c in (r, g, b))
+
+
+def tint_solid(rgba: Image.Image, color: Tuple[int, int, int]) -> Image.Image:
+    """알파는 그대로 두고 색만 한 가지로 덮는다.
+
+    앞면은 브랜드 색 바탕에 로고를 흰색으로 얹는다(역상 로고). 원래 색 그대로
+    올리면 바탕과 같은 계열이라 형태가 안 읽힌다.
+    """
+    rgba = rgba.convert("RGBA")
+    solid = Image.new("RGBA", rgba.size, color + (255,))
+    solid.putalpha(rgba.getchannel("A"))
+    return solid
+
+
 def _logo_already_has_brand_name(survey: dict, brand: str) -> bool:
     """합성된 로고 이미지가 브랜드명을 포함하고 있는가.
 
@@ -251,9 +285,11 @@ def _compose_business_card(
 
     # 배경색 추정에는 흰색을 남긴 상태를 쓰고(대표색 계산이 흔들리지 않도록),
     # 실제로 카드에 얹는 이미지는 흰 면을 비운 버전을 쓴다.
-    logo_rgba = _logo_rgba(logo)
-    front_bg, back_bg = derive_card_bg_colors(logo_rgba)
-    logo_rgba = knockout_white(logo_rgba)
+    logo_rgba = knockout_white(_logo_rgba(logo))
+    _, back_bg = derive_card_bg_colors(logo_rgba)
+    front_bg = _card_front_bg(survey)
+    # 앞면은 브랜드 색 바탕 + 흰 로고(역상), 뒷면은 흰 바탕 + 원래 색 로고.
+    logo_front = tint_solid(logo_rgba, (255, 255, 255))
 
     brand = _brand_name(survey) or (info.company if info and info.company else "")
     tagline = (survey.get("brand_direction") or survey.get("company_values_text") or "").strip()
@@ -270,7 +306,7 @@ def _compose_business_card(
         tagline = ""
 
     front = compose_card_front(
-        logo_rgba, brand, tagline, front_bg, _CARD_FONT_BOLD, _CARD_FONT_REGULAR
+        logo_front, brand, tagline, front_bg, _CARD_FONT_BOLD, _CARD_FONT_REGULAR
     )
     back = compose_card_back(
         logo_rgba, brand, tagline, _card_contact(info), back_bg,

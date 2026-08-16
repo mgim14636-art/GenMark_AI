@@ -133,3 +133,52 @@ def test_back_logo_does_not_reach_contact_block():
 
 def test_back_named_layout_unchanged():
     assert CardLayout().logo_box_back == (60, 55, 175, 155)
+
+
+# --- 앞면: 브랜드 색 바탕 + 흰 로고(역상) -------------------------------------
+# 앞면 배경을 로고 이미지의 대표색에서 유도하면 사용자가 고른 색과 미묘하게 달라져
+# 로고와 명함 바탕의 색이 어긋나 보였다. 설문 색을 정본으로 삼는다.
+from app.services.brand_kit_service import _card_front_bg, tint_solid  # noqa: E402
+
+
+def _luma(c):
+    return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+
+
+def test_front_bg_is_the_selected_color():
+    assert _card_front_bg({"color_manual": ["#0f5f66"]}) == (15, 95, 102)
+
+
+def test_front_bg_reads_backend_key_too():
+    """백엔드는 colors, /generate 스키마는 color_manual로 보낸다."""
+    assert _card_front_bg({"colors": ["#0f5f66"]}) == (15, 95, 102)
+
+
+def test_light_selection_is_darkened_for_contrast():
+    """밝은 색을 그대로 깔면 흰 로고가 묻힌다."""
+    bg = _card_front_bg({"color_manual": ["#FFE1EF"]})
+    assert _luma(bg) <= 151
+
+
+def test_darkening_keeps_the_hue():
+    """대비만 확보하고 색조는 바꾸지 않는다."""
+    bg = _card_front_bg({"color_manual": ["#FFE1EF"]})
+    assert bg.index(max(bg)) == 0  # 원본에서 R이 가장 밝았다
+
+
+def test_no_color_falls_back_to_default():
+    assert _card_front_bg({}) is not None
+
+
+def test_tint_solid_makes_logo_white():
+    im = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
+    ImageDraw.Draw(im).rectangle((2, 2, 7, 7), fill=TEAL + (255,))
+    out = tint_solid(im, (255, 255, 255))
+    assert out.getpixel((5, 5)) == (255, 255, 255, 255)
+
+
+def test_tint_solid_preserves_alpha():
+    im = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
+    ImageDraw.Draw(im).rectangle((2, 2, 7, 7), fill=TEAL + (255,))
+    out = tint_solid(im, (255, 255, 255))
+    assert out.getpixel((0, 0))[3] == 0

@@ -307,8 +307,12 @@ def force_single_color(svg: str, hex_color: str) -> str:
 
     def _mapped(value: str):
         v = value.strip().lower()
-        if v in ("none", "transparent", "currentcolor", "") or v.startswith("url("):
+        if v in ("none", "transparent", "currentcolor", ""):
             return None
+        if v.startswith("url("):
+            # 그라데이션·패턴 참조. 단색으로 통일하는 게 목적이므로 지정색으로
+            # 갈아끼운다. 남겨두면 단색 지정인데 결과에 그라데이션이 남는다.
+            return color
         lum = _luma(v)
         if lum is None:
             return None
@@ -325,6 +329,14 @@ def force_single_color(svg: str, hex_color: str) -> str:
         return mo.group(1) + target if target else mo.group(0)
 
     return re.sub(r'((?:fill|stroke)\s*:\s*)([^;"}]+)', _style, svg)
+
+
+def _colors_of(survey: dict) -> list:
+    """설문에 실제로 담겨 온 색 목록. 로그와 판정이 같은 값을 보게 한다."""
+    colors = survey.get("color_manual") or survey.get("colors")
+    if isinstance(colors, str):
+        colors = [colors]
+    return [str(c).strip() for c in (colors or []) if str(c).strip()]
 
 
 def _single_manual_color(survey: dict):
@@ -459,6 +471,11 @@ def generate_logo_variants(
     forced = _single_manual_color(survey)
     if os.environ.get("LOGO_FORCE_COLOR", "on").strip().lower() in ("off", "0", "false"):
         forced = None  # A/B 비교용 - 모델 원본 색을 그대로 둔다
+    print(
+        "[logo_gen_service] 색 통일 %s (지정색 %s)"
+        % ("적용" if forced else "미적용", _colors_of(survey)),
+        flush=True,
+    )
     if forced:
         for _i, _r in enumerate(results):
             if _r is None or not _r[1]:

@@ -897,7 +897,10 @@ def build_prompt_brief(survey: dict, variant_index: int = 0) -> str:
     if tone_words:
         lines.append(f"{tone_words.capitalize()} feeling.")
 
-    lines.append("Flat vector on a white background.")
+    # "no gradients"는 취향이 아니라 제약이다. 그라데이션이 들어간 마크는 축소·
+    # 단색 인쇄·자수에서 뭉개지고, 색 통일(force_single_color)도 걸리지 않는다
+    # (실측 확인됨 - 결과 SVG에 url(#Gradient1)이 남았다).
+    lines.append("Flat vector on a white background, solid colours only, no gradients.")
     lines.append("Keep it simple and uncluttered, with generous space around the mark.")
 
     angle = BRIEF_ANGLES[variant_index % len(BRIEF_ANGLES)]
