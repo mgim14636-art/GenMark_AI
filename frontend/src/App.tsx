@@ -1,4 +1,4 @@
-import { CSSProperties, FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
+import { CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent, lazy, MouseEvent as ReactMouseEvent, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
 import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
@@ -6,7 +6,7 @@ import GenMarkLogo from './components/ui/GenMarkLogo'
 import { AiLoader } from './components/ui/ai-loader'
 import { apiBlobRequest, AuthError, type AuthProvider, type AuthUser, downloadAuthenticatedFile, loginWithProvider, logout, restoreSession } from './auth'
 import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type BusinessCardInfoInput, type DownloadRecord, type LogoCandidate, type PinnedLogo, type SurveyImprovement, type SurveySubmitInput, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
-import { buildEditedSvg } from './lib/svgEditor'
+import { buildEditedSvg, prepareEditableSvg } from './lib/svgEditor'
 
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
 
@@ -16,7 +16,7 @@ const TRADEMARK_SCORE_FALLBACK = 23
 // 원래의 비로그인 빈 상태로 되돌릴 때는 false로 바꾸면 됩니다.
 const MYPAGE_MOCK_MODE = true
 
-type ViewMode = 'home' | 'hero' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'brand-kit' | 'edit' | 'login' | 'mypage' | 'survey'
+type ViewMode = 'home' | 'hero' | 'logo-intro' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'brand-kit' | 'edit' | 'login' | 'mypage' | 'survey'
 type LoginDestination = 'home' | 'industry' | 'choice' | 'mypage'
 type LoginReturnMode = 'hero' | 'home'
 type OnboardingOption = 'online' | 'social' | 'offline'
@@ -27,7 +27,46 @@ type ToneOption = 'friendly' | 'professional' | 'warm' | 'trendy' | 'minimal'
 type RgbColor = { r: number; g: number; b: number }
 type LogoStyle = 'symbol' | 'wordmark' | 'combination' | 'lettermark'
 type TrademarkMatchImage = { rank: number; src: string }
-type FinalEditKind = 'identity' | 'values' | 'tone' | 'style'
+type FinalEditKind = 'identity' | 'values' | 'tone' | 'color' | 'style'
+type FinalToneMode = 'recommended' | 'direct'
+type EditorTarget = string
+type EditorDraft = {
+  scale: number
+  rotation: number
+  opacity: number
+  offsetX: number
+  offsetY: number
+  color: string
+  colorChanged: boolean
+  dirty: boolean
+}
+type EditorDrafts = Record<string, EditorDraft>
+type EditorDragState = {
+  pointerId: number
+  target: string
+  startClientX: number
+  startClientY: number
+  startSvgX: number
+  startSvgY: number
+  startOffsetX: number
+  startOffsetY: number
+}
+
+const createEditorDraft = (color = '#7B5CDF'): EditorDraft => ({
+  scale: 100,
+  rotation: 0,
+  opacity: 100,
+  offsetX: 0,
+  offsetY: 0,
+  color,
+  colorChanged: false,
+  dirty: false,
+})
+
+const createEditorDrafts = (color = '#7B5CDF'): EditorDrafts => ({})
+
+const EDITOR_TEST_MODE = true
+const EDITOR_TEST_SVG_URL = '/genmark_logo.svg'
 
 const uniqueColors = (colors: string[]) => Array.from(new Map(
   colors.filter(Boolean).map((color) => [color.trim().toLowerCase(), color.trim()]),
@@ -42,6 +81,8 @@ const toneOptions: Array<{ id: ToneOption; label: string; description: string; c
   { id: 'trendy', label: '유니크하고 트렌디한', description: '개성 있고 감각적인 인상', colors: ['#171713'] },
   { id: 'minimal', label: '미니멀하고 직관적인', description: '군더더기 없이 명확한 인상', colors: ['#396fc8'] },
 ]
+
+const DEFAULT_MANUAL_COLOR = '#9765e9'
 
 const coreValueIds = new Set<CoreValue>(['vegan', 'lowIrritation', 'derma', 'cleanBeauty', 'natural', 'premium', 'sustainable', 'scientific', 'reasonable'])
 const coreValueLabels: Record<CoreValue, string> = {
@@ -68,10 +109,10 @@ const industryOptions: Array<{ id: IndustryOption; title: string; description: s
 ]
 
 const logoStyleOptions: Array<{ id: LogoStyle; label: string; description: string; fit: string; recommended?: boolean }> = [
-  { id: 'symbol', label: '심볼마크', description: '그림이나 도형만으로 브랜드를 표현하는 로고', fit: '앱 아이콘, SNS 프로필과 제품 용기에 작게 사용할 때 좋아요.' },
-  { id: 'wordmark', label: '워드마크', description: '브랜드 이름의 글씨체를 중심으로 만든 로고', fit: '새로운 브랜드 이름을 고객에게 명확하게 알리고 싶을 때 좋아요.' },
-  { id: 'combination', label: '콤비네이션', description: '그림과 브랜드 이름을 함께 사용하는 로고', fit: '온라인과 오프라인에서 다양하게 사용하고 싶을 때 좋아요.', recommended: true },
-  { id: 'lettermark', label: '레터마크', description: '브랜드 이름의 첫 글자나 이니셜을 활용한 로고', fit: '브랜드 이름이 길거나 간결한 이미지를 원할 때 좋아요.' },
+  { id: 'symbol', label: '심볼마크', description: '그림이나 도형만으로 브랜드를 표현하는 로고', fit: '브랜드를 상징하는 이미지를 직관적으로 보여주어 기억에 오래 남아요.' },
+  { id: 'wordmark', label: '워드마크', description: '브랜드 이름의 글씨체를 중심으로 만든 로고', fit: '브랜드 이름을 직관적으로 보여주어 기억에 오래 남아요.' },
+  { id: 'combination', label: '콤비네이션', description: '그림과 브랜드 이름을 함께 사용하는 로고', fit: '그림과 이름을 함께 보여주어 브랜드를 쉽게 기억하게 해요.', recommended: true },
+  { id: 'lettermark', label: '레터마크', description: '브랜드 이름의 첫 글자나 이니셜을 활용한 로고', fit: '긴 이름을 간결하게 담아 세련된 인상을 남겨요.' },
 ]
 
 const logoStylePreviewImages: Record<LogoStyle, string> = {
@@ -224,22 +265,79 @@ const hsvToRgb = (h: number, s: number, v: number): RgbColor => {
 const ToneColorPalette = ({ value, onChange, onComplete, ariaLabel }: { value: RgbColor; onChange: (color: RgbColor) => void; onComplete: () => void; ariaLabel: string }) => {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const hsv = rgbToHsv(value)
+  const previewRef = useRef<HTMLSpanElement>(null)
+  const huePreviewRef = useRef<HTMLSpanElement>(null)
+  const colorRef = useRef<RgbColor>(value)
+  const hsvRef = useRef(hsv)
+  const pendingColorRef = useRef<RgbColor | null>(null)
+  const frameRef = useRef<number | null>(null)
+
+  colorRef.current = value
+  hsvRef.current = hsv
+
+  const applyPreview = (color: RgbColor) => {
+    const nextHsv = rgbToHsv(color)
+    const hex = rgbToHex(color)
+    colorRef.current = color
+    hsvRef.current = nextHsv
+    if (previewRef.current) {
+      previewRef.current.style.setProperty('--tone-x', `${nextHsv.h / 3.6}%`)
+      previewRef.current.style.setProperty('--tone-y', `${(1 - nextHsv.v) * 100}%`)
+      previewRef.current.style.background = hex
+    }
+    if (huePreviewRef.current) huePreviewRef.current.style.left = `${nextHsv.h / 3.6}%`
+  }
+
+  useEffect(() => {
+    applyPreview(value)
+  }, [value])
+
+  useEffect(() => () => {
+    if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current)
+  }, [])
+
+  const flushPendingColor = () => {
+    if (frameRef.current !== null) {
+      window.cancelAnimationFrame(frameRef.current)
+      frameRef.current = null
+    }
+    const pendingColor = pendingColorRef.current
+    pendingColorRef.current = null
+    if (pendingColor) onChange(pendingColor)
+  }
+
+  const queueColorChange = (color: RgbColor) => {
+    applyPreview(color)
+    pendingColorRef.current = color
+    if (frameRef.current !== null) return
+    frameRef.current = window.requestAnimationFrame(() => {
+      frameRef.current = null
+      const nextColor = pendingColorRef.current
+      pendingColorRef.current = null
+      if (nextColor) onChange(nextColor)
+    })
+  }
+
   const updateFromPointer = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left))
     const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top))
-    onChange(hsvToRgb((x / rect.width) * 360, 1, 1 - y / rect.height))
+    queueColorChange(hsvToRgb((x / rect.width) * 360, 1, 1 - y / rect.height))
   }
 
   const updateHueFromPointer = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left))
-    onChange(hsvToRgb((x / rect.width) * 360, hsv.s || 1, hsv.v))
+    const currentHsv = hsvRef.current
+    queueColorChange(hsvToRgb((x / rect.width) * 360, currentHsv.s || 1, currentHsv.v))
   }
 
   const updateChannel = (channel: keyof RgbColor, nextValue: string) => {
     const numericValue = nextValue === '' ? 0 : Number(nextValue)
-    onChange({ ...value, [channel]: clampColorChannel(Number.isFinite(numericValue) ? numericValue : 0) })
+    const nextColor = { ...colorRef.current, [channel]: clampColorChannel(Number.isFinite(numericValue) ? numericValue : 0) }
+    pendingColorRef.current = null
+    applyPreview(nextColor)
+    onChange(nextColor)
   }
 
   return (
@@ -252,15 +350,17 @@ const ToneColorPalette = ({ value, onChange, onComplete, ariaLabel }: { value: R
         aria-valuetext={rgbToHex(value)}
         onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); updateFromPointer(event) }}
         onPointerMove={(event) => { if (event.buttons === 1) updateFromPointer(event) }}
+        onPointerUp={flushPendingColor}
+        onPointerCancel={flushPendingColor}
       >
-        <span className="tone-color-palette-preview" style={{ '--tone-x': `${hsv.h / 3.6}%`, '--tone-y': `${(1 - hsv.v) * 100}%`, background: rgbToHex(value) } as CSSProperties} />
+        <span ref={previewRef} className="tone-color-palette-preview" style={{ '--tone-x': `${hsv.h / 3.6}%`, '--tone-y': `${(1 - hsv.v) * 100}%`, background: rgbToHex(value) } as CSSProperties} />
       </div>
       <div className="tone-palette-actions">
         <button className={advancedOpen ? 'tone-native-picker-button active' : 'tone-native-picker-button'} type="button" onClick={() => setAdvancedOpen((current) => !current)}>
           <span className="tone-native-picker-dot" style={{ background: rgbToHex(value) }} aria-hidden="true" />
           <span>색상 세부 조정</span>
         </button>
-        <button className="tone-native-picker-done" type="button" onClick={onComplete}>선택 완료</button>
+        <button className="tone-native-picker-done" type="button" onClick={() => { flushPendingColor(); onComplete() }}>선택 완료</button>
       </div>
       {advancedOpen && (
         <div className="tone-advanced-picker" role="dialog" aria-label={`${ariaLabel} 세부 조정`}>
@@ -273,14 +373,14 @@ const ToneColorPalette = ({ value, onChange, onComplete, ariaLabel }: { value: R
             onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); updateHueFromPointer(event) }}
             onPointerMove={(event) => { if (event.buttons === 1) updateHueFromPointer(event) }}
           >
-            <span style={{ left: `${hsv.h / 3.6}%` }} />
+            <span ref={huePreviewRef} style={{ left: `${hsv.h / 3.6}%` }} />
           </div>
           <div className="tone-advanced-rgb-fields">
             {(['r', 'g', 'b'] as const).map((channel) => (
               <label key={channel}><span>{channel.toUpperCase()}</span><input type="number" min="0" max="255" value={Math.round(value[channel])} onChange={(event) => updateChannel(channel, event.target.value)} /></label>
             ))}
           </div>
-          <button className="tone-advanced-complete" type="button" onClick={() => setAdvancedOpen(false)}>선택 완료</button>
+          <button className="tone-advanced-complete" type="button" onClick={() => { flushPendingColor(); setAdvancedOpen(false) }}>선택 완료</button>
         </div>
       )}
     </div>
@@ -323,6 +423,7 @@ function BrandLogo({ className = '' }: { className?: string }) {
 
 function CustomerApp() {
   const [mode, setModeState] = useState<ViewMode>(getModeFromUrl)
+  const [logoIntroStage, setLogoIntroStage] = useState<'opening' | 'ready'>('opening')
   const [loggedIn, setLoggedIn] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
@@ -364,8 +465,7 @@ function CustomerApp() {
   const [tonePaletteTarget, setTonePaletteTarget] = useState<{ toneId: ToneOption; slot: number } | null>(null)
   const [tonePaletteDraft, setTonePaletteDraft] = useState<{ toneId: ToneOption; colors: string[] } | null>(null)
   const [customToneColors, setCustomToneColors] = useState<Partial<Record<ToneOption, string[]>>>({})
-  const [manualColors, setManualColors] = useState<string[]>(['#9765e9'])
-  const [manualColorsSelected, setManualColorsSelected] = useState(false)
+  const [manualColors, setManualColors] = useState<string[]>([DEFAULT_MANUAL_COLOR])
   const [manualColorSlot, setManualColorSlot] = useState(0)
   const [colorSelectionMode, setColorSelectionMode] = useState<'tone' | 'manual'>('tone')
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
@@ -376,19 +476,25 @@ function CustomerApp() {
   const [resultLiked, setResultLiked] = useState(false)
   const [trademarkAnalysisSkipped, setTrademarkAnalysisSkipped] = useState(false)
   const [trademarkAnalysisRequested, setTrademarkAnalysisRequested] = useState(false)
-  const [editTarget, setEditTarget] = useState<'symbol' | 'text'>('symbol')
+  const [editorTestMode, setEditorTestMode] = useState(() => getModeFromUrl() === 'edit')
+  const [editTarget, setEditTarget] = useState<EditorTarget | null>(null)
   const [editorScale, setEditorScale] = useState(100)
   const [editorRotation, setEditorRotation] = useState(0)
   const [editorOpacity, setEditorOpacity] = useState(100)
+  const [editorOffsetX, setEditorOffsetX] = useState(0)
+  const [editorOffsetY, setEditorOffsetY] = useState(0)
   const [editorColor, setEditorColor] = useState('#7B5CDF')
+  const [editorColorPickerOpen, setEditorColorPickerOpen] = useState(false)
   const [editorColorChanged, setEditorColorChanged] = useState(false)
   const [editorDirty, setEditorDirty] = useState(false)
   const [editorSaved, setEditorSaved] = useState(false)
   const [editorSvgSource, setEditorSvgSource] = useState<string | null>(null)
+  const [editorSvgPreviewSource, setEditorSvgPreviewSource] = useState<string | null>(null)
   const [editorSvgPreviewUrl, setEditorSvgPreviewUrl] = useState<string | null>(null)
   const [editorLoading, setEditorLoading] = useState(false)
   const [editorSaving, setEditorSaving] = useState(false)
   const [editorError, setEditorError] = useState('')
+  const [editorDrafts, setEditorDrafts] = useState<EditorDrafts>(() => createEditorDrafts())
   const [trademarkEntry, setTrademarkEntry] = useState<'generation' | 'result'>('generation')
   const [trademarkAnalysisCompleted, setTrademarkAnalysisCompleted] = useState(false)
   const [projectId, setProjectId] = useState<string | null>(() => window.localStorage.getItem('genmark-project-id'))
@@ -435,8 +541,48 @@ function CustomerApp() {
   const [finalEditModal, setFinalEditModal] = useState<FinalEditKind | null>(null)
   const [regenerationConfirmOpen, setRegenerationConfirmOpen] = useState(false)
   const [regenerationCreditsLoading, setRegenerationCreditsLoading] = useState(false)
-  const [finalEditDraft, setFinalEditDraft] = useState({ companyName: '', companyMotto: '', brandName: '', targetAge: '', valuesText: '', tone: '' as ToneOption | '', colors: [] as string[], logoStyle: '' as LogoStyle | '', logoShape: '' })
+  const [finalEditToneMode, setFinalEditToneMode] = useState<FinalToneMode>('recommended')
+  const [finalEditDraft, setFinalEditDraft] = useState({ companyName: '', companyMotto: '', brandName: '', targetAge: '', valuesText: '', tone: '', colors: [] as string[], logoStyle: '' as LogoStyle | '', logoShape: '' })
   const activeModalRef = useRef<HTMLDivElement>(null)
+  const editorDragRef = useRef<EditorDragState | null>(null)
+
+  const buildEditorDraftSvg = (source: string, drafts: EditorDrafts) => {
+    let edited = source
+    for (const [target, draft] of Object.entries(drafts)) {
+      if (!draft.dirty) continue
+      edited = buildEditedSvg(edited, {
+        target,
+        color: draft.colorChanged ? draft.color : undefined,
+        scale: draft.scale,
+        rotation: draft.rotation,
+        opacity: draft.opacity,
+        offsetX: draft.offsetX,
+        offsetY: draft.offsetY,
+      })
+    }
+    return edited
+  }
+
+  const updateCurrentEditorDraft = (patch: Partial<EditorDraft>) => {
+    if (!editTarget) return
+    setEditorDrafts((current) => ({
+      ...current,
+      [editTarget]: {
+        ...(current[editTarget] ?? createEditorDraft(editorColor)),
+        ...patch,
+        dirty: true,
+      },
+    }))
+  }
+
+  const updateEditorOffsets = (offsetX: number, offsetY: number) => {
+    const nextOffsetX = Math.round(Math.max(-700, Math.min(700, offsetX)))
+    const nextOffsetY = Math.round(Math.max(-500, Math.min(500, offsetY)))
+    setEditorOffsetX(nextOffsetX)
+    setEditorOffsetY(nextOffsetY)
+    updateCurrentEditorDraft({ offsetX: nextOffsetX, offsetY: nextOffsetY })
+    markEditorDirty()
+  }
 
   useEffect(() => {
     if (!creditModal && !businessCardModalOpen && !resumePromptProject && !finalEditModal && !regenerationConfirmOpen) return
@@ -515,15 +661,41 @@ function CustomerApp() {
     let disposed = false
 
     if (mode === 'edit') {
+      const baseColor = projectColors[0] ?? '#7B5CDF'
       setEditorSaved(false)
       setEditorDirty(false)
       setEditorColorChanged(false)
+      setEditorColorPickerOpen(false)
+      setEditorColor(baseColor)
       setEditorScale(100)
       setEditorRotation(0)
       setEditorOpacity(100)
+      setEditorOffsetX(0)
+      setEditorOffsetY(0)
+      setEditTarget(null)
+      setEditorDrafts(createEditorDrafts(baseColor))
     }
     setEditorError('')
     setEditorSvgSource(null)
+    setEditorSvgPreviewSource(null)
+    if (mode === 'edit' && EDITOR_TEST_MODE && editorTestMode) {
+      setEditorLoading(true)
+      void fetch(EDITOR_TEST_SVG_URL)
+        .then((response) => {
+          if (!response.ok) throw new Error('테스트용 SVG를 불러오지 못했어요.')
+          return response.text()
+        })
+        .then((svg) => {
+          if (!disposed) setEditorSvgSource(svg)
+        })
+        .catch((error) => {
+          if (!disposed) setEditorError(error instanceof Error ? error.message : '테스트용 SVG를 불러오지 못했어요.')
+        })
+        .finally(() => {
+          if (!disposed) setEditorLoading(false)
+        })
+      return () => { disposed = true }
+    }
     if (!candidate?.svgUrl) {
       setEditorLoading(false)
       return () => { disposed = true }
@@ -542,25 +714,19 @@ function CustomerApp() {
       })
 
     return () => { disposed = true }
-  }, [mode, editorCandidate?.id, editorCandidate?.svgUrl])
+  }, [editorCandidate?.id, editorCandidate?.svgUrl, editorTestMode, mode])
 
   useEffect(() => {
     if (!editorSvgSource) {
+      setEditorSvgPreviewSource(null)
       setEditorSvgPreviewUrl(null)
       return () => undefined
     }
 
     let objectUrl: string | null = null
     try {
-      const edited = editorDirty
-        ? buildEditedSvg(editorSvgSource, {
-          target: editTarget,
-          color: editorColorChanged ? editorColor : undefined,
-          scale: editorScale,
-          rotation: editorRotation,
-          opacity: editorOpacity,
-        })
-        : editorSvgSource
+      const edited = editorDirty ? buildEditorDraftSvg(editorSvgSource, editorDrafts) : editorSvgSource
+      setEditorSvgPreviewSource(prepareEditableSvg(edited, editTarget))
       objectUrl = URL.createObjectURL(new Blob([edited], { type: 'image/svg+xml' }))
       setEditorSvgPreviewUrl(objectUrl)
       setEditorError('')
@@ -572,7 +738,7 @@ function CustomerApp() {
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [editorSvgSource, editorDirty, editTarget, editorColorChanged, editorColor, editorScale, editorRotation, editorOpacity])
+  }, [editorSvgSource, editorDirty, editorDrafts, editTarget])
 
   useEffect(() => {
     let disposed = false
@@ -627,6 +793,14 @@ function CustomerApp() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [mode])
+
+  useEffect(() => {
+    if (mode !== 'logo-intro') return undefined
+
+    setLogoIntroStage('opening')
+    const timer = window.setTimeout(() => setLogoIntroStage('ready'), 3600)
+    return () => window.clearTimeout(timer)
   }, [mode])
 
   useEffect(() => {
@@ -806,7 +980,7 @@ function CustomerApp() {
   const [productActiveDot, setProductActiveDot] = useState(0)
   const [businessCardActiveDot, setBusinessCardActiveDot] = useState(0)
 
-  // 카드 4개를 한 페이지로 보고, 스크롤 위치 비율로 몇 번째 페이지인지 계산한다.
+  // 현재 화면에 보이는 카드 묶음을 한 페이지로 보고, 스크롤 위치 비율로 페이지를 계산한다.
   const computeActiveDot = (track: HTMLDivElement, itemCount: number) => {
     const dotCount = Math.max(1, Math.ceil(itemCount / 4))
     const maxScroll = track.scrollWidth - track.clientWidth
@@ -823,8 +997,15 @@ function CustomerApp() {
     setLikedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   }
 
-  const scrollGallery = (amount: number) => {
-    galleryRef.current?.scrollBy({ left: amount, behavior: 'smooth' })
+  const scrollTrackByPage = (track: HTMLDivElement | null, direction: number) => {
+    if (!track) return
+    const maxScroll = track.scrollWidth - track.clientWidth
+    const target = Math.min(maxScroll, Math.max(0, track.scrollLeft + direction * track.clientWidth))
+    track.scrollTo({ left: target, behavior: 'smooth' })
+  }
+
+  const scrollGallery = (direction: number) => {
+    scrollTrackByPage(galleryRef.current, direction)
   }
 
   const handleGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -855,8 +1036,8 @@ function CustomerApp() {
     track.classList.remove('is-dragging')
   }
 
-  const scrollProductGallery = (amount: number) => {
-    productGalleryRef.current?.scrollBy({ left: amount, behavior: 'smooth' })
+  const scrollProductGallery = (direction: number) => {
+    scrollTrackByPage(productGalleryRef.current, direction)
   }
 
   const handleProductGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -887,8 +1068,8 @@ function CustomerApp() {
     track.classList.remove('is-dragging')
   }
 
-  const scrollBusinessCardGallery = (amount: number) => {
-    businessCardGalleryRef.current?.scrollBy({ left: amount, behavior: 'smooth' })
+  const scrollBusinessCardGallery = (direction: number) => {
+    scrollTrackByPage(businessCardGalleryRef.current, direction)
   }
 
   const handleBusinessCardGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -986,12 +1167,10 @@ function CustomerApp() {
           const manual = project.colorMode.toUpperCase() === 'MANUAL'
           setColorSelectionMode(manual ? 'manual' : 'tone')
           setToneMode(manual ? 'direct' : 'recommended')
-          setManualColorsSelected(Boolean(manual && project.colors.length >= 1))
           if (!manual && matchingTone) setToneSelection(matchingTone.id)
         } else {
           setColorSelectionMode(matchingTone ? 'tone' : 'manual')
           setToneMode(matchingTone ? 'recommended' : 'direct')
-          setManualColorsSelected(Boolean(!matchingTone && project.colors.length >= 1))
           if (matchingTone) setToneSelection(matchingTone.id)
         }
       }
@@ -1132,6 +1311,10 @@ function CustomerApp() {
          setLoginDestination('home')
        }
     } catch (error) {
+      if (error instanceof AuthError && error.code === 'LOGIN_CANCELLED') {
+        setAuthError('')
+        return
+      }
       const message = error instanceof AuthError
         ? `${error.message}${error.code ? ` (${error.code}${error.requestId ? `, requestId: ${error.requestId}` : ''})` : ''}`
         : error instanceof Error
@@ -1176,6 +1359,21 @@ function CustomerApp() {
       return
     }
     setIndustryBackMode('home')
+    setMode('industry')
+  }
+
+  const openLogoCreationIntro = () => {
+    setMode('logo-intro')
+  }
+
+  const startLogoCreationFromIntro = () => {
+    setIndustryBackMode('home')
+    if (!loggedIn) {
+      setLoginDestination('industry')
+      setLoginReturnMode('home')
+      setMode('login')
+      return
+    }
     setMode('industry')
   }
 
@@ -1245,7 +1443,8 @@ function CustomerApp() {
     if (!canAnalyzeTrademark) {
       setTrademarkAnalysisSkipped(true)
       setTrademarkAnalysisRequested(false)
-      setMode(entry === 'result' ? 'result' : 'loading')
+      if (entry === 'result') setMode('result')
+      else void startLogoGeneration(false)
       return
     }
 
@@ -1280,9 +1479,8 @@ function CustomerApp() {
   }
 
   const resetManualColors = () => {
-    setManualColors(['#9765e9'])
+    setManualColors([DEFAULT_MANUAL_COLOR])
     setManualColorSlot(0)
-    setManualColorsSelected(false)
   }
 
   const updateToneColorFromHex = (toneId: ToneOption, slot: number, hex: string) => {
@@ -1307,14 +1505,16 @@ function CustomerApp() {
     setTonePaletteTarget({ toneId, slot: 0 })
   }
 
+  const getToneColors = (toneId: ToneOption) => uniqueColors(customToneColors[toneId]
+    ?? toneOptions.find((option) => option.id === toneId)?.colors
+    ?? toneOptions[0].colors).slice(0, 1)
+
   const getSelectedColors = () => {
     if (colorSelectionMode === 'tone' && toneSelection) {
-      return uniqueColors(customToneColors[toneSelection]
-        ?? toneOptions.find((option) => option.id === toneSelection)?.colors
-        ?? toneOptions[0].colors).slice(0, 1)
+      return getToneColors(toneSelection)
     }
 
-    return uniqueColors(manualColors).slice(0, 1)
+    return [uniqueColors(manualColors)[0] ?? DEFAULT_MANUAL_COLOR]
   }
 
   const buildProjectInput = (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review'): ProjectInput => {
@@ -1333,7 +1533,7 @@ function CustomerApp() {
       input.targetAge = toTargetAgeApiValue(targetAge || '전 연령층')
     }
 
-    if (step === 'tone') {
+    if (step === 'tone' || step === 'logo-style' || step === 'final-review') {
       input.tone = (toneMode === 'direct' ? directTone.trim() : toneSelection) || undefined
       const customizedRecommendedPalette = Boolean(toneSelection && customToneColors[toneSelection])
       input.colorMode = colorSelectionMode === 'manual' || customizedRecommendedPalette ? 'MANUAL' : 'TONE'
@@ -1407,30 +1607,65 @@ function CustomerApp() {
   }
 
   const resetEditorControls = () => {
+    if (!editTarget) return
+    const baseColor = projectColors[0] ?? '#7B5CDF'
     setEditorScale(100)
     setEditorRotation(0)
     setEditorOpacity(100)
+    setEditorOffsetX(0)
+    setEditorOffsetY(0)
+    setEditorColor(baseColor)
+    setEditorColorPickerOpen(false)
     setEditorColorChanged(false)
+    setEditorDrafts((current) => ({
+      ...current,
+      [editTarget]: {
+        scale: 100,
+        rotation: 0,
+        opacity: 100,
+        offsetX: 0,
+        offsetY: 0,
+        color: baseColor,
+        colorChanged: false,
+        dirty: true,
+      },
+    }))
     markEditorDirty()
   }
 
-  const selectEditorTarget = (target: 'symbol' | 'text') => {
+  const selectEditorTarget = (target: EditorTarget) => {
     if (target === editTarget) return
-    if (editorDirty) {
-      setEditorError('현재 요소의 편집 내용을 먼저 저장해주세요.')
-      return
+    if (editTarget) {
+      setEditorDrafts((current) => ({
+        ...current,
+        [editTarget]: {
+          ...(current[editTarget] ?? createEditorDraft(editorColor)),
+          scale: editorScale,
+          rotation: editorRotation,
+          opacity: editorOpacity,
+          offsetX: editorOffsetX,
+          offsetY: editorOffsetY,
+          color: editorColor,
+          colorChanged: editorColorChanged,
+        },
+      }))
     }
+    const nextDraft = editorDrafts[target] ?? createEditorDraft(editorColor)
     setEditTarget(target)
-    setEditorScale(100)
-    setEditorRotation(0)
-    setEditorOpacity(100)
-    setEditorColorChanged(false)
+    setEditorScale(nextDraft.scale)
+    setEditorRotation(nextDraft.rotation)
+    setEditorOpacity(nextDraft.opacity)
+    setEditorOffsetX(nextDraft.offsetX)
+    setEditorOffsetY(nextDraft.offsetY)
+    setEditorColor(nextDraft.color)
+    setEditorColorPickerOpen(false)
+    setEditorColorChanged(nextDraft.colorChanged)
     setEditorError('')
   }
 
   const saveEditorChanges = async (): Promise<boolean> => {
     const candidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
-    if (!projectId || !candidate?.svgUrl || !editorSvgSource) {
+    if (!editorSvgSource || (!EDITOR_TEST_MODE && (!projectId || !candidate?.svgUrl))) {
       setEditorError('저장할 SVG 로고를 불러오지 못했어요.')
       setEditorSaved(false)
       return false
@@ -1439,21 +1674,14 @@ function CustomerApp() {
     setEditorSaving(true)
     setEditorError('')
     try {
-      const editedSvg = editorDirty
-        ? buildEditedSvg(editorSvgSource, {
-          target: editTarget,
-          color: editorColorChanged ? editorColor : undefined,
-          scale: editorScale,
-          rotation: editorRotation,
-          opacity: editorOpacity,
-        })
-        : editorSvgSource
-      await projectsApi.saveCandidateSvg(candidate.svgUrl, editedSvg)
-      if (editorColorChanged) {
+      const editedSvg = editorDirty ? buildEditorDraftSvg(editorSvgSource, editorDrafts) : editorSvgSource
+      if (!EDITOR_TEST_MODE && candidate?.svgUrl) await projectsApi.saveCandidateSvg(candidate.svgUrl, editedSvg)
+      const changedColorDraft = Object.values(editorDrafts).find((draft) => draft.dirty && draft.colorChanged)
+      if (!EDITOR_TEST_MODE && changedColorDraft && projectId) {
         const currentPalette = projectColors.length > 0 ? projectColors : getSelectedColors()
         const nextPalette = [...currentPalette]
-        if (nextPalette.length === 0) nextPalette.push(editorColor)
-        else nextPalette[0] = editorColor
+        if (nextPalette.length === 0) nextPalette.push(changedColorDraft.color)
+        else nextPalette[0] = changedColorDraft.color
         const patchedProject = await projectsApi.patch(projectId, {
           brandType: brandKind === 'bi' ? 'BI' : 'CI',
           colors: nextPalette,
@@ -1465,10 +1693,11 @@ function CustomerApp() {
       setEditorSvgSource(editedSvg)
       setEditorDirty(false)
       setEditorColorChanged(false)
+      setEditorDrafts((current) => Object.fromEntries(Object.entries(current).map(([target, draft]) => [target, { ...draft, dirty: false }])))
       setEditorSaved(true)
-      setLogoCandidates((current) => current.map((item) => item.id === candidate.id
-        ? { ...item, svgEdited: true }
-        : item))
+      if (candidate) setLogoCandidates((current) => current.map((item) => item.id === candidate.id
+          ? { ...item, svgEdited: true }
+          : item))
       setAnalysisId(null)
       setAnalysisError('')
       setTrademarkAnalysisCompleted(false)
@@ -1495,12 +1724,36 @@ function CustomerApp() {
     }
   }
 
-  const startLogoGeneration = async () => {
+  const runTrademarkAnalysisForCandidate = async (targetProjectId: string, candidate: LogoCandidate, requestEpoch: number) => {
+    await projectsApi.selectCandidate(targetProjectId, candidate.id)
+    if (requestEpoch !== assetEpochRef.current) return false
+    setSelectedCandidateId(candidate.id)
+    const analysis = await projectsApi.createAnalysis(targetProjectId)
+    if (requestEpoch !== assetEpochRef.current) return false
+    setAnalysisId(analysis.id)
+    const completedAnalysis = await waitForTrademarkAnalysis(targetProjectId, analysis.id)
+    if (requestEpoch !== assetEpochRef.current) return false
+    if (completedAnalysis.status === 'FAILED') {
+      throw new Error(completedAnalysis.errorMessage ?? '상표 분석에 실패했어요.')
+    }
+    const matches = await projectsApi.getMatches(targetProjectId, analysis.id)
+    if (requestEpoch !== assetEpochRef.current) return false
+    setTrademarkMatches(matches)
+    setTrademarkSimilarity(completedAnalysis.maxSimilarity)
+    setTrademarkRiskLabel(completedAnalysis.riskLabel ?? '')
+    setTrademarkRiskDescription(completedAnalysis.riskDescription ?? '')
+    setTrademarkDisclaimer(completedAnalysis.disclaimer ?? '')
+    setTrademarkAnalysisCompleted(true)
+    return true
+  }
+
+  const startLogoGeneration = async (analyzeTrademark = trademarkAnalysisRequested) => {
     if (generationLoading) return
     setGenerationLoading(true)
     setGenerationError('')
-    setTrademarkAnalysisRequested(false)
-    setTrademarkAnalysisSkipped(false)
+    setAnalysisError('')
+    setTrademarkAnalysisRequested(analyzeTrademark)
+    setTrademarkAnalysisSkipped(!analyzeTrademark)
     setMode('loading')
     try {
       const nextProjectId = await ensureProject('final-review')
@@ -1516,6 +1769,22 @@ function CustomerApp() {
       if (candidates.length !== GENERATED_LOGO_COUNT) throw new Error('생성된 로고 1개를 불러오지 못했어요.')
 
       await applyLogoCandidateState(nextProjectId, candidates)
+      if (analyzeTrademark) {
+        try {
+          const selectedIndex = candidates.findIndex((candidate) => candidate.selected)
+          const candidate = candidates[selectedIndex >= 0 ? selectedIndex : 0]
+          if (!candidate) throw new Error('상표 분석에 사용할 로고를 찾지 못했어요.')
+          const analysisCompleted = await runTrademarkAnalysisForCandidate(nextProjectId, candidate, assetEpochRef.current)
+          if (!analysisCompleted) return
+        } catch (error) {
+          setAnalysisError(error instanceof Error ? error.message : '상표 분석 중 문제가 발생했어요.')
+          setTrademarkAnalysisCompleted(false)
+          setTrademarkAnalysisSkipped(false)
+          setTrademarkAnalysisRequested(true)
+          setMode('result')
+          return
+        }
+      }
       setMode('result')
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : '로고 생성 중 문제가 발생했어요.')
@@ -1548,25 +1817,8 @@ function CustomerApp() {
     setAnalysisError('')
     setMode('trademark-loading')
     try {
-      await projectsApi.selectCandidate(projectId, candidate.id)
-      if (requestEpoch !== assetEpochRef.current) return
-      setSelectedCandidateId(candidate.id)
-      const analysis = await projectsApi.createAnalysis(projectId)
-      if (requestEpoch !== assetEpochRef.current) return
-      setAnalysisId(analysis.id)
-      const completedAnalysis = await waitForTrademarkAnalysis(projectId, analysis.id)
-      if (requestEpoch !== assetEpochRef.current) return
-      if (completedAnalysis.status === 'FAILED') {
-        throw new Error(completedAnalysis.errorMessage ?? '상표 분석에 실패했어요.')
-      }
-      const matches = await projectsApi.getMatches(projectId, analysis.id)
-      if (requestEpoch !== assetEpochRef.current) return
-      setTrademarkMatches(matches)
-      setTrademarkSimilarity(completedAnalysis.maxSimilarity)
-      setTrademarkRiskLabel(completedAnalysis.riskLabel ?? '')
-      setTrademarkRiskDescription(completedAnalysis.riskDescription ?? '')
-      setTrademarkDisclaimer(completedAnalysis.disclaimer ?? '')
-      setTrademarkAnalysisCompleted(true)
+      const analysisCompleted = await runTrademarkAnalysisForCandidate(projectId, candidate, requestEpoch)
+      if (!analysisCompleted) return
       setMode('trademark-result')
     } catch (error) {
       if (requestEpoch !== assetEpochRef.current) return
@@ -1770,6 +2022,14 @@ function CustomerApp() {
     setCreditModal('credit')
   }
 
+  const openCreditSurvey = () => {
+    setSurveyRating(5)
+    setSurveyImprovements([])
+    setSurveyComment('')
+    setProjectError('')
+    setCreditModal('survey')
+  }
+
   const downloadWithCredit = () => {
     if (!pendingDownload || remainingCredits < 1) return
     void downloadLogo(pendingDownload).then((downloaded) => {
@@ -1915,6 +2175,34 @@ function CustomerApp() {
         </div>
       </section>
     </div>
+  )
+
+  const renderLogoCreationIntroScreen = () => (
+    <main
+      className={`logo-intro-screen ${logoIntroStage === 'opening' ? 'is-opening' : 'is-ready'}`}
+      aria-labelledby={logoIntroStage === 'ready' ? 'logo-intro-title' : undefined}
+      aria-label={logoIntroStage === 'opening' ? '브랜드 시작 안내' : undefined}
+    >
+      <button className="logo-intro-back" type="button" onClick={() => setMode('home')}>
+        <ArrowLeft aria-hidden="true" size={19} strokeWidth={1.8} /> 홈으로
+      </button>
+      <section className={`logo-intro-opening ${logoIntroStage === 'ready' ? 'is-complete' : ''}`} aria-live="polite" aria-label="브랜드 시작 문구">
+        <p id="logo-intro-title" className="logo-intro-opening-copy">
+          <span>브랜드의 방향과</span>
+          <br />
+          <span>취향을 담아</span>
+          <br />
+          <span>나만의 로고를</span>
+          <br />
+          <span>완성해보세요</span>
+        </p>
+        {logoIntroStage === 'ready' && (
+          <button className="logo-intro-continue" type="button" onClick={startLogoCreationFromIntro}>
+            계속하기 <ChevronRight aria-hidden="true" size={22} strokeWidth={1.8} />
+          </button>
+        )}
+      </section>
+    </main>
   )
 
   const renderIndustrySelectionScreen = () => (
@@ -2154,7 +2442,7 @@ function CustomerApp() {
               role="tab"
               aria-selected={toneMode === 'direct'}
               className={toneMode === 'direct' ? 'tone-mode-tab active' : 'tone-mode-tab'}
-              onClick={() => { setToneMode('direct'); setToneSelection(null); setColorSelectionMode('manual'); setManualColors((current) => current.length ? current.slice(0, 1) : ['#9765e9']); setManualColorsSelected(false); setColorPickerOpen(false); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
+            onClick={() => { setToneMode('direct'); setToneSelection(null); setColorSelectionMode('manual'); setManualColors((current) => [uniqueColors(current)[0] ?? DEFAULT_MANUAL_COLOR]); setColorPickerOpen(false); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
             >직접 지정</button>
           </div>
           <h1 id="tone-selection-title">톤앤매너와<br />색상을 골라주세요</h1>
@@ -2227,7 +2515,7 @@ function CustomerApp() {
 
         {toneMode === 'direct' && (<section className="tone-color-card tone-direct-card" aria-label="직접 색상과 분위기 지정">
           <div className="tone-direct-swatches" aria-label="직접 선택한 색상">
-            <i style={{ background: manualColors[0] ?? '#9765e9' }} />
+            <i style={{ background: manualColors[0] || DEFAULT_MANUAL_COLOR }} />
             <button
               className="tone-direct-edit-trigger"
               type="button"
@@ -2248,7 +2536,7 @@ function CustomerApp() {
                 type="text"
                 value={directTone}
                 maxLength={100}
-                placeholder="예: 친근하고 다정한, 차분하고 고급스러운"
+                placeholder="예: 차분하고 고급스러운, 대담하고 세련된"
                 aria-label="직접 입력할 분위기"
                 onChange={(event) => setDirectTone(event.target.value)}
               />
@@ -2261,20 +2549,20 @@ function CustomerApp() {
                 <button type="button" aria-label="색상 팔레트 닫기" onClick={() => setColorPickerOpen(false)}>×</button>
               </div>
               <ToneColorPalette
-                value={hexToRgb(manualColors[0] ?? '#9765e9')}
-              onChange={(color) => { updateManualColorFromHex(rgbToHex(color)); setManualColorsSelected(true) }}
+                value={hexToRgb(manualColors[0] || DEFAULT_MANUAL_COLOR)}
+                onChange={(color) => updateManualColorFromHex(rgbToHex(color))}
                 onComplete={() => setColorPickerOpen(false)}
                 ariaLabel="색상 팔레트"
               />
               <div className="tone-color-picker-footer">
-                <span>선택한 색상 · {manualColors[0] ?? '#9765e9'}</span>
+                <span>선택한 색상 · {manualColors[0] || DEFAULT_MANUAL_COLOR}</span>
                 <button type="button" className="tone-inline-reset" onClick={resetManualColors}>초기화</button>
               </div>
             </div>
           )}
         </section>)}
 
-        <button className="tone-next" type="button" onClick={() => void saveProjectStep('tone', 'style')} disabled={projectSaving || (toneMode === 'recommended' ? !toneSelection : !manualColorsSelected || !directTone.trim())}>
+        <button className="tone-next" type="button" onClick={() => void saveProjectStep('tone', 'style')} disabled={projectSaving || (toneMode === 'recommended' ? !toneSelection : !directTone.trim() || !getSelectedColors()[0])}>
           {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
         </button>
         {projectError && <p className="project-error" role="alert">{projectError}</p>}
@@ -2290,7 +2578,7 @@ function CustomerApp() {
 
         <header className="logo-style-heading">
           <h1 id="logo-style-title">어떤 형태의 로고가<br />필요한가요?</h1>
-          <p>잘 모르겠다면 활용도가 높은 <strong>‘심볼+이름’</strong>을 추천해요.</p>
+          <p>잘 모르겠다면 활용도가 높은 <strong>‘콤비네이션’</strong>을 추천해요.</p>
         </header>
 
         <section className="logo-style-options" aria-label="로고 형태 선택">
@@ -2313,12 +2601,12 @@ function CustomerApp() {
                 <span className={`logo-style-preview ${option.id}`} aria-hidden="true">
                   <img src={logoStylePreviewImages[option.id]} alt="" />
                 </span>
-                <span className="logo-style-copy">
-                  <strong>{option.label}</strong>
-                  <span>{option.description}</span>
-                  <span className="logo-style-fit"><em>적합한 경우</em>{option.fit}</span>
-                  {option.recommended && <small className="logo-style-recommend"><Sparkle /> 처음 만드는 브랜드에 추천</small>}
-                </span>
+                  <span className="logo-style-copy">
+                    {option.recommended && <small className="logo-style-recommend"><Sparkle /> 처음 만드는 브랜드에 추천</small>}
+                    <strong>{option.label}</strong>
+                    <span>{option.description}</span>
+                    <span className="logo-style-fit"><CircleCheck aria-hidden="true" size={17} strokeWidth={2} />{option.fit}</span>
+                  </span>
                 <span className="logo-style-radio" aria-hidden="true">{selected && <Check size={22} strokeWidth={2.5} />}</span>
                 </button>
                 {shapeInputOpen && (
@@ -2459,7 +2747,6 @@ function CustomerApp() {
         <section className="brand-choice-content" aria-label="CI와 BI 로고 선택">
           <div className="brand-choice-list">
             <article className="brand-choice-card ci-card">
-              <div className="brand-choice-art-wrap"><img src="/ci-white.svg" alt="회사와 기업을 대표하는 CI 로고 예시" /></div>
               <div className="brand-choice-copy">
                 <div className="brand-choice-heading">
                   <span className="brand-choice-label">회사 · 기업 로고</span>
@@ -2471,7 +2758,6 @@ function CustomerApp() {
               </div>
             </article>
             <article className="brand-choice-card bi-card">
-              <div className="brand-choice-art-wrap"><img src="/bi-white.svg" alt="제품과 화장품 브랜드를 대표하는 BI 로고 예시" /></div>
               <div className="brand-choice-copy">
                 <div className="brand-choice-heading">
                   <span className="brand-choice-label">제품 · 브랜드 로고</span>
@@ -2509,11 +2795,21 @@ function CustomerApp() {
   }
 
   const openFinalEditModal = (kind: FinalEditKind) => {
+    const initialToneMode = toneMode
+    const initialTone = initialToneMode === 'direct'
+      ? directTone
+      : toneSelection ?? toneOptions[0].id
+    const initialToneId = toneOptions.some((option) => option.id === initialTone)
+      ? initialTone as ToneOption
+      : toneOptions[0].id
     setFinalEditDraft({
       companyName, companyMotto, brandName, targetAge,
       valuesText: coreValueInputMode === 'category' ? coreValues.map((value) => coreValueLabels[value] ?? value).join(', ') : brandValueDescription,
-      tone: toneSelection ?? '', colors: [...getSelectedColors()], logoStyle: logoStyle ?? '', logoShape: logoShapePrompt,
+      tone: initialTone,
+      colors: initialToneMode === 'direct' ? [...getSelectedColors()] : [...getToneColors(initialToneId)],
+      logoStyle: logoStyle ?? '', logoShape: logoShapePrompt,
     })
+    setFinalEditToneMode(initialToneMode)
     setFinalEditModal(kind)
   }
 
@@ -2537,12 +2833,26 @@ function CustomerApp() {
       setBrandValueDescription(finalEditDraft.valuesText)
       if (brandKind === 'bi') { setCoreValueInputMode('direct'); setCoreValues([]) }
     } else if (finalEditModal === 'tone') {
-      setToneSelection(finalEditDraft.tone || null)
-      const colors = uniqueColors(finalEditDraft.colors)
-      setManualColors(colors)
-      setManualColorsSelected(colors.length > 0)
-      setColorSelectionMode('manual')
-      setToneMode('direct')
+      if (finalEditToneMode === 'direct') {
+        setDirectTone(finalEditDraft.tone.trim())
+        setToneMode('direct')
+      } else {
+        const selectedTone = toneOptions.some((option) => option.id === finalEditDraft.tone)
+          ? finalEditDraft.tone as ToneOption
+          : toneOptions[0].id
+        setToneSelection(selectedTone)
+        setToneMode('recommended')
+      }
+    } else if (finalEditModal === 'color') {
+      const colors = uniqueColors(finalEditDraft.colors).slice(0, 1)
+      if (toneMode === 'recommended' && toneSelection) {
+        setCustomToneColors((current) => ({ ...current, [toneSelection]: colors }))
+        setManualColors(colors)
+        setColorSelectionMode('tone')
+      } else {
+        setManualColors(colors)
+        setColorSelectionMode('manual')
+      }
     } else {
       setLogoStyle(finalEditDraft.logoStyle || null)
       setLogoShapePrompt(finalEditDraft.logoShape)
@@ -2600,10 +2910,10 @@ function CustomerApp() {
               <div className="final-summary-row">
                 <Palette className="final-detail-icon" aria-hidden="true" size={22} strokeWidth={1.8} />
                 <span className="final-summary-label">선호 색상</span>
-                <span className="final-color-swatches" aria-label="선호 색상 4개">
-                  {getSelectedColors().map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
-                </span>
-                  <button className="final-edit-button" type="button" onClick={() => openFinalEditModal('tone')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+                  <span className="final-color-swatches" aria-label="선호 색상 1개">
+                    {getSelectedColors().map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
+                  </span>
+                  <button className="final-edit-button" type="button" onClick={() => openFinalEditModal('color')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
               <div className="final-summary-row">
                 <TypeIcon className="final-detail-icon" aria-hidden="true" size={22} strokeWidth={1.8} />
@@ -2620,8 +2930,7 @@ function CustomerApp() {
             </div>
           </section>
 
-          <button className="final-generate-button" type="button" onClick={() => void startLogoGeneration()} disabled={generationLoading}>
-            <span className="final-sparkle-cluster" aria-hidden="true"><i>✧</i><i>✧</i><i>✧</i></span>
+          <button className="final-generate-button" type="button" onClick={() => openTrademarkSelection('generation')} disabled={generationLoading}>
             로고 생성하기
             <ChevronRight className="final-generate-arrow" aria-hidden="true" size={28} strokeWidth={1.8} />
           </button>
@@ -2806,12 +3115,24 @@ function CustomerApp() {
           </section>
 
           <div className="trademark-selection-actions">
-            <button className="trademark-check-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(false); setTrademarkAnalysisRequested(true); setTrademarkAnalysisCompleted(false); void startTrademarkAnalysis() }}>
+            <button className="trademark-check-button" type="button" onClick={() => {
+              setTrademarkAnalysisSkipped(false)
+              setTrademarkAnalysisRequested(true)
+              setTrademarkAnalysisCompleted(false)
+              if (trademarkEntry === 'generation') void startLogoGeneration(true)
+              else void startTrademarkAnalysis()
+            }}>
               <span className="trademark-check-search" aria-hidden="true" />
               <span>비슷한 상표 이미지 확인하기</span>
               <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
             </button>
-            <button className="trademark-skip-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(true); setTrademarkAnalysisRequested(false); setTrademarkAnalysisCompleted(false); setMode(trademarkEntry === 'result' ? 'result' : 'loading') }}>
+            <button className="trademark-skip-button" type="button" onClick={() => {
+              setTrademarkAnalysisSkipped(true)
+              setTrademarkAnalysisRequested(false)
+              setTrademarkAnalysisCompleted(false)
+              if (trademarkEntry === 'generation') void startLogoGeneration(false)
+              else setMode('result')
+            }}>
               <span>지금은 건너뛰기</span>
               <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
             </button>
@@ -3058,7 +3379,7 @@ function CustomerApp() {
                 <div className="logo-result-detail-row">
                   <span className="result-detail-icon" aria-hidden="true"><Palette size={22} strokeWidth={1.8} /></span>
                   <strong>선호 색상</strong>
-                  <span className="result-color-swatches" aria-label="선호 색상 4개">
+                  <span className="result-color-swatches" aria-label="선호 색상 1개">
                     {getSelectedColors().map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
                   </span>
                 </div>
@@ -3085,13 +3406,13 @@ function CustomerApp() {
             ) : trademarkAnalysisSkipped ? (
               <div><strong>상표 이미지 유사도</strong><p>이전 단계에서 유사도 분석을 건너뛰었어요.</p></div>
             ) : (
-              <div><strong>상표 이미지 유사도</strong><p>아직 상표 이미지 유사도를 확인하지 않았어요.</p><button type="button" onClick={() => openTrademarkSelection('result')}>비슷한 상표 이미지 확인하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+              <div><strong>상표 이미지 유사도</strong><p>아직 상표 이미지 유사도를 확인하지 않았어요.</p><button type="button" onClick={() => { setTrademarkAnalysisSkipped(false); setTrademarkAnalysisRequested(true); void startTrademarkAnalysis() }}>비슷한 상표 이미지 확인하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
             )}
           </section>
           {analysisError && <p className="project-error" role="alert">{analysisError}</p>}
 
           <div className="logo-result-actions">
-            <button className="logo-result-edit" type="button" onClick={() => setMode('edit')}><Pencil aria-hidden="true" size={23} strokeWidth={1.8} />로고 수정<ChevronRight aria-hidden="true" size={25} strokeWidth={1.8} /></button>
+            <button className="logo-result-edit" type="button" onClick={() => { setEditorTestMode(false); setMode('edit') }}><Pencil aria-hidden="true" size={23} strokeWidth={1.8} />로고 수정<ChevronRight aria-hidden="true" size={25} strokeWidth={1.8} /></button>
           </div>
 
           <div className="logo-result-utility-grid">
@@ -3232,11 +3553,129 @@ function CustomerApp() {
       : resultPreviewImageUrl
     const editorImageUrl = editorSvgPreviewUrl ?? fallbackImageUrl
     const showCandidateNavigation = candidates.length > 1
+    const handleEditorSvgClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+      const target = (event.target as Element).closest('[data-genmark-editor-element]')
+      const targetId = target?.getAttribute('data-genmark-editor-element')
+      selectEditorTarget(targetId ?? '')
+    }
+
+    const getEditorSvgPoint = (svg: SVGSVGElement, clientX: number, clientY: number) => {
+      const matrix = svg.getScreenCTM()
+      if (!matrix) return null
+      const point = svg.createSVGPoint()
+      point.x = clientX
+      point.y = clientY
+      return point.matrixTransform(matrix.inverse())
+    }
+
+    const handleEditorSvgPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+      const target = (event.target as Element).closest('[data-genmark-editor-element]')
+      const targetId = target?.getAttribute('data-genmark-editor-element')
+      if (!targetId) return
+
+      const svg = event.currentTarget.querySelector<SVGSVGElement>('svg')
+      const startPoint = svg ? getEditorSvgPoint(svg, event.clientX, event.clientY) : null
+      if (!startPoint) return
+
+      const draft = targetId === editTarget
+        ? { offsetX: editorOffsetX, offsetY: editorOffsetY }
+        : (editorDrafts[targetId] ?? createEditorDraft(editorColor))
+      selectEditorTarget(targetId)
+      editorDragRef.current = {
+        pointerId: event.pointerId,
+        target: targetId,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startSvgX: startPoint.x,
+        startSvgY: startPoint.y,
+        startOffsetX: draft.offsetX,
+        startOffsetY: draft.offsetY,
+      }
+      event.currentTarget.setPointerCapture(event.pointerId)
+      event.preventDefault()
+    }
+
+    const handleEditorSvgPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+      const drag = editorDragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) return
+      const svg = event.currentTarget.querySelector<SVGSVGElement>('svg')
+      const point = svg ? getEditorSvgPoint(svg, event.clientX, event.clientY) : null
+      if (!point) return
+      updateEditorOffsets(drag.startOffsetX + point.x - drag.startSvgX, drag.startOffsetY + point.y - drag.startSvgY)
+    }
+
+    const handleEditorSvgPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+      if (!editorDragRef.current || editorDragRef.current.pointerId !== event.pointerId) return
+      editorDragRef.current = null
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    const handleEditorCanvasKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        selectEditorTarget('')
+        return
+      }
+      if (!editTarget || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+      const step = event.shiftKey ? 10 : 2
+      const nextX = editorOffsetX + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0)
+      const nextY = editorOffsetY + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0)
+      event.preventDefault()
+      updateEditorOffsets(nextX, nextY)
+    }
 
     const moveEditorCandidate = (offset: number) => {
       if (!showCandidateNavigation) return
       setResultCandidate((current) => (current + offset + candidates.length) % candidates.length)
     }
+
+    const renderEditorColorControl = () => (
+      <div className="editor-color-control">
+        <div className="editor-color-row">
+          <span>색상</span>
+          <div className="editor-color-display">
+            <i className="editor-color-display-swatch" style={{ background: editorColor }} aria-hidden="true" />
+            <button
+              className="editor-color-edit"
+              type="button"
+              disabled={!editTarget}
+              aria-label="색상 편집"
+              aria-expanded={editorColorPickerOpen}
+              aria-controls="editor-color-picker"
+              onClick={() => setEditorColorPickerOpen((current) => !current)}
+            >
+              <PenLine aria-hidden="true" size={13} strokeWidth={2} /> Edit
+            </button>
+          </div>
+        </div>
+        {editorColorPickerOpen && (
+          <div className="editor-color-picker tone-color-picker tone-color-picker-inline" id="editor-color-picker" role="group" aria-label="로고 요소 색상 팔레트">
+            <ToneColorPalette
+              value={hexToRgb(editorColor)}
+              onChange={(color) => {
+                const nextColor = rgbToHex(color)
+                setEditorColor(nextColor)
+                setEditorColorChanged(true)
+                updateCurrentEditorDraft({ color: nextColor, colorChanged: true })
+                markEditorDirty()
+              }}
+              onComplete={() => setEditorColorPickerOpen(false)}
+              ariaLabel={`${editTarget ? '선택한 요소' : '로고 요소'} 색상 팔레트`}
+            />
+            <div className="editor-color-picker-footer">
+              <span>원하는 색상을 자유롭게 선택할 수 있어요.</span>
+              <button type="button" onClick={() => {
+                const baseColor = projectColors[0] ?? '#7B5CDF'
+                setEditorColor(baseColor)
+                setEditorColorChanged(false)
+                updateCurrentEditorDraft({ color: baseColor, colorChanged: false })
+                markEditorDirty()
+              }}>초기화</button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
 
     return (
       <main className="logo-editor-screen" aria-labelledby="logo-editor-title">
@@ -3247,54 +3686,28 @@ function CustomerApp() {
         </header>
 
         <section className="logo-editor-content">
-          <div className="logo-editor-meta">
-            <div className="logo-editor-counter">{showCandidateNavigation && <button type="button" aria-label="이전 후보" onClick={() => moveEditorCandidate(-1)}><ChevronLeft size={18} strokeWidth={1.8} /></button>}<strong>후보 {safeCandidateIndex + 1} / {candidates.length}</strong>{showCandidateNavigation && <button type="button" aria-label="다음 후보" onClick={() => moveEditorCandidate(1)}><ChevronRight size={18} strokeWidth={1.8} /></button>}</div>
-            <span className="logo-editor-autosave"><Check size={15} strokeWidth={2} /> {editorSaved ? '저장됨' : '편집 중'}</span>
-          </div>
-
           <section className="logo-editor-preview-card" aria-label="로고 편집 캔버스">
             <div className="logo-editor-artboard">
-              <button className={editTarget === 'symbol' ? 'editor-uploaded-logo-target selected' : 'editor-uploaded-logo-target'} type="button" aria-label="선택한 로고 수정" onClick={() => selectEditorTarget('symbol')}>
-                <img className="editor-uploaded-logo" src={editorImageUrl} alt="선택한 AI 생성 로고" style={editorSvgPreviewUrl ? { objectFit: 'contain' } : { objectFit: 'contain', transform: `scale(${editorScale / 100}) rotate(${editorRotation}deg)`, opacity: editorOpacity / 100 }} />
-                {editTarget === 'symbol' && <span className="editor-selection-trash" aria-hidden="true" />}
-              </button>
-              {editTarget === 'symbol' && <span className="editor-rotate-handle" aria-hidden="true"><RefreshCw size={22} strokeWidth={1.8} /></span>}
-            </div>
-            <div className="logo-editor-preview-footer">
-              <div className="editor-history"><button type="button" aria-label="실행 취소"><ArrowLeft size={20} strokeWidth={1.8} /></button><button type="button" aria-label="다시 실행"><ArrowRight size={20} strokeWidth={1.8} /></button></div>
+              <div className="editor-uploaded-logo-target" role="button" tabIndex={0} aria-label="수정할 로고 요소 선택" aria-describedby="editor-move-help" onClick={(event) => { if (event.target === event.currentTarget) selectEditorTarget(''); else handleEditorSvgClick(event) }} onKeyDown={handleEditorCanvasKeyDown}>
+                {editorSvgPreviewSource ? <div className="editor-uploaded-logo-svg" aria-label="SVG 로고 편집 미리보기" onClick={handleEditorSvgClick} onPointerDown={handleEditorSvgPointerDown} onPointerMove={handleEditorSvgPointerMove} onPointerUp={handleEditorSvgPointerUp} onPointerCancel={handleEditorSvgPointerUp} dangerouslySetInnerHTML={{ __html: editorSvgPreviewSource }} /> : <img className="editor-uploaded-logo" src={editorImageUrl} alt="선택한 AI 생성 로고" style={editorSvgPreviewUrl ? { objectFit: 'contain' } : { objectFit: 'contain', transform: `scale(${editorScale / 100}) rotate(${editorRotation}deg)`, opacity: editorOpacity / 100 }} />}
+              </div>
+              <p id="editor-move-help" className="editor-move-hint">요소를 선택한 뒤 드래그하거나 방향키로 이동할 수 있어요.</p>
             </div>
           </section>
 
           <section className="logo-editor-panel" aria-labelledby="logo-editor-title">
             <h1 id="logo-editor-title" className="sr-only">로고 수정</h1>
-            <div className="logo-editor-tabs" role="tablist" aria-label="수정할 로고 요소">
-              <button className={editTarget === 'symbol' ? 'active' : ''} type="button" role="tab" aria-selected={editTarget === 'symbol'} onClick={() => selectEditorTarget('symbol')}>심볼</button>
-              <button className={editTarget === 'text' ? 'active' : ''} type="button" role="tab" aria-selected={editTarget === 'text'} onClick={() => selectEditorTarget('text')}>글자</button>
-              <button type="button" role="tab" aria-selected="false" disabled>배치 준비 중</button>
+            <div className="editor-control-section element-controls">
+              <div className="editor-control-heading"><strong>{editTarget ? '선택한 요소 설정' : '요소를 선택해 주세요'}</strong><button type="button" aria-label="선택한 요소 설정 초기화" disabled={!editTarget} onClick={resetEditorControls}><RefreshCw aria-hidden="true" size={14} strokeWidth={2} />초기화</button></div>
+              <label className="editor-slider-row"><span>크기</span><input disabled={!editTarget} type="range" min="70" max="140" value={editorScale} onChange={(event) => { const value = Number(event.target.value); setEditorScale(value); updateCurrentEditorDraft({ scale: value }); markEditorDirty() }} /></label>
+              <label className="editor-slider-row"><span>회전</span><input disabled={!editTarget} type="range" min="-180" max="180" value={editorRotation} onChange={(event) => { const value = Number(event.target.value); setEditorRotation(value); updateCurrentEditorDraft({ rotation: value }); markEditorDirty() }} /></label>
+              <label className="editor-slider-row"><span>투명도</span><input disabled={!editTarget} type="range" min="30" max="100" value={editorOpacity} onChange={(event) => { const value = Number(event.target.value); setEditorOpacity(value); updateCurrentEditorDraft({ opacity: value }); markEditorDirty() }} /></label>
+              {renderEditorColorControl()}
             </div>
-
-            {editTarget === 'text' ? (
-              <div className="editor-control-section text-controls">
-                <div className="editor-control-heading"><strong>글자 요소 설정</strong><button type="button" onClick={resetEditorControls}>초기화</button></div>
-                <label className="editor-slider-row"><span>크기</span><input type="range" min="70" max="140" value={editorScale} onChange={(event) => { setEditorScale(Number(event.target.value)); markEditorDirty() }} /><output>{editorScale}%</output></label>
-                <label className="editor-slider-row"><span>회전</span><input type="range" min="-180" max="180" value={editorRotation} onChange={(event) => { setEditorRotation(Number(event.target.value)); markEditorDirty() }} /><output>{editorRotation}°</output></label>
-                <label className="editor-slider-row"><span>투명도</span><input type="range" min="30" max="100" value={editorOpacity} onChange={(event) => { setEditorOpacity(Number(event.target.value)); markEditorDirty() }} /><output>{editorOpacity}%</output></label>
-                <label className="editor-color-row"><span>색상</span><select value={editorColor} onChange={(event) => { setEditorColor(event.target.value); setEditorColorChanged(true); markEditorDirty() }}><option value="#7B5CDF">●  #7B5CDF</option><option value="#E36BAE">●  #E36BAE</option><option value="#2D3047">●  #2D3047</option></select></label>
-                <p className="logo-editor-note">브랜드명과 글씨체 교체는 현재 지원하지 않으며, 생성된 글자 모양의 크기·회전·색상만 수정할 수 있어요.</p>
-              </div>
-            ) : (
-              <div className="editor-control-section symbol-controls">
-                <div className="editor-control-heading"><strong>심볼 설정</strong><button type="button" onClick={resetEditorControls}>초기화</button></div>
-                <label className="editor-slider-row"><span>크기</span><input type="range" min="70" max="140" value={editorScale} onChange={(event) => { setEditorScale(Number(event.target.value)); markEditorDirty() }} /><output>{editorScale}%</output></label>
-                <label className="editor-slider-row"><span>회전</span><input type="range" min="-180" max="180" value={editorRotation} onChange={(event) => { setEditorRotation(Number(event.target.value)); markEditorDirty() }} /><output>{editorRotation}°</output></label>
-                <label className="editor-slider-row"><span>투명도</span><input type="range" min="30" max="100" value={editorOpacity} onChange={(event) => { setEditorOpacity(Number(event.target.value)); markEditorDirty() }} /><output>{editorOpacity}%</output></label>
-                <label className="editor-color-row"><span>색상</span><select value={editorColor} onChange={(event) => { setEditorColor(event.target.value); setEditorColorChanged(true); markEditorDirty() }}><option value="#7B5CDF">●  #7B5CDF</option><option value="#E36BAE">●  #E36BAE</option><option value="#2D3047">●  #2D3047</option></select></label>
-              </div>
-            )}
           </section>
 
           <div className="logo-editor-actions">
-            <button className="logo-editor-apply" type="button" disabled={editorLoading || editorSaving || !editorSvgSource} onClick={() => void saveEditorChanges().then((saved) => { if (saved) setMode('result') })}>수정 적용하기</button>
+            <button className="logo-editor-apply" type="button" disabled={editorLoading || editorSaving || !editorSvgSource} onClick={() => void saveEditorChanges().then((saved) => { if (saved && !EDITOR_TEST_MODE) setMode('result') })}>{editorSaving ? '저장 중...' : '적용하기'}</button>
           </div>
           {editorLoading && <p className="project-error" role="status">SVG 로고를 불러오고 있어요.</p>}
           {editorError && <p className="project-error" role="alert">{editorError}</p>}
@@ -3607,16 +4020,62 @@ function CustomerApp() {
 
   const renderFinalEditModal = () => {
     if (!finalEditModal) return null
-    const title = finalEditModal === 'identity' ? '기본 정보를 수정하세요' : finalEditModal === 'values' ? '핵심 가치를 수정하세요' : finalEditModal === 'tone' ? '분위기와 색상을 수정하세요' : '로고 타입과 모양을 수정하세요'
+    const title = finalEditModal === 'identity' ? '기본 정보를 수정하세요' : finalEditModal === 'values' ? '핵심 가치를 수정하세요' : finalEditModal === 'tone' ? '분위기를 수정하세요' : finalEditModal === 'color' ? '색상을 수정하세요' : '로고 타입과 모양을 수정하세요'
     return <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFinalEditModal(null) }}>
       <section className="credit-modal final-edit-modal" role="dialog" aria-modal="true" aria-labelledby="final-edit-title">
         <button className="modal-close" type="button" aria-label="수정 닫기" onClick={() => setFinalEditModal(null)}><X size={22} /></button>
         <h2 id="final-edit-title">{title}</h2>
         {finalEditModal === 'identity' && (brandKind === 'ci' ? <label>회사명<input autoFocus value={finalEditDraft.companyName} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, companyName: event.target.value }))} /></label> : <><label>브랜드명<input autoFocus value={finalEditDraft.brandName} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, brandName: event.target.value }))} /></label><label>주요 고객<select value={finalEditDraft.targetAge} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, targetAge: event.target.value }))}>{targetAgeOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label></>)}
         {finalEditModal === 'values' && <label>{brandKind === 'ci' ? '회사 모토' : '핵심 가치'}<textarea autoFocus value={brandKind === 'ci' ? finalEditDraft.companyMotto : finalEditDraft.valuesText} onChange={(event) => setFinalEditDraft((draft) => brandKind === 'ci' ? { ...draft, companyMotto: event.target.value } : { ...draft, valuesText: event.target.value })} maxLength={300} /></label>}
-        {finalEditModal === 'tone' && <><label>분위기<select autoFocus value={finalEditDraft.tone} onChange={(event) => { const tone = event.target.value as ToneOption; const palette = toneOptions.find((option) => option.id === tone)?.colors ?? []; setFinalEditDraft((draft) => ({ ...draft, tone, colors: uniqueColors([...palette]) })) }}>{toneOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label><div className="final-edit-color-row">{finalEditDraft.colors.map((color, index) => <input key={`${color}-${index}`} type="color" value={color} onChange={(event) => setFinalEditDraft((draft) => { const colors = [...draft.colors]; colors[index] = event.target.value; return { ...draft, colors: uniqueColors(colors) } })} />)}{finalEditDraft.colors.length < 4 && <button type="button" onClick={() => setFinalEditDraft((draft) => ({ ...draft, colors: uniqueColors([...draft.colors, '#ffffff']) }))}>색상 추가</button>}</div></>}
+        {finalEditModal === 'tone' && <div className="final-tone-editor">
+          <div className="final-tone-mode-toggle" role="tablist" aria-label="분위기 입력 방식">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={finalEditToneMode === 'recommended'}
+              className={finalEditToneMode === 'recommended' ? 'active' : ''}
+              onClick={() => {
+                const tone = toneOptions.some((option) => option.id === finalEditDraft.tone)
+                  ? finalEditDraft.tone as ToneOption
+                  : toneSelection ?? toneOptions[0].id
+                setFinalEditToneMode('recommended')
+                setFinalEditDraft((draft) => ({ ...draft, tone, colors: [...getToneColors(tone)] }))
+              }}
+            >추천</button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={finalEditToneMode === 'direct'}
+              className={finalEditToneMode === 'direct' ? 'active' : ''}
+              onClick={() => {
+                setFinalEditToneMode('direct')
+                setFinalEditDraft((draft) => ({ ...draft, tone: toneMode === 'direct' ? directTone : '' }))
+              }}
+            >직접 입력</button>
+          </div>
+          {finalEditToneMode === 'recommended' ? (
+            <label>분위기<select autoFocus value={finalEditDraft.tone} onChange={(event) => { const tone = event.target.value as ToneOption; setFinalEditDraft((draft) => ({ ...draft, tone, colors: [...getToneColors(tone)] })) }}>{toneOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
+          ) : (
+            <label>분위기<input autoFocus type="text" value={finalEditDraft.tone} maxLength={100} placeholder="예: 차분하고 고급스러운, 대담하고 세련된" onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, tone: event.target.value }))} /></label>
+          )}
+        </div>}
+        {finalEditModal === 'color' && <div className="final-tone-color-field">
+          <span>색상</span>
+          <div className="final-edit-color-row">
+            <label className="final-tone-color-control" aria-label="선택한 색상 수정">
+              <span className="final-tone-color-swatch" style={{ background: finalEditDraft.colors[0] ?? '#9765e9' }} aria-hidden="true" />
+              <span className="final-tone-color-edit"><Pencil aria-hidden="true" size={13} strokeWidth={2} /> Edit</span>
+              <input
+                type="color"
+                value={finalEditDraft.colors[0] ?? '#9765e9'}
+                aria-label="선택 색상"
+                onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, colors: [event.target.value] }))}
+              />
+            </label>
+          </div>
+        </div>}
         {finalEditModal === 'style' && <><label>로고 타입<select autoFocus value={finalEditDraft.logoStyle} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, logoStyle: event.target.value as LogoStyle }))}>{logoStyleOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label><label>원하는 로고 모양<textarea value={finalEditDraft.logoShape} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, logoShape: event.target.value }))} maxLength={100} /></label></>}
-        <div className="credit-modal-actions"><button className="gradient-button" type="button" onClick={saveFinalEditModal}>저장하기</button><button className="modal-secondary-button" type="button" onClick={() => setFinalEditModal(null)}>취소</button></div>
+        <div className="credit-modal-actions"><button className="gradient-button" type="button" disabled={finalEditModal === 'tone' && finalEditToneMode === 'direct' && !finalEditDraft.tone.trim()} onClick={saveFinalEditModal}>저장하기</button><button className="modal-secondary-button" type="button" onClick={() => setFinalEditModal(null)}>취소</button></div>
       </section>
     </div>
   }
@@ -3641,7 +4100,7 @@ function CustomerApp() {
         <p>현재 남은 크레딧은 <strong>{remainingCredits}개</strong>예요.</p>
         <p>짧은 설문조사에 참여하시면 크레딧 <strong>1개</strong>를 더 드릴게요. 지금 의견을 남겨볼까요?</p>
         <div className="credit-modal-actions">
-          <button className="gradient-button" type="button" onClick={() => setCreditModal('survey')}>설문 참여하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+          <button className="gradient-button" type="button" onClick={openCreditSurvey}>설문 참여하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
           <button className="modal-secondary-button" type="button" onClick={remainingCredits > 0 ? downloadWithCredit : () => setCreditModal(null)}>{remainingCredits > 0 ? '크레딧 사용하고 다운로드' : '닫기'}</button>
         </div>
       </section>
@@ -3655,8 +4114,10 @@ function CustomerApp() {
         <div className="survey-modal-heading"><MessageSquare aria-hidden="true" size={24} strokeWidth={1.8} /><div><h2 id="credit-survey-title">잠깐만 의견을 들려주세요</h2><p>설문에 참여하시면 크레딧 1개를 드려요.</p></div></div>
         <form onSubmit={submitCreditSurvey}>
           <div className="modal-survey-block"><h3>결과에 얼마나 만족하시나요?</h3><div className="modal-rating-options" role="radiogroup" aria-label="결과 만족도"><button type="button" role="radio" aria-checked={surveyRating === 5} className={surveyRating === 5 ? 'modal-rating-choice like selected' : 'modal-rating-choice like'} onClick={() => setSurveyRating(5)}><ThumbsUp aria-hidden="true" size={24} strokeWidth={1.8} fill={surveyRating === 5 ? 'currentColor' : 'none'} /><span>좋아요</span></button><button type="button" role="radio" aria-checked={surveyRating === 1} className={surveyRating === 1 ? 'modal-rating-choice dislike selected' : 'modal-rating-choice dislike'} onClick={() => setSurveyRating(1)}><ThumbsDown aria-hidden="true" size={24} strokeWidth={1.8} fill={surveyRating === 1 ? 'currentColor' : 'none'} /><span>싫어요</span></button></div></div>
-          <div className="modal-survey-block"><h3>어떤 부분이 더 좋아졌으면 하나요?</h3><div className="modal-improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'modal-improvement-option selected' : 'modal-improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div></div>
-          <div className="modal-survey-block"><h3>추가 의견</h3><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /></div>
+          {surveyRating === 1 && <div className="survey-followup" aria-live="polite"><div className="survey-followup-inner">
+            <div className="modal-survey-block"><h3>어떤 부분이 더 좋아졌으면 하나요?</h3><div className="modal-improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'modal-improvement-option selected' : 'modal-improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div></div>
+            <div className="modal-survey-block"><h3>추가 의견</h3><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /></div>
+          </div></div>}
           <button className="gradient-button modal-submit" type="submit">의견 보내고 크레딧 받기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
         </form>
       </section>
@@ -3786,7 +4247,7 @@ function CustomerApp() {
         <header className="login-header">
           <button className="login-back" type="button" onClick={() => setMode(loginReturnMode)}>‹ <span>{loginReturnMode === 'hero' ? '랜딩' : '홈'}</span></button>
         </header>
-      ) : mode === 'onboarding' || mode === 'industry' || mode === 'brand-details' || mode === 'company-details' || mode === 'hero' || mode === 'choice' || mode === 'tone' || mode === 'style' || mode === 'final' || mode === 'loading' || mode === 'trademark-loading' || mode === 'trademark-selection' || mode === 'trademark-result' || mode === 'result' || mode === 'brand-kit' || mode === 'edit' || mode === 'mypage' || mode === 'survey' ? null : (
+      ) : mode === 'logo-intro' || mode === 'onboarding' || mode === 'industry' || mode === 'brand-details' || mode === 'company-details' || mode === 'hero' || mode === 'choice' || mode === 'tone' || mode === 'style' || mode === 'final' || mode === 'loading' || mode === 'trademark-loading' || mode === 'trademark-selection' || mode === 'trademark-result' || mode === 'result' || mode === 'brand-kit' || mode === 'edit' || mode === 'mypage' || mode === 'survey' ? null : (
         <header className="main-header">
           <a className="main-brand" href="#home" aria-label="GenMark AI 홈" onClick={() => setMode('home')}>
             <BrandLogo />
@@ -3804,26 +4265,26 @@ function CustomerApp() {
         </header>
       )}
 
-      {mode === 'login' ? renderLoginScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'industry' ? renderIndustrySelectionScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'company-details' ? renderCompanyDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'trademark-result' ? renderTrademarkResultScreenRedesign() : mode === 'result' ? renderLogoResultScreen() : mode === 'brand-kit' ? renderBrandKitSelectionScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'mypage' ? renderMypageScreen() : mode === 'survey' ? renderSurveyScreen() : mode === 'hero' ? (
+      {mode === 'login' ? renderLoginScreen() : mode === 'logo-intro' ? renderLogoCreationIntroScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'industry' ? renderIndustrySelectionScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'company-details' ? renderCompanyDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'trademark-result' ? renderTrademarkResultScreenRedesign() : mode === 'result' ? renderLogoResultScreen() : mode === 'brand-kit' ? renderBrandKitSelectionScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'mypage' ? renderMypageScreen() : mode === 'survey' ? renderSurveyScreen() : mode === 'hero' ? (
         renderAnimatedGalleryHeroScreen()
       ) : mode === 'home' ? (
         <main id="home" className="main-home">
           {renderFeaturedHero()}
 
           <section className="curation-section" aria-labelledby="curation-title">
+            <div className="section-heading">
+              <h2 id="curation-title">큐레이션 갤러리</h2>
+              <div className="gallery-controls">
+                <button type="button" aria-label="이전 로고 묶음 보기" onClick={() => scrollGallery(-1)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <button type="button" aria-label="다음 로고 묶음 보기" onClick={() => scrollGallery(1)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+              </div>
+            </div>
             <div className="filter-row" role="tablist" aria-label="로고 스타일 필터">
               {categories.map((category) => (
                 <button key={category} type="button" className={activeCategory === category ? 'filter-button active' : 'filter-button'} onClick={() => setActiveCategory(category)}>
                   {category}
                 </button>
               ))}
-            </div>
-            <div className="section-heading">
-              <h2 id="curation-title">큐레이션 갤러리</h2>
-              <div className="gallery-controls">
-                <button type="button" aria-label="이전 로고 보기" onClick={() => scrollGallery(-340)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-                <button type="button" aria-label="다음 로고 보기" onClick={() => scrollGallery(340)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-              </div>
             </div>
             <div
               className="gallery-track"
@@ -3858,8 +4319,8 @@ function CustomerApp() {
             <div className="section-heading">
               <h2 id="product-gallery-title">제품 썸네일 갤러리</h2>
               <div className="gallery-controls">
-                <button type="button" aria-label="이전 제품 보기" onClick={() => scrollProductGallery(-340)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-                <button type="button" aria-label="다음 제품 보기" onClick={() => scrollProductGallery(340)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <button type="button" aria-label="이전 제품 묶음 보기" onClick={() => scrollProductGallery(-1)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <button type="button" aria-label="다음 제품 묶음 보기" onClick={() => scrollProductGallery(1)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
               </div>
             </div>
             <div
@@ -3890,8 +4351,8 @@ function CustomerApp() {
             <div className="section-heading">
               <h2 id="business-card-gallery-title">명함 갤러리</h2>
               <div className="gallery-controls">
-                <button type="button" aria-label="이전 명함 보기" onClick={() => scrollBusinessCardGallery(-340)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-                <button type="button" aria-label="다음 명함 보기" onClick={() => scrollBusinessCardGallery(340)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <button type="button" aria-label="이전 명함 묶음 보기" onClick={() => scrollBusinessCardGallery(-1)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <button type="button" aria-label="다음 명함 묶음 보기" onClick={() => scrollBusinessCardGallery(1)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
               </div>
             </div>
             <div
@@ -3920,11 +4381,11 @@ function CustomerApp() {
         </main>
       ) : null}
 
-      {!['loading', 'trademark-loading', 'hero', 'login'].includes(mode) && <nav className="bottom-nav" aria-label="주요 메뉴">
+      {!['loading', 'trademark-loading', 'hero', 'login', 'logo-intro'].includes(mode) && <nav className="bottom-nav" aria-label="주요 메뉴">
         <button className={mode === 'home' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setMode('home')}>
           <House className="nav-icon" aria-hidden="true" size={26} strokeWidth={1.8} /><span>홈</span>
         </button>
-        <button className="nav-item nav-item-create" type="button" onClick={startOnboarding} disabled={authRestoring}>
+        <button className="nav-item nav-item-create" type="button" onClick={openLogoCreationIntro} disabled={authRestoring}>
           <Sparkles className="nav-icon" aria-hidden="true" size={26} strokeWidth={1.8} /><span>로고 생성</span>
         </button>
         <button className={mode === 'mypage' || mode === 'survey' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setMode('mypage')}>

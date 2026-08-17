@@ -1,3 +1,5 @@
+import { runAuthPopup } from './authPopup'
+
 declare global {
   interface Window {
     Kakao?: {
@@ -50,10 +52,10 @@ export async function getKakaoAccessToken(): Promise<string> {
     Kakao.init(key)
   }
 
-  return new Promise((resolve, reject) => {
+  return runAuthPopup(({ success, fail }) => {
     Kakao.Auth.login({
-      success: (authObj) => resolve(authObj.access_token),
-      fail: (error) => reject(error),
+      success: (authObj) => success(authObj.access_token),
+      fail,
     })
-  })
+  }, '카카오')
 }

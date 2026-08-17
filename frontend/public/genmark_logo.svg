@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#35E6FF"/>
+      <stop offset="42%" stop-color="#1677FF"/>
+      <stop offset="76%" stop-color="#3144F5"/>
+      <stop offset="100%" stop-color="#9B4DFF"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#132B78"/>
+      <stop offset="100%" stop-color="#09132F"/>
+    </linearGradient>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#0C2B70" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#FFFFFF"/>
+
+  <g transform="translate(800 390)" filter="url(#shadow)">
+    <path d="M-245,-15 C-240,-185 -105,-285 45,-275 C150,-268 225,-213 270,-135 L180,-70 C145,-118 95,-150 35,-154 C-63,-162 -140,-96 -141,-5 C-142,82 -72,145 15,145 C72,145 119,123 151,87 L70,16 L300,16 L300,246 L202,158 C148,226 62,268 -39,260 C-174,249 -266,143 -245,-15 Z" fill="url(#g1)"/>
+    <path d="M-141,-5 C-140,-96 -63,-162 35,-154 C93,-149 141,-119 176,-73 L104,-22 C84,-47 55,-62 19,-65 C-31,-69 -72,-35 -72,10 C-72,55 -35,88 15,88 C49,88 79,73 99,50 L151,87 C119,123 72,145 15,145 C-72,145 -142,82 -141,-5 Z" fill="url(#g2)" opacity="0.96"/>
+    <path d="M-219,-115 C-155,-225 -12,-277 121,-226 C173,-206 218,-174 251,-130 L183,-81 C151,-117 111,-141 64,-151 C-36,-173 -135,-129 -186,-45 Z" fill="#7CEEFF" opacity="0.42"/>
+    <path d="M322,-124 C337,-88 356,-69 392,-54 C356,-39 337,-20 322,16 C307,-20 288,-39 252,-54 C288,-69 307,-88 322,-124 Z" fill="url(#g1)"/>
+  </g>
+
+  <g transform="translate(800 755)">
+    <text x="-265" y="0" font-family="Inter, Arial, Helvetica, sans-serif" font-size="118" font-weight="800" letter-spacing="-6" fill="#0C1838">Gen</text>
+    <text x="-65" y="0" font-family="Inter, Arial, Helvetica, sans-serif" font-size="118" font-weight="800" letter-spacing="-6" fill="url(#g1)">Mark</text>
+  </g>
+</svg>
