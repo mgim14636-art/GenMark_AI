@@ -1,3 +1,5 @@
+import { runAuthPopup } from './authPopup'
+
 declare global {
   interface Window {
     google?: {
@@ -43,8 +45,6 @@ const googleClientId = import.meta.env.GOOGLE_CLIENT_ID || import.meta.env.VITE_
 // per call (re-initializing resets Google's internal config).
 let currentResolve: ((idToken: string) => void) | null = null
 let currentReject: ((error: unknown) => void) | null = null
-
-const RESPONSE_TIMEOUT_MS = 60_000
 
 function settleCurrent(idToken: string | null, error?: unknown) {
   if (idToken !== null) {
@@ -129,14 +129,20 @@ export async function getGoogleIdToken(): Promise<string> {
   const button = createHiddenButton()
   const realButton = await waitForRealButton(button)
 
-  return new Promise((resolve, reject) => {
-    currentResolve = resolve
-    currentReject = reject
-    if (!realButton) {
-      settleCurrent(null, new Error('Google 로그인 버튼을 준비하지 못했어요.'))
-      return
-    }
-    realButton.click()
-    setTimeout(() => settleCurrent(null), RESPONSE_TIMEOUT_MS)
-  })
+  try {
+    return await runAuthPopup<string>(({ success, fail }) => {
+      currentResolve = success
+      currentReject = fail
+      if (!realButton) {
+        settleCurrent(null, new Error('Google 로그인 버튼을 준비하지 못했어요.'))
+        return
+      }
+      realButton.click()
+    }, 'Google')
+  } finally {
+    currentResolve = null
+    currentReject = null
+    currentHiddenButton?.remove()
+    currentHiddenButton = null
+  }
 }

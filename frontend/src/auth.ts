@@ -1,5 +1,6 @@
 import { getGoogleIdToken } from './lib/googleAuth'
 import { getKakaoAccessToken } from './lib/kakaoAuth'
+import { AuthPopupError } from './lib/authPopup'
 import { tokenStorage } from './lib/tokenStorage'
 
 export type AuthProvider = 'kakao' | 'google'
@@ -116,6 +117,9 @@ const request = async <T>(path: string, init: RequestInit = {}, retry = true): P
 
 const normalizeProviderError = (error: unknown) => {
   if (error instanceof AuthError) return error
+  if (error instanceof AuthPopupError) {
+    return new AuthError(error.message, error.code)
+  }
   const message = error instanceof Error ? error.message : '소셜 로그인에 실패했습니다.'
   return new AuthError(message, 'PROVIDER_LOGIN_FAILED')
 }
