@@ -152,7 +152,7 @@ const featuredHeroSlides = [
   { id: 'dokdo', src: '/home/dokdo.svg', alt: '독도 로고 이미지' },
   { id: 'musclegym', src: '/home/musclegym.svg', alt: '머슬짐 로고 이미지' },
   { id: 'soomin', src: '/home/soomin.svg', alt: '수민 로고 이미지' },
-  { id: 'petal', src: '/home/petal-a.svg', alt: '꽃잎 로고 이미지' },
+  { id: 'hip', src: '/home/hip-logo.svg', alt: '힙 로고 이미지' },
 ]
 
 const galleryItems = [
