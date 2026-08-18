@@ -48,6 +48,9 @@ services:
       MOTIF_TRANSLATION_MODEL: ${MOTIF_TRANSLATION_MODEL:-upstage/solar-pro4}
       MOTIF_TRANSLATION_TIMEOUT_SECONDS: ${MOTIF_TRANSLATION_TIMEOUT_SECONDS:-5}
       KIPRIS_API_KEY: ${KIPRIS_API_KEY:-}
+      # The local bundle contains metadata/embeddings but not the full KIPRIS image archive.
+      # Keep similarity search available while those optional source images are absent.
+      STRICT_IMAGE_CHECK: ${STRICT_IMAGE_CHECK:-false}
       EMBEDDINGS_PATH: /app/data/faiss/embeddings.npy
       IDS_PATH: /app/data/faiss/ids.csv
       DATA_MANIFEST_PATH: /app/data/faiss/data_manifest.json

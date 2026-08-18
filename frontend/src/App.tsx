@@ -72,6 +72,23 @@ const uniqueColors = (colors: string[]) => Array.from(new Map(
   colors.filter(Boolean).map((color) => [color.trim().toLowerCase(), color.trim()]),
 ).values()).slice(0, 4)
 
+const formatBusinessPhone = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (!digits) return ''
+  if (/^1\d{3}/.test(digits)) {
+    if (digits.length <= 4) return digits
+    return `${digits.slice(0, 4)}-${digits.slice(4)}`
+  }
+  if (digits.startsWith('02')) {
+    if (digits.length <= 2) return digits
+    if (digits.length <= 6) return `${digits.slice(0, 2)}-${digits.slice(2)}`
+    return `${digits.slice(0, 2)}-${digits.slice(2, digits.length - 4)}-${digits.slice(-4)}`
+  }
+  if (digits.length <= 3) return digits
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`
+  return `${digits.slice(0, 3)}-${digits.slice(3, digits.length - 4)}-${digits.slice(-4)}`
+}
+
 const categories = ['전체', '심볼마크', '워드마크', '콤비네이션', '레터마크']
 
 const toneOptions: Array<{ id: ToneOption; label: string; description: string; colors: [string] }> = [
@@ -549,6 +566,7 @@ function CustomerApp() {
   const [finalEditModal, setFinalEditModal] = useState<FinalEditKind | null>(null)
   const [regenerationConfirmOpen, setRegenerationConfirmOpen] = useState(false)
   const [regenerationCreditsLoading, setRegenerationCreditsLoading] = useState(false)
+  const resultHydrationProjectRef = useRef<string | null>(null)
   const [finalEditToneMode, setFinalEditToneMode] = useState<FinalToneMode>('recommended')
   const [finalEditDraft, setFinalEditDraft] = useState({ companyName: '', companyMotto: '', brandName: '', targetAge: '', valuesText: '', tone: '', colors: [] as string[], logoStyle: '' as LogoStyle | '', logoShape: '' })
   const activeModalRef = useRef<HTMLDivElement>(null)
@@ -1230,6 +1248,17 @@ function CustomerApp() {
   }
 
   /** 이어쓸 만한 초안이 있을 때, 곧장 이어쓰지 않고 "이어서 작성하시겠습니까?" 확인창부터 보여준다. */
+  // 결과 화면을 URL로 바로 열거나 새로고침한 경우에도 서버에 저장된
+  // 프로젝트 조건을 먼저 복원해 재생성 전후의 요약 정보가 비어 보이지 않게 한다.
+  useEffect(() => {
+    if (!loggedIn || mode !== 'result' || !projectId || resultHydrationProjectRef.current === projectId) return
+
+    resultHydrationProjectRef.current = projectId
+    void restoreProjectState(projectId).catch(() => {
+      if (resultHydrationProjectRef.current === projectId) resultHydrationProjectRef.current = null
+    })
+  }, [loggedIn, mode, projectId])
+
   const presentResumePrompt = async (resumeId: string, fallback: () => void, options: { skipSilentResume?: boolean } = {}) => {
     try {
       const project = await projectsApi.get(resumeId)
@@ -1765,6 +1794,10 @@ function CustomerApp() {
 
   const startLogoGeneration = async (analyzeTrademark = trademarkAnalysisRequested) => {
     if (generationLoading) return
+    // 결과 화면에서 시작한 재생성은 현재 폼 상태로 프로젝트를 다시 저장하지 않는다.
+    // 새로고침 직후에는 폼 상태가 아직 비어 있을 수 있으므로 서버 프로젝트를
+    // 먼저 복원한 뒤 같은 프로젝트에 새 generation만 추가한다.
+    const preserveExistingProject = mode === 'result' || (mode === 'loading' && logoCandidates.length > 0)
     setGenerationLoading(true)
     setGenerationError('')
     setAnalysisError('')
@@ -1772,7 +1805,21 @@ function CustomerApp() {
     setTrademarkAnalysisSkipped(!analyzeTrademark)
     setMode('loading')
     try {
-      const nextProjectId = await ensureProject('final-review')
+      let nextProjectId = projectId ?? window.localStorage.getItem('genmark-project-id')
+      if (preserveExistingProject) {
+        if (!nextProjectId) {
+          const session = await restoreSession()
+          nextProjectId = session?.resumeProjectId ?? null
+        }
+        if (!nextProjectId) throw new Error('기존 프로젝트를 찾을 수 없습니다. 결과 화면을 다시 불러온 뒤 시도해주세요.')
+        if (!projectId) setProjectId(nextProjectId)
+        const needsProjectHydration = !brandKind || (brandKind === 'ci'
+          ? !companyName.trim() && !companyMotto.trim()
+          : !brandName.trim() && coreValues.length === 0 && !brandValueDescription.trim())
+        if (needsProjectHydration) await restoreProjectState(nextProjectId)
+      } else {
+        nextProjectId = await ensureProject('final-review')
+      }
       if (!nextProjectId) throw new Error('프로젝트 정보를 먼저 입력해주세요.')
       const generation = await projectsApi.createGeneration(nextProjectId, crypto.randomUUID())
       setGenerationId(generation.id)
@@ -1971,7 +2018,7 @@ function CustomerApp() {
       name: businessCardInfo.name.trim(),
       title: businessCardInfo.title?.trim() || undefined,
       company: businessCardInfo.company?.trim() || undefined,
-      phone: businessCardInfo.phone?.trim() || undefined,
+      phone: formatBusinessPhone(businessCardInfo.phone ?? '') || undefined,
       email: businessCardInfo.email?.trim() || undefined,
       address: businessCardInfo.address?.trim() || undefined,
     }
@@ -3418,7 +3465,7 @@ function CustomerApp() {
           </div>
 
           <div className="logo-result-utility-grid">
-            <button className="utility-primary" type="button" onClick={openRegenerationConfirm}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />조건을 바꿔<br />다시 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+            <button className="utility-primary" type="button" onClick={openRegenerationConfirm}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />재 생성<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
             <button className="utility-secondary" type="button" onClick={openBrandKitSelection}><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />{brandKit?.status === 'SUCCEEDED' ? '브랜드 키트 확인하기' : '브랜드 키트 만들기'}<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
           </div>
           {brandKit && <p className="project-error" role="status">브랜드 키트 상태: {brandKit.status === 'QUEUED' || brandKit.status === 'RUNNING' ? '생성 중' : brandKit.status === 'SUCCEEDED' ? '완료' : '실패'}</p>}
@@ -3429,9 +3476,9 @@ function CustomerApp() {
   }
 
   const renderBrandKitSelectionScreen = () => {
-    const options: Array<{ type: BrandKit['kitType']; title: string; caption: string; description: string; icon: typeof CreditCard }> = [
-      { type: 'BUSINESS_CARD', title: '명함', caption: '첫 인사를 더 또렷하게', description: '기업의 인상을 담은 명함 앞·뒷면 시안을 만들어요.', icon: CreditCard },
-      { type: 'THUMBNAIL', title: '제품 썸네일', caption: '제품을 한눈에 보여주기', description: '상품 페이지와 SNS에 쓸 썸네일 시안을 만들어요.', icon: ImageIcon },
+    const options: Array<{ type: BrandKit['kitType']; title: string; caption: string; description: string; image: string }> = [
+      { type: 'BUSINESS_CARD', title: '명함', caption: '첫 인사를 더 또렷하게', description: '기업의 인상을 담은 명함 앞·뒷면 시안을 만들어요.', image: '/brand-kit-examples/zenith.png' },
+      { type: 'THUMBNAIL', title: '제품 썸네일', caption: '제품을 한눈에 보여주기', description: '상품 페이지와 SNS에 쓸 썸네일 시안을 만들어요.', image: '/brand-kit-examples/solen.png' },
     ]
     const selectedOption = options.find((option) => option.type === brandKitType)
     const completedStorageKeys = brandKit?.status === 'SUCCEEDED'
@@ -3505,7 +3552,6 @@ function CustomerApp() {
           ) : (
             <div className="brand-kit-choice-grid" role="radiogroup" aria-label="브랜드 키트 종류 선택">
               {options.map((option) => {
-                const Icon = option.icon
                 const selected = option.type === brandKitType
                 return (
                   <button
@@ -3516,7 +3562,7 @@ function CustomerApp() {
                     aria-checked={selected}
                     onClick={() => setBrandKitType(option.type)}
                   >
-                    <span className="brand-kit-choice-visual" aria-hidden="true"><Icon size={40} strokeWidth={1.6} /></span>
+                    <span className="brand-kit-choice-visual" aria-hidden="true"><img className="brand-kit-choice-image" src={option.image} alt="" /></span>
                     <span className="brand-kit-choice-copy"><strong>{option.title}</strong><em>{option.caption}</em><small>{option.description}</small></span>
                     <span className="brand-kit-choice-radio" aria-hidden="true">{selected ? <Check size={18} strokeWidth={2.6} /> : null}</span>
                   </button>
@@ -3691,6 +3737,7 @@ function CustomerApp() {
           <section className="logo-editor-preview-card" aria-label="로고 편집 캔버스">
             <div className="logo-editor-artboard">
               <div className="editor-uploaded-logo-target" role="button" tabIndex={0} aria-label="수정할 로고 요소 선택" aria-describedby="editor-move-help" onClick={(event) => { if (event.target === event.currentTarget) selectEditorTarget(''); else handleEditorSvgClick(event) }} onKeyDown={handleEditorCanvasKeyDown}>
+                <span className="editor-safe-area-guide" aria-hidden="true" />
                 {editorSvgPreviewSource ? <div className="editor-uploaded-logo-svg" aria-label="SVG 로고 편집 미리보기" onClick={handleEditorSvgClick} onPointerDown={handleEditorSvgPointerDown} onPointerMove={handleEditorSvgPointerMove} onPointerUp={handleEditorSvgPointerUp} onPointerCancel={handleEditorSvgPointerUp} dangerouslySetInnerHTML={{ __html: editorSvgPreviewSource }} /> : <img className="editor-uploaded-logo" src={editorImageUrl} alt="선택한 AI 생성 로고" style={editorSvgPreviewUrl ? { objectFit: 'contain' } : { objectFit: 'contain', transform: `scale(${editorScale / 100}) rotate(${editorRotation}deg)`, opacity: editorOpacity / 100 }} />}
               </div>
               <p id="editor-move-help" className="editor-move-hint">요소를 선택한 뒤 드래그하거나 방향키로 이동할 수 있어요.</p>
@@ -4134,7 +4181,8 @@ function CustomerApp() {
   }
 
   const updateBusinessCardInfo = (field: keyof BusinessCardInfoInput, value: string) => {
-    setBusinessCardInfo((current) => ({ ...current, [field]: value }))
+    const nextValue = field === 'phone' ? formatBusinessPhone(value) : value
+    setBusinessCardInfo((current) => ({ ...current, [field]: nextValue }))
     if (field === 'name' || field === 'email') {
       setBusinessCardInfoErrors((current) => ({ ...current, [field]: undefined }))
     }
@@ -4184,7 +4232,7 @@ function CustomerApp() {
             </label>
             <label className="business-card-field">
               <span>전화번호</span>
-              <input type="tel" maxLength={40} autoComplete="tel" value={businessCardInfo.phone ?? ''} onChange={(event) => updateBusinessCardInfo('phone', event.target.value)} placeholder="010-1234-5678" />
+              <input type="tel" inputMode="numeric" maxLength={13} autoComplete="tel" value={businessCardInfo.phone ?? ''} onChange={(event) => updateBusinessCardInfo('phone', event.target.value)} placeholder="010-1234-5678" />
             </label>
             <label className="business-card-field">
               <span>이메일</span>

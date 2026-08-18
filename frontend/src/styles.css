@@ -67,8 +67,17 @@
 .editor-symbol-target.selected::before, .editor-symbol-target.selected::after { position: absolute; width: 14px; height: 14px; border: 1.5px solid #a984ff; border-radius: 50%; background: #fff; content: ''; }
 .editor-symbol-target.selected::before { top: -8px; left: -8px; box-shadow: 226px 0 0 -1px #fff, 226px 0 0 0 #a984ff; }
 .editor-symbol-target.selected::after { bottom: -8px; left: -8px; box-shadow: 226px 0 0 -1px #fff, 226px 0 0 0 #a984ff; }
-.editor-uploaded-logo-target { position: relative; display: grid; width: 286px; height: 286px; place-items: center; overflow: hidden; border: 1.5px solid transparent; background: #fff; cursor: pointer; }
-.editor-uploaded-logo-target.selected { border-color: #a984ff; }
+.editor-uploaded-logo-target { position: relative; display: grid; width: 286px; height: 286px; place-items: center; overflow: hidden; border: 0; box-sizing: border-box; background: #fff; cursor: pointer; }
+.editor-uploaded-logo-target.selected { border-color: transparent; }
+.editor-safe-area-guide { position: absolute; z-index: 3; inset: 11px; pointer-events: none; opacity: .88; background:
+    linear-gradient(90deg, #9a7bd8, #d091bd) left top / 28px 2px no-repeat,
+    linear-gradient(180deg, #9a7bd8, #d091bd) left top / 2px 28px no-repeat,
+    linear-gradient(90deg, #d091bd, #9a7bd8) right top / 28px 2px no-repeat,
+    linear-gradient(180deg, #d091bd, #9a7bd8) right top / 2px 28px no-repeat,
+    linear-gradient(90deg, #9a7bd8, #d091bd) left bottom / 28px 2px no-repeat,
+    linear-gradient(0deg, #9a7bd8, #d091bd) left bottom / 2px 28px no-repeat,
+    linear-gradient(90deg, #d091bd, #9a7bd8) right bottom / 28px 2px no-repeat,
+    linear-gradient(0deg, #d091bd, #9a7bd8) right bottom / 2px 28px no-repeat; }
 .editor-uploaded-logo-target.selected::before, .editor-uploaded-logo-target.selected::after { position: absolute; z-index: 2; width: 14px; height: 14px; border: 1.5px solid #a984ff; border-radius: 50%; background: #fff; content: ''; }
 .editor-uploaded-logo-target.selected::before { top: -8px; left: -8px; box-shadow: 286px 0 0 -1px #fff, 286px 0 0 0 #a984ff; }
 .editor-uploaded-logo-target.selected::after { bottom: -8px; left: -8px; box-shadow: 286px 0 0 -1px #fff, 286px 0 0 0 #a984ff; }
@@ -139,7 +148,7 @@
 .editor-color-row { margin-top: 4px; }
 .editor-color-control { display: grid; gap: 10px; grid-column: 1 / -1; }
 .editor-color-control .editor-color-row { grid-template-columns: 48px minmax(0, 1fr); }
-.editor-color-display { display: flex; grid-column: 2; flex-direction: column; align-items: flex-start; gap: 7px; }
+.editor-color-display { display: flex; grid-column: 2; flex-direction: column; align-items: center; gap: 7px; }
 .editor-color-display-swatch { display: block; width: 50px; height: 50px; border: 1px solid rgb(73 56 119 / .22); border-radius: 50%; box-shadow: inset 0 1px 3px rgb(255 255 255 / .72), 0 3px 9px rgb(47 34 75 / .14); }
 .editor-color-edit { display: inline-flex; position: relative; min-height: 34px; align-items: center; gap: 4px; border: 0; border-radius: 999px; padding: 5px 10px; color: #7651c6; background: #f7f1ff; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; transition: color 180ms ease, background 180ms ease, transform 180ms ease; }
 .editor-color-edit:hover,
@@ -389,10 +398,14 @@
 .brand-kit-choice:active { transform: translateY(-1px) scale(.99); }
 .brand-kit-choice.selected { border-color: #9e62ed; background: linear-gradient(155deg, #fff 0%, #fbf6ff 100%); box-shadow: 0 16px 35px rgb(126 73 211 / .17); }
 .brand-kit-choice.selected::before { border-color: rgb(245 129 196 / .62); }
-.brand-kit-choice-visual { display: grid; place-items: center; position: relative; margin: 20px 20px 0; border-radius: 18px; color: #8d5aea; background: linear-gradient(135deg, #eee3ff, #ffe8f4); }
+.brand-kit-choice-visual { display: grid; place-items: center; position: relative; margin: 20px 20px 0; overflow: hidden; border-radius: 18px; color: #8d5aea; background: linear-gradient(135deg, #eee3ff, #ffe8f4); }
 .brand-kit-choice:nth-child(2) .brand-kit-choice-visual { color: #d460ae; background: linear-gradient(135deg, #f3e5ff, #fce9ef); }
 .brand-kit-choice-visual::after { position: absolute; width: 70px; height: 70px; border: 1px solid rgb(255 255 255 / .8); border-radius: 22px; content: ''; transform: rotate(-11deg); }
 .brand-kit-choice-visual svg { position: relative; z-index: 1; }
+.brand-kit-choice-visual::after { display: none; }
+.brand-kit-choice-image { display: block; position: absolute; inset: 0; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; object-position: center; }
+.brand-kit-choice:first-child .brand-kit-choice-image { object-position: 50% 54%; }
+.brand-kit-choice:nth-child(2) .brand-kit-choice-image { object-position: 50% 53%; }
 .brand-kit-choice-copy { display: grid; align-content: start; gap: 5px; padding: 21px 24px 24px; }
 .brand-kit-choice-copy strong { color: #202943; font-size: clamp(23px, 2.8vw, 29px); letter-spacing: -.09em; }
 .brand-kit-choice-copy em { color: #9156df; font-size: 16px; font-style: normal; font-weight: 700; letter-spacing: -.07em; }
@@ -1325,6 +1338,13 @@
 .logo-loading-steps.step-progress-4::after { height: 516px; }
 .logo-loading-steps.step-progress-5::after { height: 645px; }
 
+/* Keep the loading cards independent; remove the connecting progress rails. */
+.logo-loading-steps::before,
+.logo-loading-steps::after {
+  display: none;
+  content: none;
+}
+
 .logo-loading-step {
   display: grid;
   position: relative;
@@ -1450,7 +1470,7 @@
 .logo-loading-time-card { gap: 22px; }
 .logo-loading-time-card > div { flex: 1; }
 .logo-loading-time-card p {
-  margin: 0 0 17px;
+  margin: 0;
   color: #303544;
   font-size: 22px;
   font-weight: 600;
@@ -1458,10 +1478,12 @@
 }
 
 .logo-loading-progress {
-  height: 12px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #ede9fb;
+  display: none;
+}
+
+.logo-loading-time-card,
+.logo-loading-save-card {
+  display: none;
 }
 
 .logo-loading-progress span {
@@ -1582,7 +1604,7 @@
   .logo-loading-time-card,
   .logo-loading-save-card { min-height: 92px; border-radius: 18px; padding: 15px 16px; }
   .logo-loading-time-card { gap: 10px; }
-  .logo-loading-time-card p { margin-bottom: 12px; font-size: 17px; }
+  .logo-loading-time-card p { margin-bottom: 0; font-size: 17px; }
   .logo-loading-side-icon { flex-basis: 40px; width: 40px; height: 40px; }
   .logo-loading-save-card { gap: 9px; }
   .logo-loading-save-icon { flex-basis: 40px; width: 40px; height: 48px; }
@@ -5499,6 +5521,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 }
 
 .trademark-progress-line {
+  display: none;
   position: absolute;
   top: 50%;
   right: 10px;
@@ -10331,8 +10354,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .tone-option-shell .tone-custom-trigger {
   display: inline-flex;
   position: absolute;
-  top: 88px;
-  left: 28px;
+  top: 50%;
+  left: 50px;
   z-index: 2;
   align-items: center;
   justify-content: center;
@@ -10348,7 +10371,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   box-shadow: none;
   font-size: 11px;
   font-weight: 700;
-  transform: none;
+  transform: translate(-50%, 34px);
   transition: color 180ms ease, background 180ms ease, transform 180ms ease;
 }
 
@@ -10356,7 +10379,19 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .tone-option-shell .tone-custom-trigger[aria-expanded='true'] {
   color: #fff;
   background: #8c59df;
-  transform: translateY(-1px);
+  transform: translate(-50%, 32px);
+}
+
+@media (max-width: 768px) {
+  .tone-option-shell .tone-custom-trigger {
+    left: 34px;
+    transform: translate(-50%, 26px);
+  }
+
+  .tone-option-shell .tone-custom-trigger:hover,
+  .tone-option-shell .tone-custom-trigger[aria-expanded='true'] {
+    transform: translate(-50%, 24px);
+  }
 }
 
 .tone-direct-swatches {
@@ -10392,8 +10427,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 @media (max-width: 480px) {
   .tone-option-shell .tone-custom-trigger {
-    top: 75px;
-    left: 27px;
+    left: 34px;
   }
 
   .tone-direct-swatches {
