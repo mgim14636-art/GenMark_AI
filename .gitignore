@@ -12,6 +12,11 @@ Thumbs.db
 .env
 .env.local
 *.env
+.env_prod*
+
+# JavaScript dependencies
+node_modules/
+frontend/dist/
 
 # Java / Maven
 backend/target/
