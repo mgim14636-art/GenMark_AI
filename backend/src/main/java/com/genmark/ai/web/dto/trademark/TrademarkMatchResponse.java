@@ -7,5 +7,6 @@ public record TrademarkMatchResponse(
         String category,
         int similarity,
         String imagePath,
-        String imageUrl
+        String imageUrl,
+        String note
 ) {}

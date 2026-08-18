@@ -19,6 +19,7 @@ class GenerationRequest(BaseModel):
     brand_name: Optional[str] = None
     company_name: Optional[str] = None
     brand_direction: Optional[str] = Field(None, description="브랜드 방향성/핵심 편익 서술형(BI)")
+    brand_description: Optional[str] = Field(None, description="브랜드 가치 설명 서술형(BI)")
 
     # 기업 가치·방향성 (BI: brand_values/brand_values_text, CI: company_values/company_values_text)
     brand_values: Optional[List[str]] = None
@@ -36,6 +37,7 @@ class GenerationRequest(BaseModel):
 
     motif_category: Optional[List[str]] = Field(None, description="모티프 카테고리 칩(복수 선택 가능)")
     concreteness: Optional[str] = Field(None, description="완전 추상 | 적당히 단순화 | 사실적")
+    logo_shape: Optional[str] = Field(None, max_length=100, description="사용자가 요청한 로고 형태")
     additional_requirements: Optional[str] = None
 
     text_color: Optional[str] = Field(None, description="혼합형/워드마크/레터마크 텍스트 색상 직접 지정")
@@ -43,7 +45,7 @@ class GenerationRequest(BaseModel):
 
     # 상한이 없으면 한 번의 요청으로 수백 장이 생성돼 크레딧이 소진된다
     # (docs/2026-08-11_로고생성_문제점-점검.md 2번). max_workers도 같이 묶인다.
-    num_variants: int = Field(4, ge=1, le=8, description="생성할 로고 시안 수")
+    num_variants: int = Field(1, ge=1, le=1, description="생성할 로고 시안 수 (현재 1개 고정)")
 
     variant_offset: int = Field(
         0,
@@ -83,4 +85,15 @@ class GeneratedLogo(BaseModel):
 
 
 class GenerationResponse(BaseModel):
+    modelName: str
     logos: List[GeneratedLogo]
+
+
+class SvgRasterizeRequest(BaseModel):
+    svg: str = Field(..., min_length=1, description="편집된 SVG 문서")
+
+
+class SvgRasterizeResponse(BaseModel):
+    imageBase64: str
+    width: int = 1024
+    height: int = 1024

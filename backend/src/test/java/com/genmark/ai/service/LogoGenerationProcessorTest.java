@@ -37,13 +37,13 @@ class LogoGenerationProcessorTest {
     }
 
     private static LogoAiClient.GeneratedLogo logo(String imageBase64) {
-        return new LogoAiClient.GeneratedLogo(imageBase64, null, null);
+        return new LogoAiClient.GeneratedLogo(imageBase64, null, null, null);
     }
 
     @Test
-    void threeImagesFailWithoutCandidateRows() {
+    void zeroImagesFailWithoutCandidateRows() {
         when(aiClient.generate(any())).thenReturn(
-                new LogoAiClient.LogoAiResult(true, List.of(logo("a"), logo("b"), logo("c"))));
+                new LogoAiClient.LogoAiResult(true, "remote/model", List.of()));
 
         processor.process(10L);
 
@@ -54,9 +54,9 @@ class LogoGenerationProcessorTest {
     }
 
     @Test
-    void exactlyFourImagesSucceed() {
+    void exactlyOneImageSucceeds() {
         when(aiClient.generate(any())).thenReturn(
-                new LogoAiClient.LogoAiResult(true, List.of(logo("a"), logo("b"), logo("c"), logo("d"))));
+                new LogoAiClient.LogoAiResult(true, "remote/model", List.of(logo("a"))));
         when(storage.store(eq("g"), anyInt(), anyString()))
                 .thenReturn(new LogoFileStorage.StoredImage("logos/g/c.png", 512, 512));
 
@@ -64,6 +64,21 @@ class LogoGenerationProcessorTest {
 
         assertThat(generation.getStatus()).isEqualTo(LogoGeneration.Status.SUCCEEDED);
         assertThat(generation.getProject().getStatus()).isEqualTo(ProjectStatus.RESULT_READY);
-        verify(candidateRepository, times(4)).save(any());
+        assertThat(generation.getModelName()).isEqualTo("remote/model");
+        verify(candidateRepository, times(1)).save(any());
+    }
+
+    @Test
+    void storesOriginalSvgWithPng() {
+        var logo = new LogoAiClient.GeneratedLogo("a", null, null, "<svg><path/></svg>");
+        when(aiClient.generate(any())).thenReturn(new LogoAiClient.LogoAiResult(true, "remote/model", List.of(logo)));
+        when(storage.store("g", 1, "a"))
+                .thenReturn(new LogoFileStorage.StoredImage("logos/g/candidate-1.png", 512, 512));
+
+        processor.process(10L);
+
+        assertThat(generation.getStatus()).isEqualTo(LogoGeneration.Status.SUCCEEDED);
+        assertThat(generation.getModelName()).isEqualTo("remote/model");
+        verify(storage).storeOriginalSvg("g", 1, "<svg><path/></svg>");
     }
 }

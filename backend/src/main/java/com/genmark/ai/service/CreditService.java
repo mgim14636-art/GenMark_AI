@@ -22,9 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class CreditService {
 
-    /** 가입 시 지급량. 설문조사 보상도 같은 값이다. */
+    /** 가입 시 2개, 설문 완료 시 화면 안내와 동일하게 1개를 지급한다. */
     public static final int SIGNUP_GRANT = 2;
-    public static final int SURVEY_GRANT = 2;
+    public static final int SURVEY_GRANT = 1;
 
     private final MemberRepository memberRepository;
     private final CreditHistoryRepository creditHistoryRepository;

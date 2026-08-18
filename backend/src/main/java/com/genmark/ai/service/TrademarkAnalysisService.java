@@ -39,6 +39,9 @@ public class TrademarkAnalysisService {
     @Transactional
     public TrademarkAnalysisResponse create(String projectPublicId, Long memberId) {
         ProjectLike project = projectLookup.requireOwned(projectPublicId, memberId);
+        if (!"combination".equals(project.getLogoStyle())) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "현재 상표 분석은 조합형 로고만 지원합니다.");
+        }
         boolean isCi = project instanceof CiProject;
         LogoCandidate candidate = (isCi
                 ? candidateRepository.findFirstByGenerationCiProjectIdAndSelectedTrue(project.getId())
@@ -104,7 +107,7 @@ public class TrademarkAnalysisService {
         String imageUrl = "/api/v1/projects/%s/trademark-analyses/%s/matches/%d/image"
                 .formatted(projectId, analysisId, m.getRank());
         return new TrademarkMatchResponse(m.getRank(), m.getApplicationNumber(), m.getName(), m.getCategory(),
-                m.getSimilarity(), m.getImagePath(), imageUrl);
+                m.getSimilarity(), m.getImagePath(), imageUrl, m.getNote());
     }
 
     private void runAfterCommit(Runnable task) {

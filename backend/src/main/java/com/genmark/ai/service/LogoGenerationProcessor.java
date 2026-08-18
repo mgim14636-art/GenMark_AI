@@ -25,6 +25,8 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 public class LogoGenerationProcessor {
+    private static final int EXPECTED_LOGO_COUNT = 1;
+
     private final LogoGenerationRepository generationRepository;
     private final LogoCandidateRepository candidateRepository;
     private final LogoAiClient logoAiClient;
@@ -42,14 +44,20 @@ public class LogoGenerationProcessor {
                     generation.getRequestSnapshotJson(), new TypeReference<>() {});
             LogoAiClient.LogoAiResult result = logoAiClient.generate(survey);
             List<LogoAiClient.GeneratedLogo> logos = result.logos();
-            if (!result.success() || logos == null || logos.size() != 4) {
+            if (!result.success() || logos == null || logos.size() != EXPECTED_LOGO_COUNT) {
                 throw new ApiException(ErrorCode.AI_INCOMPLETE_RESULT);
             }
-            List<LogoFileStorage.StoredImage> images = new ArrayList<>(4);
-            for (int i = 0; i < 4; i++) {
-                images.add(storage.store(generation.getPublicId(), i + 1, logos.get(i).imageBase64()));
+            if (result.modelName() != null && !result.modelName().isBlank()) {
+                generation.setModelName(result.modelName());
             }
-            for (int i = 0; i < 4; i++) {
+            List<LogoFileStorage.StoredImage> images = new ArrayList<>(EXPECTED_LOGO_COUNT);
+            for (int i = 0; i < EXPECTED_LOGO_COUNT; i++) {
+                images.add(storage.store(generation.getPublicId(), i + 1, logos.get(i).imageBase64()));
+                if (logos.get(i).svg() != null) {
+                    storage.storeOriginalSvg(generation.getPublicId(), i + 1, logos.get(i).svg());
+                }
+            }
+            for (int i = 0; i < EXPECTED_LOGO_COUNT; i++) {
                 LogoFileStorage.StoredImage image = images.get(i);
                 candidateRepository.save(LogoCandidate.builder().generation(generation).candidateOrder(i + 1)
                         .storageKey(image.storageKey()).mimeType("image/png")
@@ -78,10 +86,11 @@ public class LogoGenerationProcessor {
      * 예외를 던지지 않는다.
      */
     private String writeMetadata(LogoAiClient.GeneratedLogo logo) {
-        if (logo.seed() == null && logo.variantIndex() == null) return null;
+        if (logo.seed() == null && logo.variantIndex() == null && logo.svg() == null) return null;
         Map<String, Object> metadata = new LinkedHashMap<>();
         if (logo.variantIndex() != null) metadata.put("variantIndex", logo.variantIndex());
         if (logo.seed() != null) metadata.put("seed", logo.seed());
+        if (logo.svg() != null) metadata.put("svgAvailable", true);
         try {
             return objectMapper.writeValueAsString(metadata);
         } catch (JsonProcessingException e) {

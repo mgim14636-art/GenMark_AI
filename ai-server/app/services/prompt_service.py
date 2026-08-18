@@ -54,10 +54,12 @@ _LEGACY_TONE_ALIASES = {
 _CURRENT_SURVEY_ALIASES = {
     "industry": {
         "COSMETICS": "뷰티",
-        "FASHION": "기타",
-        "FOOD": "기타",
-        "TECH": "기타",
-        "HEALTH_WELLNESS": "기타",
+        "FASHION": "패션",
+        "FOOD": "푸드·카페",
+        "HEALTH_WELLNESS": "헬스·웰니스",
+        "TECH": "테크",
+        "EDUCATION": "교육",
+        "PET": "펫",
         "OTHER": "기타",
     },
     "tone": {
@@ -81,6 +83,17 @@ _CURRENT_SURVEY_ALIASES = {
         "50-60": "50-60대",
         "ALL": "전 연령",
         "ALL_AGES": "전 연령",
+        # DB가 실제로 허용하는 값은 물결표(~) 표기다. 위의 붙임표(-) 키만 있던 동안에는
+        # bi_project.target_age에 저장된 값 4개 중 3개가 매칭되지 않아, "전 연령층"을
+        # 고른 사용자를 뺀 전원이 타겟 연령 문구를 프롬프트에서 잃었다.
+        #
+        #   chk_bi_target_age CHECK (target_age IN ('10~20','30~40','50~60','전 연령층'))
+        #
+        # DB CHECK가 규격의 출처이므로 네 값이 모두 여기 있어야 한다.
+        # CHECK를 바꾸면 이 표와 tests/test_prompt_target_age.py도 같이 바꿀 것.
+        "10~20": "10-20대",
+        "30~40": "30-40대",
+        "50~60": "50-60대",
         # 화면(App.tsx)과 DB 기본값(bi_project.target_age)이 쓰는 실제 문자열은
         # "전 연령층"이다. TARGET_AGE_MODIFIER 키가 "전 연령"이라 여태 매칭되지
         # 않아, 이 값을 고른 사용자는 타겟 정보가 프롬프트에서 통째로 빠졌다.
@@ -125,15 +138,20 @@ def _normalize_tone(tone: str) -> str:
 
 # 스타일별 심볼 문장 — 브랜드명 문자는 절대 넣지 않는다(항상 logo_composer.py가 합성).
 STYLE_MAP = {
-    "심볼": "The mark is a purely graphic, abstract symbol icon with no letterforms.",
+    "심볼": "Create a standalone graphic symbol with no letterforms or typography.",
     "워드마크": "The mark is an abstract shape inspired by wordmark letterforms, without any readable text.",
-    "혼합형": "The mark combines a graphic symbol with an abstract letterform-like silhouette.",
+    "혼합형": "Create a compact graphic symbol designed to pair cleanly with a separately typeset brand name; do not draw letters.",
     "레터마크": "The mark is an elegant monogram-style abstract initial shape, without any readable text.",
 }
 
-# MVP 범위는 뷰티(G1201) 한정 — 다른 업종은 아직 구현하지 않아 목록에서 제외
 INDUSTRY_MAP = {
     "뷰티": "a beauty and cosmetics brand",
+    "패션": "a fashion and apparel brand",
+    "푸드·카페": "a food, cafe, or bakery brand",
+    "헬스·웰니스": "a health and wellness brand",
+    "테크": "a technology and software brand",
+    "교육": "an education and learning brand",
+    "펫": "a pet care and companion-animal brand",
     "기타": "a general commercial brand",
 }
 
@@ -159,6 +177,54 @@ MOTIF_MAP = {
         "a mountain peak silhouette",
         "a star burst shape",
     ],
+    "패션": [
+        "an elegant folded-fabric ribbon",
+        "a refined needle-and-thread curve",
+        "a minimal garment-label emblem",
+        "an abstract runway silhouette",
+        "a tailored geometric monogram frame",
+        "a flowing textile wave",
+    ],
+    "푸드·카페": [
+        "a warm rising-steam curve",
+        "a minimal coffee bean silhouette",
+        "a handcrafted grain or wheat emblem",
+        "a simple cup-and-saucer silhouette",
+        "an inviting table-and-plate symbol",
+        "a fresh sprout paired with a bowl shape",
+    ],
+    "헬스·웰니스": [
+        "a balanced pulse-and-leaf symbol",
+        "a calm protective heart shape",
+        "an abstract human figure in motion",
+        "a restorative sun-and-horizon emblem",
+        "a balanced circular wellness mark",
+        "a gentle shield with organic curves",
+    ],
+    "테크": [
+        "an interconnected node emblem",
+        "a modular pixel-and-orbit symbol",
+        "a precise forward-moving circuit shape",
+        "an abstract data-flow ribbon",
+        "a secure geometric network mark",
+        "a minimal layered portal symbol",
+    ],
+    "교육": [
+        "an open-book shape becoming a path",
+        "a rising spark of discovery",
+        "a structured learning-block emblem",
+        "an abstract dialogue-and-idea symbol",
+        "a guiding compass for learning",
+        "a growth staircase with a bright point",
+    ],
+    "펫": [
+        "a warm abstract paw silhouette",
+        "a protective heart around an animal profile",
+        "a playful tail-and-circle symbol",
+        "a friendly dog-and-cat negative-space mark",
+        "a simple companion-animal face emblem",
+        "a joyful pet motion curve",
+    ],
     "기타": [
         "an abstract geometric emblem",
         "a minimal circular badge shape",
@@ -174,7 +240,9 @@ MOTIF_MAP = {
 # 카테고리를 고르지 않았을 때 MOTIF_MAP의 고정 목록을 쓸 업종.
 # "기타"는 별·무한대·링처럼 상투적인 도형만 있어 강제하면 오히려 밋밋해진다
 # (94062ed에서 열린 지시로 바꾼 이유). 뷰티 풀은 업종 특화 모티프라 강제해도 좋다.
-MOTIF_POOL_INDUSTRIES = {"뷰티"}
+MOTIF_POOL_INDUSTRIES = {
+    "뷰티", "패션", "푸드·카페", "헬스·웰니스", "테크", "교육", "펫"
+}
 
 USER_MOTIF_RENDERING_APPROACHES = (
     "a bold simplified flat silhouette",
@@ -182,6 +250,26 @@ USER_MOTIF_RENDERING_APPROACHES = (
     "a clever negative-space construction",
     "a balanced abstract composition",
 )
+
+# 선(outline) 마감일 때 쓰는 같은 길이의 대체 목록.
+# 위 목록 0번 "a bold simplified flat silhouette"은 꽉 찬 면을 뜻해 선 지시와
+# 충돌한다(실측 확인됨 — 선 모드 프롬프트에 silhouette이 그대로 실려 나갔다).
+# 길이를 맞춰 두어야 variant_index 순환에 따른 시안 다양성이 그대로 유지된다.
+OUTLINE_MOTIF_RENDERING_APPROACHES = (
+    "a bold simplified single-weight outline",
+    "soft organic abstract contours",
+    "a clever negative-space construction",
+    "a balanced abstract composition",
+)
+
+
+def _rendering_approach(variant_index: int, finish: str) -> str:
+    pool = (
+        OUTLINE_MOTIF_RENDERING_APPROACHES
+        if finish == LOGO_FINISH_OUTLINE
+        else USER_MOTIF_RENDERING_APPROACHES
+    )
+    return pool[variant_index % len(pool)]
 
 # 설문 화면(FR-06)의 "모티프 카테고리" 칩 — 사용자가 이걸 고르면 업종 고정 목록
 # (MOTIF_MAP) 대신 이 목록에서 모티프를 고른다. 예전엔 이 필드가 코드에서 아예 읽히지
@@ -303,6 +391,14 @@ def _resolve_values(survey: dict) -> str:
     문장 없이 박혔다(실측 확인됨). 텍스트 인코더에는 노이즈일 뿐이라, 아는 키워드는
     영어로 바꾸고 남은 한글은 버린다. 전부 한글이면 이 문장 자체를 생략한다.
     """
+    if "value_keywords_en" in survey:
+        enriched_values = survey.get("value_keywords_en") or []
+        if isinstance(enriched_values, str):
+            enriched_values = [enriched_values]
+        if not enriched_values:
+            return ""
+        return f"The brand values are {', '.join(enriched_values[:5])}."
+
     raw_values = _raw_value_keys(survey)
     if raw_values:
         translated = [VALUE_KEYWORD_MAP.get(v, v) for v in raw_values]
@@ -327,6 +423,28 @@ def _resolve_values(survey: dict) -> str:
     if not usable:
         return ""
     return f"The brand values are {', '.join(dict.fromkeys(usable))}."
+
+
+def _usable_user_subject(survey: dict) -> str:
+    """사용자가 지정한 형태(logo_shape/추가요구사항) 중 프롬프트에 실을 수 있는 값.
+
+    번역이 실패해 한글이 남았으면 영어 프롬프트에 그대로 흘리지 않는다(빈 문자열).
+
+    이 판정을 _resolve_motif와 build_prompt_from_survey가 각자 하다가 서로
+    어긋났다. 한글 입력이 오면 모티프는 "the exact user-requested subject"로
+    고정되는데 그 subject가 뭔지 설명하는 문장은 삭제돼, 모델이 정체불명의 지시만
+    받았다(실측 확인됨 — "달 모양"을 넣었는데 프롬프트에 한 글자도 안 실림).
+    게다가 모티프 풀 폴백까지 건너뛰어 시안이 전부 같은 프롬프트로 나갔다.
+    두 곳이 반드시 같은 답을 쓰도록 여기 한 곳으로 모은다.
+    """
+    raw = (
+        survey.get("logo_shape_en")
+        or survey.get("logo_shape")
+        or survey.get("additional_requirements")
+        or ""
+    )
+    text = " ".join(str(raw).split())[:200]  # 개행 제거 및 과도한 길이 방지
+    return "" if _HANGUL.search(text) else text
 
 
 def _raw_motif_categories(survey: dict) -> list:
@@ -357,8 +475,7 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
 
     MVP 범위가 뷰티 한정이므로 실제 서비스 경로는 위쪽이다.
     """
-    extra = " ".join((survey.get("additional_requirements") or "").split())[:200]
-    if extra:
+    if _usable_user_subject(survey):
         return "the exact user-requested subject"
 
     category_pool = []
@@ -367,7 +484,14 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
             if motif not in category_pool:
                 category_pool.append(motif)
 
-    # 카테고리 미선택 시, 큐레이션된 풀이 있는 업종만 고정 목록으로 폴백한다.
+    # 사용자가 고른 가치가 시각 모티프와 연결되도록 가치 기반 후보를 우선한다.
+    if not category_pool:
+        for value in _raw_value_keys(survey):
+            for motif in VALUE_MOTIF_BIAS.get(value, []):
+                if motif not in category_pool:
+                    category_pool.append(motif)
+
+    # 카테고리·가치 후보가 없을 때 업종별 큐레이션 풀로 폴백한다.
     pool = category_pool
     if not pool and industry_key in MOTIF_POOL_INDUSTRIES:
         pool = MOTIF_MAP.get(industry_key, [])
@@ -379,9 +503,7 @@ def _resolve_motif(industry_key: str, survey: dict, variant_index: int) -> str:
         offset = sum(ord(c) for c in brand_name) if brand_name else 0
         return pool[(offset + variant_index) % len(pool)]
 
-    approach = USER_MOTIF_RENDERING_APPROACHES[
-        variant_index % len(USER_MOTIF_RENDERING_APPROACHES)
-    ]
+    approach = _rendering_approach(variant_index, _resolve_finish(survey))
     return f"an original brand-specific subject, rendered with {approach}"
 
 
@@ -482,20 +604,110 @@ def _resolve_colors(survey: dict, tone: str) -> str:
     지정해도 결과가 전부 무채색 단색으로만 나옴). "and"로 명시적으로 묶어 두 색이
     함께 쓰여야 하는 조합임을 분명히 한다.
     """
-    color_mode = survey.get("color_mode", "ai")
-    if color_mode == "manual":
-        manual_colors = survey.get("color_manual") or survey.get("colors")
-        if isinstance(manual_colors, str):
-            manual_colors = [manual_colors]
-        if manual_colors:
-            named = [_hex_to_color_name(c) for c in manual_colors]
-            named = [c for c in dict.fromkeys(named) if c]
-            if len(named) == 1:
-                return named[0]
-            if len(named) == 2:
-                return f"{named[0]} and {named[1]}"
-            return ", ".join(named[:-1]) + f", and {named[-1]}"
+    named = _manual_color_names(survey)
+    if named:
+        if len(named) == 1:
+            return named[0]
+        if len(named) == 2:
+            return f"{named[0]} and {named[1]}"
+        return ", ".join(named[:-1]) + f", and {named[-1]}"
     return TONE_COLOR_MAP.get(tone, "pastel muted tones")
+
+
+def _manual_color_names(survey: dict) -> list:
+    """사용자가 확정한 팔레트의 색 이름 목록. 없으면 빈 목록.
+
+    color_mode는 추천(TONE/ai)과 직접 지정(MANUAL/manual)의 선택 경로를 나타낸다.
+    어느 경로든 color_manual에 확정된 HEX가 있으면 일반 톤 프리셋보다 우선한다.
+    색상 값이 없을 때만 tone 기반 기본 팔레트를 사용한다.
+    """
+    manual_colors = survey.get("color_manual") or survey.get("colors")
+    if isinstance(manual_colors, str):
+        manual_colors = [manual_colors]
+    if not manual_colors:
+        return []
+    named = [_hex_to_color_name(c) for c in manual_colors]
+    result = []
+    seen = set()
+    for color in named:
+        if color and color.casefold() not in seen:
+            result.append(color); seen.add(color.casefold())
+    return result
+
+
+# 로고 마감 — 면(solid)이냐 선(outline)이냐.
+#
+# logo_shape(사용자가 원하는 형태 자유 입력)와는 다른 축이다. logo_shape이 "무엇을"
+# 그릴지라면 이쪽은 "어떻게" 그릴지다.
+#
+# 기본값은 solid. 지금까지 나온 시안이 전부 면이라 바꾸면 기존 결과가 통째로 달라진다.
+# 화면에 선택 항목이 생기기 전까지 LOGO_FINISH 환경변수로 전체 기본값을 바꿔 실험한다.
+#
+# 주의: MOTIF_MAP 항목 상당수가 "... silhouette"으로 끝난다. silhouette은 꽉 찬 면을
+# 뜻해 선 지시와 정면으로 충돌하므로 outline일 때 _strip_fill_words가 떼어낸다.
+LOGO_FINISH_SOLID = "solid"
+LOGO_FINISH_OUTLINE = "outline"
+
+DEFAULT_LOGO_FINISH = os.environ.get("LOGO_FINISH", LOGO_FINISH_SOLID).strip().lower()
+
+_FINISH_ALIASES = {
+    "solid": LOGO_FINISH_SOLID, "fill": LOGO_FINISH_SOLID, "filled": LOGO_FINISH_SOLID,
+    "면": LOGO_FINISH_SOLID, "면형": LOGO_FINISH_SOLID,
+    "outline": LOGO_FINISH_OUTLINE, "line": LOGO_FINISH_OUTLINE,
+    "line_art": LOGO_FINISH_OUTLINE, "lineart": LOGO_FINISH_OUTLINE,
+    "stroke": LOGO_FINISH_OUTLINE,
+    "선": LOGO_FINISH_OUTLINE, "선형": LOGO_FINISH_OUTLINE,
+}
+
+FINISH_SENTENCE = {
+    LOGO_FINISH_SOLID: (
+        "Use a strong silhouette, intentional negative space, balanced proportions, "
+        "and clean geometry."
+    ),
+    LOGO_FINISH_OUTLINE: (
+        "Draw it as clean line art: every shape is an open outline stroke of uniform "
+        "weight, never filled in. Keep the interior empty so the white background shows "
+        "through, with balanced proportions and clean geometry."
+    ),
+}
+
+_FILL_WORDS = (" silhouette", " emblem", " badge")
+
+
+def _resolve_finish(survey: dict) -> str:
+    """면/선 마감. 설문값이 없으면 LOGO_FINISH 환경변수 기본값을 쓴다."""
+    raw = str(survey.get("logo_finish") or survey.get("finish") or "").strip().lower()
+    if raw in _FINISH_ALIASES:
+        return _FINISH_ALIASES[raw]
+    return _FINISH_ALIASES.get(DEFAULT_LOGO_FINISH, LOGO_FINISH_SOLID)
+
+
+def _strip_fill_words(motif: str) -> str:
+    """모티프 문구에서 면을 전제하는 꼬리말을 뗀다.
+
+    "a single botanical leaf silhouette" -> "a single botanical leaf"
+    """
+    out = motif
+    for w in _FILL_WORDS:
+        if out.endswith(w):
+            out = out[: -len(w)]
+    return out.strip() or motif
+
+
+def _color_clause(survey: dict, tone: str) -> str:
+    """core 문장에 들어갈 색상 구절.
+
+    색이 하나일 때 "in a deep navy color palette"라고 쓰면 'palette'라는 단어가
+    여러 색을 암시해 모델이 보조색을 끼워 넣는다(실측 확인됨 — 남색 1색 의도였는데
+    남색+산호색으로 생성됨). 단색 의도는 단색이라고 명시해야 한다.
+    """
+    named = _manual_color_names(survey)
+    if len(named) == 1:
+        noun = ("single stroke color"
+                if _resolve_finish(survey) == LOGO_FINISH_OUTLINE else "single flat color")
+        return f"rendered strictly in {named[0]} as the {noun}"
+    color_kw = _resolve_colors(survey, tone)
+    return f"in {_article(color_kw)} {color_kw} color palette"
 
 
 def _fit_to_budget(core: str, optional_parts: list) -> str:
@@ -542,8 +754,16 @@ def _normalize_survey(survey: dict) -> dict:
 
     for field, aliases in _CURRENT_SURVEY_ALIASES.items():
         value = survey.get(field)
+        if isinstance(value, str):
+            value = value.strip()
+            survey[field] = value
         if value in aliases:
             survey[field] = aliases[value]
+        elif isinstance(value, str):
+            folded = value.casefold()
+            matched = next((mapped for key, mapped in aliases.items() if key.casefold() == folded), None)
+            if matched is not None:
+                survey[field] = matched
 
     # 가치 칩을 사전 키로 맞춘다. 같은 칩이 두 개 매핑되는 경우가 있어
     # (저자극·더마 → 더마·저자극) 순서를 지키며 중복을 제거한다.
@@ -561,7 +781,160 @@ def _normalize_survey(survey: dict) -> dict:
     return survey
 
 
-def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
+# ---------------------------------------------------------------------------
+# 브리프 프롬프트 (v4)
+#
+# 통제 실험 결과다. Recraft 사이트에서 같은 모델(V4 Vector)에 두 프롬프트를 넣어
+# 비교했다.
+#   - 사용자가 한국어로 쓴 짧은 브리프(브랜드명/업종/콤비네이션/색/무드) -> 완성도
+#     높은 락업. 심볼과 워드마크가 함께 설계됨.
+#   - 우리 프롬프트(모티프 지정 + 조형 지시) -> 동심원 선 뭉치. 브랜드와 무관한 모티프.
+# 플랫폼도 모델도 같았으므로 차이는 프롬프트뿐이다.
+#
+# 특히 해로웠던 문장들:
+#   "fine monoline line art ... as few strokes as possible"
+#       -> 서로 충돌한다. 모델은 "fine monoline"을 촘촘한 선 드로잉으로 해석해
+#          동심원을 그린다.
+#   "The mark depicts <고정 풀에서 뽑은 모티프>."
+#       -> 브랜드명과 무관하다. 브랜드가 "Tree"인데 물방울이 나온다.
+#   "legible when scaled down to 16 pixels"
+#       -> 모델이 밀도를 높이는 쪽으로 받는다.
+#   형용사 5개 나열, "Create a logo that reflects the brand identity..." 류의 군더더기
+#       -> 지시를 희석한다.
+#
+# 그래서 이 빌더는 설문에서 사용자가 실제로 고른 사실만 짧게 넘기고 조형은 모델에게
+# 맡긴다. 단색 통일은 프롬프트로 조르지 않는다 - logo_gen_service.force_single_color가
+# 생성 후에 확정적으로 처리하므로, 프롬프트에서 색을 못 박아 조형을 망칠 이유가 없다.
+
+BRIEF_TONE = {
+    "친근하고 다정한": "friendly and approachable",
+    "전문적이고 신뢰감 있는": "professional and trustworthy",
+    "감성적이고 따뜻한": "warm and emotional",
+    "유니크하고 트렌디한": "unique and trendy",
+    "미니얼하고 직관적인": "minimal and clean",
+}
+
+# 스타일별 한 줄. 한글 브랜드명일 때는 워드마크를 모델에게 맡길 수 없다 -
+# Recraft는 한글 글자를 제대로 그리지 못한다. 이 경우 심볼만 받아
+# logo_composer가 폰트로 합성한다(기존 경로).
+BRIEF_STYLE = {
+    "혼합형": 'The symbol and the brand name are designed together as one lockup.',
+    "워드마크": "A wordmark built from the brand name itself.",
+    "레터마크": "A monogram built from the brand initial.",
+    "심볼": "A standalone symbol with no letters.",
+}
+BRIEF_STYLE_NO_TEXT = "A standalone symbol with no letters, to be paired with type later."
+
+# 시안마다 바꾸는 것은 "조형 방식"이 아니라 "발상의 각도"다. 획 굵기나 도형 개수
+# 같은 조형 지시를 시안별로 바꾸면 앞서 실패한 v1으로 되돌아간다.
+BRIEF_ANGLES = (
+    "",
+    "Try an abstract interpretation.",
+    "Try a motif drawn from nature.",
+    "Try a geometric interpretation.",
+)
+
+
+def model_draws_wordmark(survey: dict) -> bool:
+    """모델이 브랜드명까지 직접 그리는가.
+
+    brief 프롬프트는 영문 브랜드명 + 텍스트를 포함하는 스타일일 때 모델에게
+    워드마크까지 맡긴다. 이때 logo_composer가 폰트로 이름을 또 얹으면 브랜드명이
+    두 번 나온다(실측 확인됨). 프롬프트와 합성이 같은 판단을 쓰도록 여기 한 곳에
+    모은다.
+
+    한글은 Recraft가 제대로 그리지 못하므로 항상 False - 심볼만 받아 합성한다.
+    legacy 프롬프트는 글자를 금지하므로 역시 False.
+    """
+    if PROMPT_STYLE in ("legacy", "v1", "old"):
+        return False
+    survey = _normalize_survey(survey)
+    if survey.get("style", "혼합형") not in ("혼합형", "워드마크", "레터마크"):
+        return False
+    brand = " ".join((survey.get("brand_name") or "").split())
+    return bool(brand) and not _HANGUL.search(brand)
+
+
+# 번역 실패 시 motif_translation_service가 넣는 자리표시자. 그 자체로는 무엇을
+# 그리라는 지시가 없어, 문맥이 짧은 브리프에서는 특히 해롭다.
+_SUBJECT_PLACEHOLDERS = (
+    "a brand-specific motif matching the user's request",
+    "the exact user-requested subject",
+)
+
+
+def build_prompt_brief(survey: dict, variant_index: int = 0) -> str:
+    """설문 사실만 담은 짧은 브리프. 조형은 모델에게 맡긴다."""
+    survey = _normalize_survey(survey)
+
+    industry = INDUSTRY_MAP.get(survey.get("industry", ""), INDUSTRY_MAP["기타"])
+    brand = " ".join((survey.get("brand_name") or "").split())
+    style_key = survey.get("style", "혼합형")
+
+    # 한글 브랜드명은 모델이 못 그린다 -> 심볼만 받는다.
+    model_can_draw_name = bool(brand) and not _HANGUL.search(brand)
+    if style_key in ("혼합형", "워드마크", "레터마크") and not model_can_draw_name:
+        style_line = BRIEF_STYLE_NO_TEXT
+    else:
+        style_line = BRIEF_STYLE.get(style_key, BRIEF_STYLE["혼합형"])
+
+    lines = []
+    if brand and model_can_draw_name:
+        lines.append(f'A logo for {industry} called "{brand}".')
+    else:
+        lines.append(f"A logo for {industry}.")
+    lines.append(style_line)
+
+    named = _manual_color_names(survey)
+    if named:
+        lines.append(f"{_join_names(named).capitalize()} palette.")
+    else:
+        lines.append(f"{TONE_COLOR_MAP.get(survey.get('tone',''), 'soft muted')} palette.")
+
+    # 사용자가 지정한 형태는 독립 문장으로, 그것도 앞쪽에 둔다.
+    # "~ feeling." 문장에 섞어 넣었더니 모델이 분위기 서술로 읽고 형태를 무시했다
+    # (실측 확인됨 - "원형 틀 안의 잎사귀"를 요청했는데 원형 틀이 빠졌다).
+    subject = _usable_user_subject(survey)
+    if subject and subject not in _SUBJECT_PLACEHOLDERS:
+        lines.insert(1, f"The mark depicts {subject}.")
+
+    # 브랜드 가치·모토. CI 화면의 "회사 모토"가 여기로 들어온다
+    # (프론트 companyMotto -> 백엔드 coreValues -> company_values_text).
+    # 원문 한국어를 그대로 넣지 않는다 - 텍스트 인코더가 못 읽고 프롬프트만
+    # 길어진다. value_keyword_service가 뽑아 둔 영어 키워드를 쓴다.
+    values = _resolve_values(survey)
+    if values:
+        lines.append(values)
+
+    tone_words = BRIEF_TONE.get(survey.get("tone", ""), "")
+    if tone_words:
+        lines.append(f"{tone_words.capitalize()} feeling.")
+
+    # "no gradients"는 취향이 아니라 제약이다. 그라데이션이 들어간 마크는 축소·
+    # 단색 인쇄·자수에서 뭉개지고, 색 통일(force_single_color)도 걸리지 않는다
+    # (실측 확인됨 - 결과 SVG에 url(#Gradient1)이 남았다).
+    lines.append("Flat vector on a white background, solid colours only, no gradients.")
+    lines.append("Keep it simple and uncluttered, with generous space around the mark.")
+
+    angle = BRIEF_ANGLES[variant_index % len(BRIEF_ANGLES)]
+    if angle:
+        lines.append(angle)
+
+    return "\n".join(lines)
+
+
+def _join_names(names: list) -> str:
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + f" and {names[-1]}"
+
+
+# 어느 빌더를 쓸지. brief가 기본이다 - 위 실험 근거 참고.
+# 예전 프롬프트로 되돌리려면 LOGO_PROMPT=legacy.
+PROMPT_STYLE = os.environ.get("LOGO_PROMPT", "brief").strip().lower()
+
+
+def build_prompt_legacy(survey: dict, variant_index: int = 0) -> str:
     """설문을 프롬프트로 변환한다.
 
     survey는 화면설계서의 CI/BI 화면 필드명(company_name/company_values 등)을 그대로
@@ -583,21 +956,26 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     tone = _normalize_tone(survey.get("tone", ""))
     tone_kw = _resolve_tone(tone)
     aesthetic_kw = TONE_AESTHETIC_MAP.get(tone, "")
-    color_kw = _resolve_colors(survey, tone)
+    color_clause = _color_clause(survey, tone)
+    single_color = len(_manual_color_names(survey)) == 1
+    finish = _resolve_finish(survey)
     value_kw = _resolve_values(survey)
     age_kw = TARGET_AGE_MODIFIER.get(survey.get("target_age", ""), "")
     motif_kw = _resolve_motif(industry_key, survey, variant_index)
+    if finish == LOGO_FINISH_OUTLINE:
+        motif_kw = _strip_fill_words(motif_kw)
     concreteness_kw = CONCRETENESS_MAP.get(survey.get("concreteness", ""), "")
     style_sentence = STYLE_MAP.get(style_key, STYLE_MAP["심볼"])
 
-    extra = (survey.get("additional_requirements") or "").strip()
-    extra = " ".join(extra.split())[:200]  # 개행 제거 및 과도한 길이 방지
+    extra = _usable_user_subject(survey)
+    if extra and finish == LOGO_FINISH_OUTLINE:
+        # 사용자 지정 형태에도 면을 전제하는 꼬리말이 붙어 온다(번역 서비스가
+        # "...silhouette"으로 만들어 준다). 선 지시와 정면 충돌하므로 여기서도 뗀다.
+        extra = _strip_fill_words(extra)
 
     user_motif_lead = ""
     if extra:
-        approach = USER_MOTIF_RENDERING_APPROACHES[
-            variant_index % len(USER_MOTIF_RENDERING_APPROACHES)
-        ]
+        approach = _rendering_approach(variant_index, finish)
         user_motif_lead = (
             f"The primary motif must satisfy this exact user request: {extra}. "
             f"Preserve that requested subject while using {approach}. "
@@ -621,18 +999,25 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
     # 바로 다음(가장 이른 위치)으로 옮겨 우선순위를 높였다.
     core = (
         user_motif_lead
-        + f"A minimalist flat vector logo icon for {industry} "
-        f"in {_article(color_kw)} {color_kw} color palette, "
-        f"drawn as one bold, large, solid-filled silhouette in {motif_kw}, with a thick, "
-        f"clean, unbroken outline that fills the canvas. {style_sentence} "
+        + f"A distinctive professional flat vector logo for {industry} "
+        f"{color_clause}, "
+        f"built from one to three cohesive shapes around {motif_kw}. "
+        f"{FINISH_SENTENCE[finish]} "
+        f"The mark must be scalable and legible at small sizes, with a memorable custom character rather than a generic stock-icon look. "
+        f"{style_sentence} "
         + (f"The shape is {concreteness_kw}. " if concreteness_kw else "")
         # tone_kw는 "a friendly, approachable feeling with ..." 처럼 이미 완결된
         # 명사구다. 뒤에 "character"를 붙이면 "...soft shapes character"라는 비문이
         # 된다(실측 확인됨). 문구를 그대로 문장으로 세운다.
         + f"The design conveys {tone_kw or 'a clean, balanced character'}. "
         f"It is flat 2D, with no gradients, shadows, or 3D rendering. "
-        f"Centered on a plain white background, with no readable letters or words, "
-        f"finished and complete rather than a sketch."
+        + (
+            "Every shape in the mark is the exact same single color; "
+            "no second color or tint appears anywhere. "
+            if single_color else ""
+        )
+        + "Centered on a plain white background, with no readable letters or words, "
+        "finished and complete rather than a sketch."
     )
 
     # 부가 설명은 예산이 남는 만큼만 순서대로 붙인다. value_kw(사용자가 직접 고른 기업
@@ -644,3 +1029,14 @@ def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
         f"The overall style references a {aesthetic_kw}." if aesthetic_kw else "",
     ]
     return _fit_to_budget(core, optional_parts)
+
+
+def build_prompt_from_survey(survey: dict, variant_index: int = 0) -> str:
+    """서비스 진입점. LOGO_PROMPT 환경변수로 빌더를 고른다.
+
+    기본은 brief(v4). legacy는 모티프·조형까지 지시하던 예전 프롬프트로,
+    비교용으로만 남긴다 - build_prompt_brief 위 주석의 실험 근거 참고.
+    """
+    if PROMPT_STYLE in ("legacy", "v1", "old"):
+        return build_prompt_legacy(survey, variant_index=variant_index)
+    return build_prompt_brief(survey, variant_index=variant_index)

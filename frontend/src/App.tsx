@@ -1,16 +1,23 @@
-import { FormEvent, lazy, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
+import { CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent, lazy, MouseEvent as ReactMouseEvent, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
+import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
 import { AiLoader } from './components/ui/ai-loader'
-import { AuthError, type AuthProvider, type AuthUser, downloadAuthenticatedFile, loginWithProvider, logout, restoreSession } from './auth'
-import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type DownloadRecord, type LogoCandidate, type PinnedLogo, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
+import { apiBlobRequest, AuthError, type AuthProvider, type AuthUser, downloadAuthenticatedFile, loginWithProvider, logout, restoreSession } from './auth'
+import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type BusinessCardInfoInput, type DownloadRecord, type LogoCandidate, type PinnedLogo, type SurveyImprovement, type SurveySubmitInput, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
+import { buildEditedSvg, prepareEditableSvg } from './lib/svgEditor'
 
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
 
-type ViewMode = 'home' | 'hero' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'brand-kit' | 'edit' | 'login' | 'mypage' | 'survey'
-type LoginDestination = 'home' | 'industry' | 'choice'
+const TRADEMARK_SCORE_FALLBACK = 23
+
+// 화면 설계서용 임시 목업 모드입니다. 실제 로그인 사용자와 API 데이터에는 영향을 주지 않으며,
+// 원래의 비로그인 빈 상태로 되돌릴 때는 false로 바꾸면 됩니다.
+const MYPAGE_MOCK_MODE = true
+
+type ViewMode = 'home' | 'hero' | 'logo-intro' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'brand-kit' | 'edit' | 'login' | 'mypage' | 'survey'
+type LoginDestination = 'home' | 'industry' | 'choice' | 'mypage'
 type LoginReturnMode = 'hero' | 'home'
 type OnboardingOption = 'online' | 'social' | 'offline'
 type AudienceOption = 'company' | 'owner' | 'hobby' | 'sidejob'
@@ -19,16 +26,63 @@ type CoreValue = 'vegan' | 'lowIrritation' | 'derma' | 'cleanBeauty' | 'natural'
 type ToneOption = 'friendly' | 'professional' | 'warm' | 'trendy' | 'minimal'
 type RgbColor = { r: number; g: number; b: number }
 type LogoStyle = 'symbol' | 'wordmark' | 'combination' | 'lettermark'
+type TrademarkMatchImage = { rank: number; src: string }
+type FinalEditKind = 'identity' | 'values' | 'tone' | 'color' | 'style'
+type FinalToneMode = 'recommended' | 'direct'
+type EditorTarget = string
+type EditorDraft = {
+  scale: number
+  rotation: number
+  opacity: number
+  offsetX: number
+  offsetY: number
+  color: string
+  colorChanged: boolean
+  dirty: boolean
+}
+type EditorDrafts = Record<string, EditorDraft>
+type EditorDragState = {
+  pointerId: number
+  target: string
+  startClientX: number
+  startClientY: number
+  startSvgX: number
+  startSvgY: number
+  startOffsetX: number
+  startOffsetY: number
+}
 
-const categories = ['전체', '워드마크', '콤비네이션', '레터마크', '미니멀']
+const createEditorDraft = (color = '#7B5CDF'): EditorDraft => ({
+  scale: 100,
+  rotation: 0,
+  opacity: 100,
+  offsetX: 0,
+  offsetY: 0,
+  color,
+  colorChanged: false,
+  dirty: false,
+})
 
-const toneOptions: Array<{ id: ToneOption; label: string; description: string; colors: [string, string] }> = [
-  { id: 'friendly', label: '친근하고 다정한', description: '편안하고 부드러운 인상', colors: ['#f39bbd', '#b9d3f7'] },
-  { id: 'professional', label: '전문적이고 신뢰감 있는', description: '정돈되고 믿음직한 인상', colors: ['#17185b', '#a45c72'] },
-  { id: 'warm', label: '감성적이고 따뜻한', description: '섬세하고 따뜻한 인상', colors: ['#d29474', '#f2eadc'] },
-  { id: 'trendy', label: '유니크하고 트렌디한', description: '개성 있고 감각적인 인상', colors: ['#171713', '#f2f2f4'] },
-  { id: 'minimal', label: '미니멀하고 직관적인', description: '군더더기 없이 명확한 인상', colors: ['#396fc8', '#dde4ff'] },
+const createEditorDrafts = (color = '#7B5CDF'): EditorDrafts => ({})
+
+const EDITOR_TEST_MODE = true
+const EDITOR_TEST_SVG_URL = '/genmark_logo.svg'
+
+const uniqueColors = (colors: string[]) => Array.from(new Map(
+  colors.filter(Boolean).map((color) => [color.trim().toLowerCase(), color.trim()]),
+).values()).slice(0, 4)
+
+const categories = ['전체', '심볼마크', '워드마크', '콤비네이션', '레터마크']
+
+const toneOptions: Array<{ id: ToneOption; label: string; description: string; colors: [string] }> = [
+  { id: 'friendly', label: '친근하고 다정한', description: '편안하고 부드러운 인상', colors: ['#f39bbd'] },
+  { id: 'professional', label: '전문적이고 신뢰감 있는', description: '정돈되고 믿음직한 인상', colors: ['#17185b'] },
+  { id: 'warm', label: '감성적이고 따뜻한', description: '섬세하고 따뜻한 인상', colors: ['#d29474'] },
+  { id: 'trendy', label: '유니크하고 트렌디한', description: '개성 있고 감각적인 인상', colors: ['#171713'] },
+  { id: 'minimal', label: '미니멀하고 직관적인', description: '군더더기 없이 명확한 인상', colors: ['#396fc8'] },
 ]
+
+const DEFAULT_MANUAL_COLOR = '#9765e9'
 
 const coreValueIds = new Set<CoreValue>(['vegan', 'lowIrritation', 'derma', 'cleanBeauty', 'natural', 'premium', 'sustainable', 'scientific', 'reasonable'])
 const coreValueLabels: Record<CoreValue, string> = {
@@ -55,11 +109,18 @@ const industryOptions: Array<{ id: IndustryOption; title: string; description: s
 ]
 
 const logoStyleOptions: Array<{ id: LogoStyle; label: string; description: string; fit: string; recommended?: boolean }> = [
-  { id: 'symbol', label: '심볼마크', description: '그림이나 도형만으로 브랜드를 표현하는 로고', fit: '앱 아이콘, SNS 프로필과 제품 용기에 작게 사용할 때 좋아요.' },
-  { id: 'wordmark', label: '워드마크', description: '브랜드 이름의 글씨체를 중심으로 만든 로고', fit: '새로운 브랜드 이름을 고객에게 명확하게 알리고 싶을 때 좋아요.' },
-  { id: 'combination', label: '콤비네이션', description: '그림과 브랜드 이름을 함께 사용하는 로고', fit: '온라인과 오프라인에서 다양하게 사용하고 싶을 때 좋아요.', recommended: true },
-  { id: 'lettermark', label: '레터마크', description: '브랜드 이름의 첫 글자나 이니셜을 활용한 로고', fit: '브랜드 이름이 길거나 간결한 이미지를 원할 때 좋아요.' },
+  { id: 'symbol', label: '심볼마크', description: '그림이나 도형만으로 브랜드를 표현하는 로고', fit: '브랜드를 상징하는 이미지를 직관적으로 보여주어 기억에 오래 남아요.' },
+  { id: 'wordmark', label: '워드마크', description: '브랜드 이름의 글씨체를 중심으로 만든 로고', fit: '브랜드 이름을 직관적으로 보여주어 기억에 오래 남아요.' },
+  { id: 'combination', label: '콤비네이션', description: '그림과 브랜드 이름을 함께 사용하는 로고', fit: '그림과 이름을 함께 보여주어 브랜드를 쉽게 기억하게 해요.', recommended: true },
+  { id: 'lettermark', label: '레터마크', description: '브랜드 이름의 첫 글자나 이니셜을 활용한 로고', fit: '긴 이름을 간결하게 담아 세련된 인상을 남겨요.' },
 ]
+
+const logoStylePreviewImages: Record<LogoStyle, string> = {
+  symbol: '/logo-style-icons/symbol.png',
+  wordmark: '/logo-style-icons/wordmark.png',
+  combination: '/logo-style-icons/combination.png',
+  lettermark: '/logo-style-icons/lettermark.png',
+}
 
 const finalSummaryIconMap: Record<string, LucideIcon> = {
   name: Building2,
@@ -86,20 +147,40 @@ const extractLogoShapeRequirement = (requirements: string | null | undefined) =>
 }
 
 const galleryItems = [
-  { id: 'luna', name: 'LUNA', category: '미니멀', meta: '뷰티 · 워드마크', likes: '2.8k', position: '20% 72%', tone: 'luna' },
-  { id: 'beau', name: 'BEAU', category: '워드마크', meta: '스킨케어 · 워드마크', likes: '1.9k', position: '72% 46%', tone: 'beau' },
-  { id: 'sora', name: 'SORA', category: '콤비네이션', meta: '클린뷰티 · 워드마크', likes: '1.6k', position: '88% 72%', tone: 'sora' },
-  { id: 'mori', name: 'MORI', category: '레터마크', meta: '바디케어 · 레터마크', likes: '1.2k', position: '52% 28%', tone: 'mori' },
+  { id: 'quendra', name: 'QUENDRA', category: '워드마크', meta: '뷰티 · 워드마크', likes: '2.8k', image: '/curation-gallery/quendra.png', position: '50% 50%', tone: 'quendra' },
+  { id: 'rk-monogram', name: 'RK', category: '레터마크', meta: '뷰티 · 레터마크', likes: '2.2k', image: '/curation-gallery/rk-monogram.png', position: '50% 50%', tone: 'rk-monogram' },
+  { id: 'bramont', name: 'BRAMONT', category: '콤비네이션', meta: '라이프스타일 · 콤비네이션', likes: '1.9k', image: '/curation-gallery/bramont.png', position: '50% 50%', tone: 'bramont' },
+  { id: 'gn-monogram', name: 'GN', category: '레터마크', meta: '뷰티 · 레터마크', likes: '1.7k', image: '/curation-gallery/gn-monogram.png', position: '50% 50%', tone: 'gn-monogram' },
+  { id: 'vastel', name: 'VASTEL', category: '콤비네이션', meta: '뷰티 · 콤비네이션', likes: '1.5k', image: '/curation-gallery/vastel.png', position: '50% 50%', tone: 'vastel' },
+  { id: 'sevria', name: 'SEVRIA', category: '워드마크', meta: '뷰티 · 워드마크', likes: '1.4k', image: '/curation-gallery/sevria.png', position: '50% 50%', tone: 'sevria' },
+  { id: 'aurelia-symbol', name: 'AURELIA', category: '심볼마크', meta: '뷰티 · 심볼마크', likes: '1.2k', image: '/curation-gallery/aurelia-symbol.png', position: '50% 50%', tone: 'aurelia-symbol' },
+  { id: 'sunwave-mark', name: 'SUNWAVE', category: '심볼마크', meta: '웰니스 · 심볼마크', likes: '1.1k', image: '/curation-gallery/sunwave-mark.png', position: '50% 50%', tone: 'sunwave-mark' },
+  { id: 'orivel', name: 'ORIVEL', category: '콤비네이션', meta: '테크 · 콤비네이션', likes: '980', image: '/curation-gallery/orivel.png', position: '50% 50%', tone: 'orivel' },
+  { id: 'lysenne', name: 'LYSENNE', category: '워드마크', meta: '뷰티 · 워드마크', likes: '860', image: '/curation-gallery/lysenne.png', position: '50% 50%', tone: 'lysenne' },
 ]
 
 const productGalleryItems = [
-  { id: 'lumiere-product', name: 'LUMIÈRE', category: '세럼', meta: '스킨케어 · 프리미엄 패키지', likes: '2.4k', position: '20% 72%', tone: 'lumiere' },
-  { id: 'luneria-product', name: 'LUNERIA', category: '크림', meta: '클린뷰티 · 시그니처 라인', likes: '2.1k', position: '72% 46%', tone: 'luneria' },
-  { id: 'muse-product', name: 'MUSE', category: '바디케어', meta: '바디 · 감성 패키지', likes: '1.7k', position: '88% 72%', tone: 'muse' },
-  { id: 'vela-product', name: 'VELA', category: '퍼퓸', meta: '향수 · 미니멀 패키지', likes: '1.4k', position: '52% 28%', tone: 'vela' },
+  { id: 'lavenor-product', name: 'LAVENOR', category: '클렌저', meta: '라벤더 · 포밍 클렌저', likes: '2.4k', image: '/product-gallery/lavenor.png', position: '50% 50%', tone: 'lavenor' },
+  { id: 'solairea-product', name: 'SOLAIREA', category: '선케어', meta: '선밤 · SPF 50', likes: '2.1k', image: '/product-gallery/solairea.png', position: '50% 50%', tone: 'solairea' },
+  { id: 'noirel-product', name: 'NOIRÉL', category: '에센스', meta: '리뉴얼 · 프리미엄 에센스', likes: '1.7k', image: '/product-gallery/noirel.png', position: '50% 50%', tone: 'noirel' },
+  { id: 'verena-product', name: 'VERENA', category: '크림', meta: '보태니컬 · 페이스 크림', likes: '1.5k', image: '/product-gallery/verena.png', position: '50% 50%', tone: 'verena' },
+  { id: 'peache-product', name: 'PEACHÉ', category: '세럼', meta: '피치 · 스킨 리뉴얼 세럼', likes: '1.4k', image: '/product-gallery/peache.png', position: '50% 50%', tone: 'peache' },
+  { id: 'lavenora-product', name: 'LAVENORA', category: '클렌저', meta: '보태니컬 · 젠틀 클렌저', likes: '1.3k', image: '/product-gallery/lavenora.png', position: '50% 50%', tone: 'lavenora' },
+  { id: 'azura-product', name: 'AZURA', category: '에센스', meta: '럭스 · 래디언스 에센스', likes: '1.2k', image: '/product-gallery/azura.png', position: '50% 50%', tone: 'azura' },
+  { id: 'citrea-product', name: 'CITRÉA', category: '미스트', meta: '시트러스 · 페이셜 미스트', likes: '1.1k', image: '/product-gallery/citrea.png', position: '50% 50%', tone: 'citrea' },
+  { id: 'aurelis-product', name: 'AURELIS', category: '바디로션', meta: '시트러스 · 바디 로션', likes: '980', image: '/product-gallery/aurelis.png', position: '50% 50%', tone: 'aurelis' },
+  { id: 'terraluna-product', name: 'TERRALUNA', category: '토너', meta: '보태니컬 · 클라리파잉 토너', likes: '860', image: '/product-gallery/terraluna.png', position: '50% 50%', tone: 'terraluna' },
 ]
 
-const surveyImprovementOptions = ['로고 디자인', '글씨체', '색상 조합', '생성 속도', '수정 기능', '상표 이미지 분석', '결과 설명', '제품 썸네일', '기타']
+const businessCardGalleryItems = [
+  { id: 'nevia-card', name: 'NEVIA', category: '명함', meta: '미니멀 · 내추럴', likes: '1.8k', image: '/business-card-gallery/nevia.png', position: '50% 50%', tone: 'nevia' },
+  { id: 'morvan-card', name: 'MORVAN', category: '명함', meta: '브라운 · 내추럴', likes: '1.5k', image: '/business-card-gallery/morvan.png', position: '50% 50%', tone: 'morvan' },
+  { id: 'eloris-card', name: 'ELORIS', category: '명함', meta: '라벤더 · 감성', likes: '1.3k', image: '/business-card-gallery/eloris.png', position: '50% 50%', tone: 'eloris' },
+  { id: 'vitara-card', name: 'VITARA', category: '명함', meta: '골드 · 내추럴', likes: '1.1k', image: '/business-card-gallery/vitara.png', position: '50% 50%', tone: 'vitara' },
+  { id: 'aurion-card', name: 'AURION', category: '명함', meta: '네이비 · 프리미엄', likes: '980', image: '/business-card-gallery/aurion.png', position: '50% 50%', tone: 'aurion' },
+]
+
+const surveyImprovementOptions: SurveyImprovement[] = ['로고 생성·재생성', '브랜드 맞춤 로고', '로고 수정', '유사 상표 확인', '로고 저장·활용', '기타']
 
 const getModeFromUrl = (): ViewMode => {
   const requestedView = new URLSearchParams(window.location.search).get('view')
@@ -123,18 +204,16 @@ const getModeFromUrl = (): ViewMode => {
   if (requestedView === 'edit' || requestedView === 'logo-edit' || requestedView === 'logo-editor') return 'edit'
   if (requestedView === 'mypage' || requestedView === 'my-page' || requestedView === 'profile') return 'mypage'
   if (requestedView === 'survey' || requestedView === 'feedback' || requestedView === 'satisfaction') return 'survey'
-  return 'hero'
+  return 'home'
 }
 
 // TEMP_RESULT_PREVIEW: 결과 후보가 없을 때 결과 화면 레이아웃을 생성 API 없이
 // 검토하기 위한 로컬 목업 데이터입니다. 실제 생성·저장 흐름에는 사용하지 않습니다.
 const resultPreviewCandidates: LogoCandidate[] = [
-  { id: 'preview-candidate-1', order: 1, storageKey: 'preview-candidate-1', mimeType: 'image/svg+xml', width: 760, height: 760, selected: true, pinnedAt: null, createdAt: '' },
-  { id: 'preview-candidate-2', order: 2, storageKey: 'preview-candidate-2', mimeType: 'image/svg+xml', width: 760, height: 760, selected: false, pinnedAt: null, createdAt: '' },
-  { id: 'preview-candidate-3', order: 3, storageKey: 'preview-candidate-3', mimeType: 'image/svg+xml', width: 760, height: 760, selected: false, pinnedAt: null, createdAt: '' },
-  { id: 'preview-candidate-4', order: 4, storageKey: 'preview-candidate-4', mimeType: 'image/svg+xml', width: 760, height: 760, selected: false, pinnedAt: null, createdAt: '' },
+  { id: 'preview-candidate-1', order: 1, storageKey: 'preview-candidate-1', svgUrl: null, svgEdited: false, mimeType: 'image/svg+xml', width: 760, height: 760, selected: true, pinnedAt: null, createdAt: '' },
 ]
-const resultPreviewImageUrl = '/logo-result-preview.svg'
+const resultPreviewImageUrl = '/logo-result-preview-bramont.png'
+const GENERATED_LOGO_COUNT = 1
 
 const clampColorChannel = (value: number) => Math.max(0, Math.min(255, Math.round(value)))
 const rgbToHex = ({ r, g, b }: RgbColor) => `#${[r, g, b].map((channel) => clampColorChannel(channel).toString(16).padStart(2, '0')).join('')}`
@@ -186,22 +265,79 @@ const hsvToRgb = (h: number, s: number, v: number): RgbColor => {
 const ToneColorPalette = ({ value, onChange, onComplete, ariaLabel }: { value: RgbColor; onChange: (color: RgbColor) => void; onComplete: () => void; ariaLabel: string }) => {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const hsv = rgbToHsv(value)
+  const previewRef = useRef<HTMLSpanElement>(null)
+  const huePreviewRef = useRef<HTMLSpanElement>(null)
+  const colorRef = useRef<RgbColor>(value)
+  const hsvRef = useRef(hsv)
+  const pendingColorRef = useRef<RgbColor | null>(null)
+  const frameRef = useRef<number | null>(null)
+
+  colorRef.current = value
+  hsvRef.current = hsv
+
+  const applyPreview = (color: RgbColor) => {
+    const nextHsv = rgbToHsv(color)
+    const hex = rgbToHex(color)
+    colorRef.current = color
+    hsvRef.current = nextHsv
+    if (previewRef.current) {
+      previewRef.current.style.setProperty('--tone-x', `${nextHsv.h / 3.6}%`)
+      previewRef.current.style.setProperty('--tone-y', `${(1 - nextHsv.v) * 100}%`)
+      previewRef.current.style.background = hex
+    }
+    if (huePreviewRef.current) huePreviewRef.current.style.left = `${nextHsv.h / 3.6}%`
+  }
+
+  useEffect(() => {
+    applyPreview(value)
+  }, [value])
+
+  useEffect(() => () => {
+    if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current)
+  }, [])
+
+  const flushPendingColor = () => {
+    if (frameRef.current !== null) {
+      window.cancelAnimationFrame(frameRef.current)
+      frameRef.current = null
+    }
+    const pendingColor = pendingColorRef.current
+    pendingColorRef.current = null
+    if (pendingColor) onChange(pendingColor)
+  }
+
+  const queueColorChange = (color: RgbColor) => {
+    applyPreview(color)
+    pendingColorRef.current = color
+    if (frameRef.current !== null) return
+    frameRef.current = window.requestAnimationFrame(() => {
+      frameRef.current = null
+      const nextColor = pendingColorRef.current
+      pendingColorRef.current = null
+      if (nextColor) onChange(nextColor)
+    })
+  }
+
   const updateFromPointer = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left))
     const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top))
-    onChange(hsvToRgb((x / rect.width) * 360, 1, 1 - y / rect.height))
+    queueColorChange(hsvToRgb((x / rect.width) * 360, 1, 1 - y / rect.height))
   }
 
   const updateHueFromPointer = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left))
-    onChange(hsvToRgb((x / rect.width) * 360, hsv.s || 1, hsv.v))
+    const currentHsv = hsvRef.current
+    queueColorChange(hsvToRgb((x / rect.width) * 360, currentHsv.s || 1, currentHsv.v))
   }
 
   const updateChannel = (channel: keyof RgbColor, nextValue: string) => {
     const numericValue = nextValue === '' ? 0 : Number(nextValue)
-    onChange({ ...value, [channel]: clampColorChannel(Number.isFinite(numericValue) ? numericValue : 0) })
+    const nextColor = { ...colorRef.current, [channel]: clampColorChannel(Number.isFinite(numericValue) ? numericValue : 0) }
+    pendingColorRef.current = null
+    applyPreview(nextColor)
+    onChange(nextColor)
   }
 
   return (
@@ -214,15 +350,17 @@ const ToneColorPalette = ({ value, onChange, onComplete, ariaLabel }: { value: R
         aria-valuetext={rgbToHex(value)}
         onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); updateFromPointer(event) }}
         onPointerMove={(event) => { if (event.buttons === 1) updateFromPointer(event) }}
+        onPointerUp={flushPendingColor}
+        onPointerCancel={flushPendingColor}
       >
-        <span className="tone-color-palette-preview" style={{ left: `${hsv.h / 3.6}%`, top: `${(1 - hsv.v) * 100}%`, background: rgbToHex(value) }} />
+        <span ref={previewRef} className="tone-color-palette-preview" style={{ '--tone-x': `${hsv.h / 3.6}%`, '--tone-y': `${(1 - hsv.v) * 100}%`, background: rgbToHex(value) } as CSSProperties} />
       </div>
       <div className="tone-palette-actions">
         <button className={advancedOpen ? 'tone-native-picker-button active' : 'tone-native-picker-button'} type="button" onClick={() => setAdvancedOpen((current) => !current)}>
           <span className="tone-native-picker-dot" style={{ background: rgbToHex(value) }} aria-hidden="true" />
           <span>색상 세부 조정</span>
         </button>
-        <button className="tone-native-picker-done" type="button" onClick={onComplete}>선택 완료</button>
+        <button className="tone-native-picker-done" type="button" onClick={() => { flushPendingColor(); onComplete() }}>선택 완료</button>
       </div>
       {advancedOpen && (
         <div className="tone-advanced-picker" role="dialog" aria-label={`${ariaLabel} 세부 조정`}>
@@ -235,14 +373,14 @@ const ToneColorPalette = ({ value, onChange, onComplete, ariaLabel }: { value: R
             onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); updateHueFromPointer(event) }}
             onPointerMove={(event) => { if (event.buttons === 1) updateHueFromPointer(event) }}
           >
-            <span style={{ left: `${hsv.h / 3.6}%` }} />
+            <span ref={huePreviewRef} style={{ left: `${hsv.h / 3.6}%` }} />
           </div>
           <div className="tone-advanced-rgb-fields">
             {(['r', 'g', 'b'] as const).map((channel) => (
               <label key={channel}><span>{channel.toUpperCase()}</span><input type="number" min="0" max="255" value={Math.round(value[channel])} onChange={(event) => updateChannel(channel, event.target.value)} /></label>
             ))}
           </div>
-          <button className="tone-advanced-complete" type="button" onClick={() => setAdvancedOpen(false)}>선택 완료</button>
+          <button className="tone-advanced-complete" type="button" onClick={() => { flushPendingColor(); setAdvancedOpen(false) }}>선택 완료</button>
         </div>
       )}
     </div>
@@ -285,7 +423,9 @@ function BrandLogo({ className = '' }: { className?: string }) {
 
 function CustomerApp() {
   const [mode, setModeState] = useState<ViewMode>(getModeFromUrl)
+  const [logoIntroStage, setLogoIntroStage] = useState<'opening' | 'ready'>('opening')
   const [loggedIn, setLoggedIn] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [authLoading, setAuthLoading] = useState(false)
   const [authRestoring, setAuthRestoring] = useState(true)
@@ -313,16 +453,19 @@ function CustomerApp() {
   const [targetAge, setTargetAge] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [companyMotto, setCompanyMotto] = useState('')
+  const [profileEditing, setProfileEditing] = useState(false)
+  const [profileCompanyNameDraft, setProfileCompanyNameDraft] = useState('')
+  const [profileCompanyMottoDraft, setProfileCompanyMottoDraft] = useState('')
   const [coreValues, setCoreValues] = useState<CoreValue[]>([])
   const [coreValueInputMode, setCoreValueInputMode] = useState<'category' | 'direct'>('category')
   const [brandValueDescription, setBrandValueDescription] = useState('')
   const [toneSelection, setToneSelection] = useState<ToneOption | null>(null)
   const [toneMode, setToneMode] = useState<'recommended' | 'direct'>('recommended')
+  const [directTone, setDirectTone] = useState('')
   const [tonePaletteTarget, setTonePaletteTarget] = useState<{ toneId: ToneOption; slot: number } | null>(null)
   const [tonePaletteDraft, setTonePaletteDraft] = useState<{ toneId: ToneOption; colors: string[] } | null>(null)
   const [customToneColors, setCustomToneColors] = useState<Partial<Record<ToneOption, string[]>>>({})
-  const [manualColors, setManualColors] = useState<string[]>([])
-  const [manualColorsSelected, setManualColorsSelected] = useState(false)
+  const [manualColors, setManualColors] = useState<string[]>([DEFAULT_MANUAL_COLOR])
   const [manualColorSlot, setManualColorSlot] = useState(0)
   const [colorSelectionMode, setColorSelectionMode] = useState<'tone' | 'manual'>('tone')
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
@@ -332,18 +475,30 @@ function CustomerApp() {
   const [resultCandidate, setResultCandidate] = useState(0)
   const [resultLiked, setResultLiked] = useState(false)
   const [trademarkAnalysisSkipped, setTrademarkAnalysisSkipped] = useState(false)
-  const [editTarget, setEditTarget] = useState<'symbol' | 'text'>('symbol')
-  const [editorBrandName, setEditorBrandName] = useState('LUVÉRA')
-  const [editorSymbol, setEditorSymbol] = useState(0)
+  const [trademarkAnalysisRequested, setTrademarkAnalysisRequested] = useState(false)
+  const [editorTestMode, setEditorTestMode] = useState(() => getModeFromUrl() === 'edit')
+  const [editTarget, setEditTarget] = useState<EditorTarget | null>(null)
   const [editorScale, setEditorScale] = useState(100)
   const [editorRotation, setEditorRotation] = useState(0)
   const [editorOpacity, setEditorOpacity] = useState(100)
-  const [editorLetterSpacing, setEditorLetterSpacing] = useState(0)
+  const [editorOffsetX, setEditorOffsetX] = useState(0)
+  const [editorOffsetY, setEditorOffsetY] = useState(0)
   const [editorColor, setEditorColor] = useState('#7B5CDF')
+  const [editorColorPickerOpen, setEditorColorPickerOpen] = useState(false)
+  const [editorColorChanged, setEditorColorChanged] = useState(false)
+  const [editorDirty, setEditorDirty] = useState(false)
   const [editorSaved, setEditorSaved] = useState(false)
+  const [editorSvgSource, setEditorSvgSource] = useState<string | null>(null)
+  const [editorSvgPreviewSource, setEditorSvgPreviewSource] = useState<string | null>(null)
+  const [editorSvgPreviewUrl, setEditorSvgPreviewUrl] = useState<string | null>(null)
+  const [editorLoading, setEditorLoading] = useState(false)
+  const [editorSaving, setEditorSaving] = useState(false)
+  const [editorError, setEditorError] = useState('')
+  const [editorDrafts, setEditorDrafts] = useState<EditorDrafts>(() => createEditorDrafts())
   const [trademarkEntry, setTrademarkEntry] = useState<'generation' | 'result'>('generation')
   const [trademarkAnalysisCompleted, setTrademarkAnalysisCompleted] = useState(false)
   const [projectId, setProjectId] = useState<string | null>(() => window.localStorage.getItem('genmark-project-id'))
+  const [projectColors, setProjectColors] = useState<string[]>([])
   const [generationId, setGenerationId] = useState<string | null>(null)
   const [generationError, setGenerationError] = useState('')
   const [generationLoading, setGenerationLoading] = useState(false)
@@ -357,24 +512,260 @@ function CustomerApp() {
   const [pinError, setPinError] = useState('')
   const [brandKit, setBrandKit] = useState<BrandKit | null>(null)
   const [brandKitError, setBrandKitError] = useState('')
+  const [brandKitDownloading, setBrandKitDownloading] = useState(false)
   const [brandKitType, setBrandKitType] = useState<BrandKit['kitType'] | null>(null)
+  const [businessCardModalOpen, setBusinessCardModalOpen] = useState(false)
+  const [businessCardInfo, setBusinessCardInfo] = useState<BusinessCardInfoInput>({
+    name: '', title: '', company: '', phone: '', email: '', address: '',
+  })
+  const [businessCardInfoErrors, setBusinessCardInfoErrors] = useState<{ name?: string; email?: string }>({})
+  const [businessCardTarget, setBusinessCardTarget] = useState<{ candidateId: string; projectId: string } | null>(null)
   const [ciProfileLoading, setCiProfileLoading] = useState(false)
   const ciProfileLoaded = useRef(false)
+  const assetEpochRef = useRef(0)
+  const brandKitRequestEpochRef = useRef(0)
   const [analysisId, setAnalysisId] = useState<string | null>(null)
   const [analysisError, setAnalysisError] = useState('')
   const [trademarkMatches, setTrademarkMatches] = useState<TrademarkMatch[]>([])
+  const [trademarkMatchImages, setTrademarkMatchImages] = useState<TrademarkMatchImage[]>([])
   const [trademarkDisclaimer, setTrademarkDisclaimer] = useState('')
   const [trademarkSimilarity, setTrademarkSimilarity] = useState<number | null>(null)
   const [trademarkRiskLabel, setTrademarkRiskLabel] = useState('')
   const [trademarkRiskDescription, setTrademarkRiskDescription] = useState('')
   const [surveyRating, setSurveyRating] = useState(0)
-  const [surveyImprovements, setSurveyImprovements] = useState<string[]>([])
+  const [surveyImprovements, setSurveyImprovements] = useState<SurveyImprovement[]>([])
   const [surveyComment, setSurveyComment] = useState('')
   const [surveySubmitted, setSurveySubmitted] = useState(false)
   const [remainingCredits, setRemainingCredits] = useState(2)
   const [creditModal, setCreditModal] = useState<'credit' | 'survey' | null>(null)
+  const [finalEditModal, setFinalEditModal] = useState<FinalEditKind | null>(null)
+  const [regenerationConfirmOpen, setRegenerationConfirmOpen] = useState(false)
+  const [regenerationCreditsLoading, setRegenerationCreditsLoading] = useState(false)
+  const [finalEditToneMode, setFinalEditToneMode] = useState<FinalToneMode>('recommended')
+  const [finalEditDraft, setFinalEditDraft] = useState({ companyName: '', companyMotto: '', brandName: '', targetAge: '', valuesText: '', tone: '', colors: [] as string[], logoStyle: '' as LogoStyle | '', logoShape: '' })
+  const activeModalRef = useRef<HTMLDivElement>(null)
+  const editorDragRef = useRef<EditorDragState | null>(null)
+
+  const buildEditorDraftSvg = (source: string, drafts: EditorDrafts) => {
+    let edited = source
+    for (const [target, draft] of Object.entries(drafts)) {
+      if (!draft.dirty) continue
+      edited = buildEditedSvg(edited, {
+        target,
+        color: draft.colorChanged ? draft.color : undefined,
+        scale: draft.scale,
+        rotation: draft.rotation,
+        opacity: draft.opacity,
+        offsetX: draft.offsetX,
+        offsetY: draft.offsetY,
+      })
+    }
+    return edited
+  }
+
+  const updateCurrentEditorDraft = (patch: Partial<EditorDraft>) => {
+    if (!editTarget) return
+    setEditorDrafts((current) => ({
+      ...current,
+      [editTarget]: {
+        ...(current[editTarget] ?? createEditorDraft(editorColor)),
+        ...patch,
+        dirty: true,
+      },
+    }))
+  }
+
+  const updateEditorOffsets = (offsetX: number, offsetY: number) => {
+    const nextOffsetX = Math.round(Math.max(-700, Math.min(700, offsetX)))
+    const nextOffsetY = Math.round(Math.max(-500, Math.min(500, offsetY)))
+    setEditorOffsetX(nextOffsetX)
+    setEditorOffsetY(nextOffsetY)
+    updateCurrentEditorDraft({ offsetX: nextOffsetX, offsetY: nextOffsetY })
+    markEditorDirty()
+  }
+
+  useEffect(() => {
+    if (!creditModal && !businessCardModalOpen && !resumePromptProject && !finalEditModal && !regenerationConfirmOpen) return
+
+    const modalRoot = activeModalRef.current
+    if (!modalRoot) return
+
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const backgroundElements = Array.from(document.querySelectorAll<HTMLElement>('.app-shell > main, .app-shell > .bottom-nav'))
+    const previousOverflow = document.body.style.overflow
+    const focusableSelector = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    const getFocusableElements = () => Array.from(modalRoot.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => element.offsetParent !== null)
+
+    backgroundElements.forEach((element) => element.setAttribute('inert', ''))
+    document.body.style.overflow = 'hidden'
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      const preferredTarget = modalRoot.querySelector<HTMLElement>('[autofocus]') ?? getFocusableElements()[0]
+      preferredTarget?.focus()
+    })
+
+    const handleModalKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        if (businessCardModalOpen) {
+          setBusinessCardModalOpen(false)
+          setBusinessCardTarget(null)
+          setBusinessCardInfoErrors({})
+        } else if (finalEditModal) {
+          setFinalEditModal(null)
+        } else if (regenerationConfirmOpen) {
+          setRegenerationConfirmOpen(false)
+        } else if (creditModal) {
+          setCreditModal(null)
+        } else {
+          setResumePromptProject(null)
+        }
+        return
+      }
+
+      if (event.key !== 'Tab') return
+      const focusableElements = getFocusableElements()
+      if (focusableElements.length === 0) {
+        event.preventDefault()
+        return
+      }
+
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement.focus()
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleModalKeyDown)
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', handleModalKeyDown)
+      backgroundElements.forEach((element) => element.removeAttribute('inert'))
+      document.body.style.overflow = previousOverflow
+      previouslyFocused?.focus()
+    }
+  }, [businessCardModalOpen, creditModal, finalEditModal, regenerationConfirmOpen, resumePromptProject])
   const [choiceInfoModal, setChoiceInfoModal] = useState<'ci' | 'bi' | null>(null)
-  const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; candidateId?: string; storageKey?: string } | null>(null)
+  const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; candidateId?: string; storageKey?: string; svgUrl?: string | null } | null>(null)
+  const editorCandidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
+
+  useEffect(() => {
+    if (mode !== 'edit' && mode !== 'result') return () => undefined
+    const candidate = editorCandidate
+    let disposed = false
+
+    if (mode === 'edit') {
+      const baseColor = projectColors[0] ?? '#7B5CDF'
+      setEditorSaved(false)
+      setEditorDirty(false)
+      setEditorColorChanged(false)
+      setEditorColorPickerOpen(false)
+      setEditorColor(baseColor)
+      setEditorScale(100)
+      setEditorRotation(0)
+      setEditorOpacity(100)
+      setEditorOffsetX(0)
+      setEditorOffsetY(0)
+      setEditTarget(null)
+      setEditorDrafts(createEditorDrafts(baseColor))
+    }
+    setEditorError('')
+    setEditorSvgSource(null)
+    setEditorSvgPreviewSource(null)
+    if (mode === 'edit' && EDITOR_TEST_MODE && editorTestMode) {
+      setEditorLoading(true)
+      void fetch(EDITOR_TEST_SVG_URL)
+        .then((response) => {
+          if (!response.ok) throw new Error('테스트용 SVG를 불러오지 못했어요.')
+          return response.text()
+        })
+        .then((svg) => {
+          if (!disposed) setEditorSvgSource(svg)
+        })
+        .catch((error) => {
+          if (!disposed) setEditorError(error instanceof Error ? error.message : '테스트용 SVG를 불러오지 못했어요.')
+        })
+        .finally(() => {
+          if (!disposed) setEditorLoading(false)
+        })
+      return () => { disposed = true }
+    }
+    if (!candidate?.svgUrl) {
+      setEditorLoading(false)
+      return () => { disposed = true }
+    }
+
+    setEditorLoading(true)
+    void projectsApi.getCandidateSvg(candidate.svgUrl)
+      .then((svg) => {
+        if (!disposed) setEditorSvgSource(svg)
+      })
+      .catch((error) => {
+        if (!disposed) setEditorError(error instanceof Error ? error.message : 'SVG를 불러오지 못했어요.')
+      })
+      .finally(() => {
+        if (!disposed) setEditorLoading(false)
+      })
+
+    return () => { disposed = true }
+  }, [editorCandidate?.id, editorCandidate?.svgUrl, editorTestMode, mode])
+
+  useEffect(() => {
+    if (!editorSvgSource) {
+      setEditorSvgPreviewSource(null)
+      setEditorSvgPreviewUrl(null)
+      return () => undefined
+    }
+
+    let objectUrl: string | null = null
+    try {
+      const edited = editorDirty ? buildEditorDraftSvg(editorSvgSource, editorDrafts) : editorSvgSource
+      setEditorSvgPreviewSource(prepareEditableSvg(edited, editTarget))
+      objectUrl = URL.createObjectURL(new Blob([edited], { type: 'image/svg+xml' }))
+      setEditorSvgPreviewUrl(objectUrl)
+      setEditorError('')
+    } catch (error) {
+      setEditorSvgPreviewUrl(null)
+      setEditorError(error instanceof Error ? error.message : 'SVG 편집 미리보기를 만들지 못했어요.')
+    }
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [editorSvgSource, editorDirty, editorDrafts, editTarget])
+
+  useEffect(() => {
+    let disposed = false
+    const createdUrls: string[] = []
+    const matchesWithImages = trademarkMatches.filter((match) => match.imageUrl)
+
+    if (matchesWithImages.length === 0) {
+      setTrademarkMatchImages([])
+      return () => undefined
+    }
+
+    void Promise.all(matchesWithImages.map(async (match) => {
+      const blob = await apiBlobRequest(match.imageUrl as string)
+      const src = URL.createObjectURL(blob)
+      createdUrls.push(src)
+      return { rank: match.rank, src }
+    })).then((images) => {
+      if (!disposed) setTrademarkMatchImages(images)
+    }).catch(() => {
+      if (!disposed) setTrademarkMatchImages([])
+    })
+
+    return () => {
+      disposed = true
+      createdUrls.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [trademarkMatches])
 
   const setMode = (nextMode: ViewMode, options: { replace?: boolean } = {}) => {
     setModeState(nextMode)
@@ -402,6 +793,14 @@ function CustomerApp() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [mode])
+
+  useEffect(() => {
+    if (mode !== 'logo-intro') return undefined
+
+    setLogoIntroStage('opening')
+    const timer = window.setTimeout(() => setLogoIntroStage('ready'), 3600)
+    return () => window.clearTimeout(timer)
   }, [mode])
 
   useEffect(() => {
@@ -472,12 +871,13 @@ function CustomerApp() {
     }
 
     setLoadingStep(0)
+    const totalLoadingSteps = trademarkAnalysisRequested ? 6 : 5
     const timer = window.setInterval(() => {
-      setLoadingStep((current) => Math.min(current + 1, 4))
+      setLoadingStep((current) => Math.min(current + 1, totalLoadingSteps - 1))
     }, 1600)
 
     return () => window.clearInterval(timer)
-  }, [generationLoading, mode])
+  }, [generationLoading, mode, trademarkAnalysisRequested])
 
   useEffect(() => {
     if (mode !== 'company-details' || !loggedIn || brandKind !== 'ci' || ciProfileLoaded.current) return undefined
@@ -518,6 +918,38 @@ function CustomerApp() {
     ])
   }, [loggedIn, mode])
 
+  useEffect(() => {
+    if (!loggedIn || (mode !== 'brand-kit' && mode !== 'mypage')) return
+    let cancelled = false
+    void meApi.getBrandKits()
+      .then((kits) => {
+        if (cancelled) return
+        const latest = selectedCandidateId
+          ? kits.find((kit) => kit.candidateId === selectedCandidateId) ?? null
+          : kits[0] ?? null
+        setBrandKit(latest)
+        if (latest) {
+          const restoredRequestEpoch = ++brandKitRequestEpochRef.current
+          setBrandKitType(latest.kitType)
+          setSelectedCandidateId(latest.candidateId)
+          setProjectId(latest.projectId)
+          if (latest.status === 'QUEUED' || latest.status === 'RUNNING') {
+            void pollBrandKit(latest, restoredRequestEpoch, () => cancelled).catch((error) => {
+              if (!cancelled && mode === 'brand-kit') {
+                setBrandKitError(error instanceof Error ? error.message : '브랜드 키트 상태를 갱신하지 못했어요.')
+              }
+            })
+          }
+        }
+      })
+      .catch((error) => {
+        if (!cancelled && mode === 'brand-kit') {
+          setBrandKitError(error instanceof Error ? error.message : '기존 브랜드 키트를 불러오지 못했어요.')
+        }
+      })
+    return () => { cancelled = true }
+  }, [loggedIn, mode, selectedCandidateId])
+
   useEffect(() => () => {
     if (onboardingTransitionTimer.current !== null) window.clearTimeout(onboardingTransitionTimer.current)
   }, [])
@@ -539,6 +971,23 @@ function CustomerApp() {
   const productGalleryDragStartX = useRef(0)
   const productGalleryDragStartScrollLeft = useRef(0)
   const isDraggingProductGallery = useRef(false)
+  const businessCardGalleryRef = useRef<HTMLDivElement>(null)
+  const businessCardGalleryDragStartX = useRef(0)
+  const businessCardGalleryDragStartScrollLeft = useRef(0)
+  const isDraggingBusinessCardGallery = useRef(false)
+
+  const [curationActiveDot, setCurationActiveDot] = useState(0)
+  const [productActiveDot, setProductActiveDot] = useState(0)
+  const [businessCardActiveDot, setBusinessCardActiveDot] = useState(0)
+
+  // 현재 화면에 보이는 카드 묶음을 한 페이지로 보고, 스크롤 위치 비율로 페이지를 계산한다.
+  const computeActiveDot = (track: HTMLDivElement, itemCount: number) => {
+    const dotCount = Math.max(1, Math.ceil(itemCount / 4))
+    const maxScroll = track.scrollWidth - track.clientWidth
+    if (maxScroll <= 0) return 0
+    const ratio = track.scrollLeft / maxScroll
+    return Math.min(dotCount - 1, Math.round(ratio * (dotCount - 1)))
+  }
 
   const filteredItems = activeCategory === '전체'
     ? galleryItems
@@ -548,8 +997,15 @@ function CustomerApp() {
     setLikedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   }
 
-  const scrollGallery = (amount: number) => {
-    galleryRef.current?.scrollBy({ left: amount, behavior: 'smooth' })
+  const scrollTrackByPage = (track: HTMLDivElement | null, direction: number) => {
+    if (!track) return
+    const maxScroll = track.scrollWidth - track.clientWidth
+    const target = Math.min(maxScroll, Math.max(0, track.scrollLeft + direction * track.clientWidth))
+    track.scrollTo({ left: target, behavior: 'smooth' })
+  }
+
+  const scrollGallery = (direction: number) => {
+    scrollTrackByPage(galleryRef.current, direction)
   }
 
   const handleGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -580,8 +1036,8 @@ function CustomerApp() {
     track.classList.remove('is-dragging')
   }
 
-  const scrollProductGallery = (amount: number) => {
-    productGalleryRef.current?.scrollBy({ left: amount, behavior: 'smooth' })
+  const scrollProductGallery = (direction: number) => {
+    scrollTrackByPage(productGalleryRef.current, direction)
   }
 
   const handleProductGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -612,14 +1068,80 @@ function CustomerApp() {
     track.classList.remove('is-dragging')
   }
 
-  const toggleSurveyImprovement = (item: string) => {
+  const scrollBusinessCardGallery = (direction: number) => {
+    scrollTrackByPage(businessCardGalleryRef.current, direction)
+  }
+
+  const handleBusinessCardGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    const track = businessCardGalleryRef.current
+    if (!track || event.button !== 0) return
+
+    isDraggingBusinessCardGallery.current = true
+    businessCardGalleryDragStartX.current = event.clientX
+    businessCardGalleryDragStartScrollLeft.current = track.scrollLeft
+    track.setPointerCapture(event.pointerId)
+    track.classList.add('is-dragging')
+  }
+
+  const handleBusinessCardGalleryPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const track = businessCardGalleryRef.current
+    if (!track || !isDraggingBusinessCardGallery.current) return
+
+    event.preventDefault()
+    track.scrollLeft = businessCardGalleryDragStartScrollLeft.current - (event.clientX - businessCardGalleryDragStartX.current)
+  }
+
+  const handleBusinessCardGalleryPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const track = businessCardGalleryRef.current
+    if (!track) return
+
+    isDraggingBusinessCardGallery.current = false
+    if (track.hasPointerCapture(event.pointerId)) track.releasePointerCapture(event.pointerId)
+    track.classList.remove('is-dragging')
+  }
+
+  const handleGalleryScroll = () => {
+    const track = galleryRef.current
+    if (!track) return
+    setCurationActiveDot(computeActiveDot(track, filteredItems.length))
+  }
+
+  const handleProductGalleryScroll = () => {
+    const track = productGalleryRef.current
+    if (!track) return
+    setProductActiveDot(computeActiveDot(track, productGalleryItems.length))
+  }
+
+  const handleBusinessCardGalleryScroll = () => {
+    const track = businessCardGalleryRef.current
+    if (!track) return
+    setBusinessCardActiveDot(computeActiveDot(track, businessCardGalleryItems.length))
+  }
+
+  const toggleSurveyImprovement = (item: SurveyImprovement) => {
     setSurveyImprovements((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])
+  }
+
+  const applyLogoCandidateState = async (candidateProjectId: string, candidates: LogoCandidate[]) => {
+    let nextCandidates = candidates
+    let selected = candidates.findIndex((candidate) => candidate.selected)
+    if (selected < 0 && candidates.length === 1) {
+      const selectedCandidate = await projectsApi.selectCandidate(candidateProjectId, candidates[0].id)
+      nextCandidates = candidates.map((candidate) => ({ ...candidate, selected: candidate.id === selectedCandidate.id }))
+      selected = 0
+    }
+
+    setLogoCandidates(nextCandidates)
+    setResultCandidate(selected >= 0 ? selected : 0)
+    setSelectedCandidateId(selected >= 0 ? nextCandidates[selected].id : null)
+    setResultLiked(Boolean(nextCandidates[selected >= 0 ? selected : 0]?.pinnedAt))
   }
 
   const restoreProjectState = async (resumeId: string): Promise<ViewMode | null> => {
     try {
       const project = await projectsApi.get(resumeId)
       setProjectId(project.id)
+      setProjectColors(project.colors?.slice(0, 4) ?? [])
       window.localStorage.setItem('genmark-project-id', project.id)
 
       const nextBrandKind = project.brandType === 'CI' ? 'ci' : project.brandType === 'BI' ? 'bi' : null
@@ -634,29 +1156,49 @@ function CustomerApp() {
       setTargetAge(project.targetAge
         ? targetAgeOptions.find((option) => option.id === project.targetAge || option.label === project.targetAge)?.id ?? ''
         : '')
-      setLogoShapePrompt(extractLogoShapeRequirement(project.additionalRequirements))
+      setLogoShapePrompt(project.logoShape ?? extractLogoShapeRequirement(project.additionalRequirements))
       if (project.tone && toneOptions.some((option) => option.id === project.tone)) setToneSelection(project.tone as ToneOption)
       else setToneSelection(null)
+      setDirectTone(project.colorMode?.toUpperCase() === 'MANUAL' ? project.tone ?? '' : '')
       if (project.colors?.length) {
-        setManualColors(project.colors.slice(0, 4))
-        const matchingTone = project.colors.length >= 2
-          ? toneOptions.find((option) => option.colors[0].toLowerCase() === project.colors?.[0]?.toLowerCase() && option.colors[1].toLowerCase() === project.colors?.[1]?.toLowerCase())
-          : undefined
-        setColorSelectionMode(matchingTone ? 'tone' : 'manual')
-        setManualColorsSelected(Boolean(!matchingTone && project.colors.length >= 2))
-        if (matchingTone) setToneSelection(matchingTone.id)
+        setManualColors(project.colors.slice(0, 1))
+        const matchingTone = toneOptions.find((option) => option.colors[0].toLowerCase() === project.colors?.[0]?.toLowerCase())
+        if (project.colorMode) {
+          const manual = project.colorMode.toUpperCase() === 'MANUAL'
+          setColorSelectionMode(manual ? 'manual' : 'tone')
+          setToneMode(manual ? 'direct' : 'recommended')
+          if (!manual && matchingTone) setToneSelection(matchingTone.id)
+        } else {
+          setColorSelectionMode(matchingTone ? 'tone' : 'manual')
+          setToneMode(matchingTone ? 'recommended' : 'direct')
+          if (matchingTone) setToneSelection(matchingTone.id)
+        }
       }
       if (project.logoStyle && logoStyleOptions.some((option) => option.id === project.logoStyle)) setLogoStyle(project.logoStyle as LogoStyle)
 
       const step = typeof project.currentStep === 'number' ? project.currentStep : Number(project.currentStep)
+      const hasResult = project.brandType === 'BI'
+        ? step >= 6 || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED'
+        : step >= 5 || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED'
+      if (hasResult) {
+        try {
+          await applyLogoCandidateState(project.id, await projectsApi.getLatestCandidates(project.id))
+        } catch (error) {
+          if (!(error instanceof AuthError) || error.status !== 404) throw error
+          setLogoCandidates([])
+          setSelectedCandidateId(null)
+          setResultCandidate(0)
+          setResultLiked(false)
+        }
+        return 'result'
+      }
+
       if (project.brandType === 'BI') {
-        if (step >= 6 || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED') return 'result'
         if (step >= 5) return 'final'
         if (step >= 4) return 'style'
         if (step >= 3) return 'tone'
         return 'brand-details'
       }
-      if (step >= 5 || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED') return 'result'
       if (step >= 4) return 'final'
       if (step >= 3) return 'style'
       if (step >= 2) return 'tone'
@@ -672,11 +1214,13 @@ function CustomerApp() {
   }
 
   /** 이어쓸 만한 초안이 있을 때, 곧장 이어쓰지 않고 "이어서 작성하시겠습니까?" 확인창부터 보여준다. */
-  const presentResumePrompt = async (resumeId: string, fallback: () => void) => {
+  const presentResumePrompt = async (resumeId: string, fallback: () => void, options: { skipSilentResume?: boolean } = {}) => {
     try {
       const project = await projectsApi.get(resumeId)
-      if (project.status === 'COMPLETED') {
-        // 완전히 끝난 프로젝트는 더 이상 이어쓰기 대상이 아니다 — 새로고침 없이도 새 프로젝트를 시작할 수 있게 비워준다.
+      const alreadyHasResult = project.status === 'RESULT_READY' || project.status === 'GENERATING' || project.status === 'ANALYZING'
+      if (project.status === 'COMPLETED' || (options.skipSilentResume && alreadyHasResult)) {
+        // 완전히 끝났거나(COMPLETED) 이미 생성 결과가 있는 프로젝트는 더 이상 이어쓰기 대상이 아니다
+        // — 새로고침 없이도 새 프로젝트를 시작할 수 있게 비워준다.
         setProjectId(null)
         window.localStorage.removeItem('genmark-project-id')
         fallback()
@@ -760,13 +1304,17 @@ function CustomerApp() {
        } else if (session.resumeProjectId) {
          const destination = loginDestination
          setMode('home')
-         await presentResumePrompt(session.resumeProjectId, () => setMode(destination))
+         await presentResumePrompt(session.resumeProjectId, () => setMode(destination), { skipSilentResume: true })
          setLoginDestination('home')
        } else {
          setMode(loginDestination)
          setLoginDestination('home')
        }
     } catch (error) {
+      if (error instanceof AuthError && error.code === 'LOGIN_CANCELLED') {
+        setAuthError('')
+        return
+      }
       const message = error instanceof AuthError
         ? `${error.message}${error.code ? ` (${error.code}${error.requestId ? `, requestId: ${error.requestId}` : ''})` : ''}`
         : error instanceof Error
@@ -779,11 +1327,18 @@ function CustomerApp() {
   }
 
   const handleLogout = () => {
-    const returnMode = mode === 'login' ? 'home' : mode
-    setAuthUser(null)
-    setLoggedIn(false)
-    setMode(returnMode, { replace: true })
-    void logout()
+    // 같은 화면이라도 뭔가 전환되는 느낌을 주려고, 짧게 화면을 덮었다가 걷어내는
+    // 동안 실제 로그아웃 상태 변경을 처리한다 (사용자에게는 순간이동이 아니라
+    // 페이지가 넘어가는 것처럼 보임).
+    setLoggingOut(true)
+    window.setTimeout(() => {
+      const returnMode = mode === 'login' ? 'home' : mode
+      setAuthUser(null)
+      setLoggedIn(false)
+      setMode(returnMode, { replace: true })
+      void logout()
+      window.setTimeout(() => setLoggingOut(false), 260)
+    }, 260)
   }
 
   const startOnboarding = async () => {
@@ -800,10 +1355,25 @@ function CustomerApp() {
       return
     }
     if (projectId) {
-      await presentResumePrompt(projectId, () => { setIndustryBackMode('home'); setMode('industry') })
+      await presentResumePrompt(projectId, () => { setIndustryBackMode('home'); setMode('industry') }, { skipSilentResume: true })
       return
     }
     setIndustryBackMode('home')
+    setMode('industry')
+  }
+
+  const openLogoCreationIntro = () => {
+    setMode('logo-intro')
+  }
+
+  const startLogoCreationFromIntro = () => {
+    setIndustryBackMode('home')
+    if (!loggedIn) {
+      setLoginDestination('industry')
+      setLoginReturnMode('home')
+      setMode('login')
+      return
+    }
     setMode('industry')
   }
 
@@ -872,11 +1442,14 @@ function CustomerApp() {
     setTrademarkAnalysisCompleted(false)
     if (!canAnalyzeTrademark) {
       setTrademarkAnalysisSkipped(true)
-      setMode(entry === 'result' ? 'result' : 'loading')
+      setTrademarkAnalysisRequested(false)
+      if (entry === 'result') setMode('result')
+      else void startLogoGeneration(false)
       return
     }
 
     setTrademarkAnalysisSkipped(false)
+    setTrademarkAnalysisRequested(false)
     setTrademarkEntry(entry)
     setMode('trademark-selection')
   }
@@ -901,29 +1474,28 @@ function CustomerApp() {
     setManualColors((current) => {
       const next = [...current]
       next[manualColorSlot] = hex
-      return next
+      return uniqueColors(next)
     })
   }
 
   const resetManualColors = () => {
-    setManualColors(['#9765e9', '#dcaff5'])
+    setManualColors([DEFAULT_MANUAL_COLOR])
     setManualColorSlot(0)
-    setManualColorsSelected(false)
   }
 
   const updateToneColorFromHex = (toneId: ToneOption, slot: number, hex: string) => {
     setTonePaletteDraft((current) => {
       const base = current?.toneId === toneId
         ? current.colors
-        : customToneColors[toneId] ?? toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#eadfff', '#ffe1ef']
+        : customToneColors[toneId] ?? toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#eadfff']
       const next = [...base]
       next[slot] = hex
-      return { toneId, colors: next }
+      return { toneId, colors: uniqueColors(next) }
     })
   }
 
   const resetToneColors = (toneId: ToneOption) => {
-    const original = toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#eadfff', '#ffe1ef']
+    const original = toneOptions.find((tone) => tone.id === toneId)?.colors ?? ['#eadfff']
     setCustomToneColors((current) => {
       const next = { ...current }
       delete next[toneId]
@@ -933,19 +1505,16 @@ function CustomerApp() {
     setTonePaletteTarget({ toneId, slot: 0 })
   }
 
+  const getToneColors = (toneId: ToneOption) => uniqueColors(customToneColors[toneId]
+    ?? toneOptions.find((option) => option.id === toneId)?.colors
+    ?? toneOptions[0].colors).slice(0, 1)
+
   const getSelectedColors = () => {
     if (colorSelectionMode === 'tone' && toneSelection) {
-      return customToneColors[toneSelection]
-        ?? toneOptions.find((option) => option.id === toneSelection)?.colors
-        ?? toneOptions[0].colors
+      return getToneColors(toneSelection)
     }
 
-    return manualColors
-  }
-
-  const buildAdditionalRequirements = () => {
-    const shapeRequirement = logoShapePrompt.trim() ? `${logoShapeRequirementPrefix} ${logoShapePrompt.trim()}` : ''
-    return shapeRequirement || undefined
+    return [uniqueColors(manualColors)[0] ?? DEFAULT_MANUAL_COLOR]
   }
 
   const buildProjectInput = (step: 'brand-brief' | 'tone' | 'logo-style' | 'final-review'): ProjectInput => {
@@ -964,17 +1533,19 @@ function CustomerApp() {
       input.targetAge = toTargetAgeApiValue(targetAge || '전 연령층')
     }
 
-    if (step === 'tone') {
-      input.tone = toneSelection ?? undefined
-      input.colorMode = colorSelectionMode === 'manual' ? 'MANUAL' : 'TONE'
+    if (step === 'tone' || step === 'logo-style' || step === 'final-review') {
+      input.tone = (toneMode === 'direct' ? directTone.trim() : toneSelection) || undefined
+      const customizedRecommendedPalette = Boolean(toneSelection && customToneColors[toneSelection])
+      input.colorMode = colorSelectionMode === 'manual' || customizedRecommendedPalette ? 'MANUAL' : 'TONE'
       input.colors = getSelectedColors()
+      input.paletteReplace = true
     }
 
     if (step === 'logo-style') {
       input.logoStyle = logoStyle ?? undefined
-      input.additionalRequirements = buildAdditionalRequirements()
+      input.logoShape = logoShapePrompt.trim()
     }
-    if (step === 'final-review') input.additionalRequirements = buildAdditionalRequirements()
+    if (step === 'final-review') input.logoShape = logoShapePrompt.trim()
 
     return input
   }
@@ -993,7 +1564,8 @@ function CustomerApp() {
     const input = buildProjectInput(step)
     if (projectId) {
       try {
-        await projectsApi.updateStep(projectId, step, input)
+        const project = await projectsApi.updateStep(projectId, step, input)
+        setProjectColors(project.colors?.slice(0, 4) ?? (input.colors?.slice(0, 4) ?? []))
         return projectId
       } catch (error) {
         if (!(error instanceof AuthError) || error.status !== 404) throw error
@@ -1004,8 +1576,10 @@ function CustomerApp() {
 
     const project = await projectsApi.create(buildProjectCreateInput(step))
     setProjectId(project.id)
+    setProjectColors(project.colors?.slice(0, 4) ?? [])
     window.localStorage.setItem('genmark-project-id', project.id)
-    await projectsApi.updateStep(project.id, step, input)
+    const updatedProject = await projectsApi.updateStep(project.id, step, input)
+    setProjectColors(updatedProject.colors?.slice(0, 4) ?? (input.colors?.slice(0, 4) ?? []))
     return project.id
   }
 
@@ -1027,23 +1601,159 @@ function CustomerApp() {
     }
   }
 
-  const saveEditorChanges = async () => {
-    if (!projectId) {
-      setEditorSaved(true)
-      return
+  const markEditorDirty = () => {
+    setEditorDirty(true)
+    setEditorSaved(false)
+  }
+
+  const resetEditorControls = () => {
+    if (!editTarget) return
+    const baseColor = projectColors[0] ?? '#7B5CDF'
+    setEditorScale(100)
+    setEditorRotation(0)
+    setEditorOpacity(100)
+    setEditorOffsetX(0)
+    setEditorOffsetY(0)
+    setEditorColor(baseColor)
+    setEditorColorPickerOpen(false)
+    setEditorColorChanged(false)
+    setEditorDrafts((current) => ({
+      ...current,
+      [editTarget]: {
+        scale: 100,
+        rotation: 0,
+        opacity: 100,
+        offsetX: 0,
+        offsetY: 0,
+        color: baseColor,
+        colorChanged: false,
+        dirty: true,
+      },
+    }))
+    markEditorDirty()
+  }
+
+  const selectEditorTarget = (target: EditorTarget) => {
+    if (target === editTarget) return
+    if (editTarget) {
+      setEditorDrafts((current) => ({
+        ...current,
+        [editTarget]: {
+          ...(current[editTarget] ?? createEditorDraft(editorColor)),
+          scale: editorScale,
+          rotation: editorRotation,
+          opacity: editorOpacity,
+          offsetX: editorOffsetX,
+          offsetY: editorOffsetY,
+          color: editorColor,
+          colorChanged: editorColorChanged,
+        },
+      }))
     }
+    const nextDraft = editorDrafts[target] ?? createEditorDraft(editorColor)
+    setEditTarget(target)
+    setEditorScale(nextDraft.scale)
+    setEditorRotation(nextDraft.rotation)
+    setEditorOpacity(nextDraft.opacity)
+    setEditorOffsetX(nextDraft.offsetX)
+    setEditorOffsetY(nextDraft.offsetY)
+    setEditorColor(nextDraft.color)
+    setEditorColorPickerOpen(false)
+    setEditorColorChanged(nextDraft.colorChanged)
+    setEditorError('')
+  }
+
+  const saveEditorChanges = async (): Promise<boolean> => {
+    const candidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
+    if (!editorSvgSource || (!EDITOR_TEST_MODE && (!projectId || !candidate?.svgUrl))) {
+      setEditorError('저장할 SVG 로고를 불러오지 못했어요.')
+      setEditorSaved(false)
+      return false
+    }
+
+    setEditorSaving(true)
+    setEditorError('')
     try {
-      await projectsApi.patch(projectId, { brandType: brandKind === 'bi' ? 'BI' : 'CI', brandName: editorBrandName, colors: [editorColor] })
+      const editedSvg = editorDirty ? buildEditorDraftSvg(editorSvgSource, editorDrafts) : editorSvgSource
+      if (!EDITOR_TEST_MODE && candidate?.svgUrl) await projectsApi.saveCandidateSvg(candidate.svgUrl, editedSvg)
+      const changedColorDraft = Object.values(editorDrafts).find((draft) => draft.dirty && draft.colorChanged)
+      if (!EDITOR_TEST_MODE && changedColorDraft && projectId) {
+        const currentPalette = projectColors.length > 0 ? projectColors : getSelectedColors()
+        const nextPalette = [...currentPalette]
+        if (nextPalette.length === 0) nextPalette.push(changedColorDraft.color)
+        else nextPalette[0] = changedColorDraft.color
+        const patchedProject = await projectsApi.patch(projectId, {
+          brandType: brandKind === 'bi' ? 'BI' : 'CI',
+          colors: nextPalette,
+          paletteReplace: true,
+        })
+        setProjectColors(patchedProject.colors?.slice(0, 4) ?? nextPalette.slice(0, 4))
+      }
+      assetEpochRef.current += 1
+      setEditorSvgSource(editedSvg)
+      setEditorDirty(false)
+      setEditorColorChanged(false)
+      setEditorDrafts((current) => Object.fromEntries(Object.entries(current).map(([target, draft]) => [target, { ...draft, dirty: false }])))
       setEditorSaved(true)
+      if (candidate) setLogoCandidates((current) => current.map((item) => item.id === candidate.id
+          ? { ...item, svgEdited: true }
+          : item))
+      setAnalysisId(null)
+      setAnalysisError('')
+      setTrademarkAnalysisCompleted(false)
+      setTrademarkAnalysisSkipped(false)
+      setTrademarkAnalysisRequested(false)
+      setTrademarkMatches([])
+      setTrademarkMatchImages([])
+      setTrademarkSimilarity(null)
+      setTrademarkRiskLabel('')
+      setTrademarkRiskDescription('')
+      setTrademarkDisclaimer('')
+      setBrandKit(null)
+      setBrandKitError('')
+      setBrandKitType(null)
+      return true
     } catch (error) {
-      setProjectError(error instanceof Error ? error.message : '편집 내용을 저장하지 못했어요.')
+      const message = error instanceof Error ? error.message : '편집 내용을 저장하지 못했어요.'
+      setEditorError(message)
+      setProjectError(message)
+      setEditorSaved(false)
+      return false
+    } finally {
+      setEditorSaving(false)
     }
   }
 
-  const startLogoGeneration = async () => {
+  const runTrademarkAnalysisForCandidate = async (targetProjectId: string, candidate: LogoCandidate, requestEpoch: number) => {
+    await projectsApi.selectCandidate(targetProjectId, candidate.id)
+    if (requestEpoch !== assetEpochRef.current) return false
+    setSelectedCandidateId(candidate.id)
+    const analysis = await projectsApi.createAnalysis(targetProjectId)
+    if (requestEpoch !== assetEpochRef.current) return false
+    setAnalysisId(analysis.id)
+    const completedAnalysis = await waitForTrademarkAnalysis(targetProjectId, analysis.id)
+    if (requestEpoch !== assetEpochRef.current) return false
+    if (completedAnalysis.status === 'FAILED') {
+      throw new Error(completedAnalysis.errorMessage ?? '상표 분석에 실패했어요.')
+    }
+    const matches = await projectsApi.getMatches(targetProjectId, analysis.id)
+    if (requestEpoch !== assetEpochRef.current) return false
+    setTrademarkMatches(matches)
+    setTrademarkSimilarity(completedAnalysis.maxSimilarity)
+    setTrademarkRiskLabel(completedAnalysis.riskLabel ?? '')
+    setTrademarkRiskDescription(completedAnalysis.riskDescription ?? '')
+    setTrademarkDisclaimer(completedAnalysis.disclaimer ?? '')
+    setTrademarkAnalysisCompleted(true)
+    return true
+  }
+
+  const startLogoGeneration = async (analyzeTrademark = trademarkAnalysisRequested) => {
     if (generationLoading) return
     setGenerationLoading(true)
     setGenerationError('')
+    setAnalysisError('')
+    setTrademarkAnalysisRequested(analyzeTrademark)
+    setTrademarkAnalysisSkipped(!analyzeTrademark)
     setMode('loading')
     try {
       const nextProjectId = await ensureProject('final-review')
@@ -1056,12 +1766,25 @@ function CustomerApp() {
       }
 
       const candidates = await projectsApi.getCandidates(nextProjectId, generation.id)
-      if (candidates.length !== 4) throw new Error('로고 후보를 4개 불러오지 못했어요.')
-      setLogoCandidates(candidates)
-      const selected = candidates.findIndex((candidate) => candidate.selected)
-      setResultCandidate(selected >= 0 ? selected : 0)
-      setSelectedCandidateId(selected >= 0 ? candidates[selected].id : null)
-      setResultLiked(Boolean(candidates[selected >= 0 ? selected : 0]?.pinnedAt))
+      if (candidates.length !== GENERATED_LOGO_COUNT) throw new Error('생성된 로고 1개를 불러오지 못했어요.')
+
+      await applyLogoCandidateState(nextProjectId, candidates)
+      if (analyzeTrademark) {
+        try {
+          const selectedIndex = candidates.findIndex((candidate) => candidate.selected)
+          const candidate = candidates[selectedIndex >= 0 ? selectedIndex : 0]
+          if (!candidate) throw new Error('상표 분석에 사용할 로고를 찾지 못했어요.')
+          const analysisCompleted = await runTrademarkAnalysisForCandidate(nextProjectId, candidate, assetEpochRef.current)
+          if (!analysisCompleted) return
+        } catch (error) {
+          setAnalysisError(error instanceof Error ? error.message : '상표 분석 중 문제가 발생했어요.')
+          setTrademarkAnalysisCompleted(false)
+          setTrademarkAnalysisSkipped(false)
+          setTrademarkAnalysisRequested(true)
+          setMode('result')
+          return
+        }
+      }
       setMode('result')
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : '로고 생성 중 문제가 발생했어요.')
@@ -1084,89 +1807,207 @@ function CustomerApp() {
   }
 
   const startTrademarkAnalysis = async () => {
-    if (!projectId || trademarkAnalysisCompleted) return
+    if (!projectId) return
     const candidate = logoCandidates[resultCandidate]
     if (!candidate) {
       setAnalysisError('먼저 로고 후보를 생성해주세요.')
       return
     }
-
+    const requestEpoch = assetEpochRef.current
     setAnalysisError('')
     setMode('trademark-loading')
     try {
-      await projectsApi.selectCandidate(projectId, candidate.id)
-      setSelectedCandidateId(candidate.id)
-      const analysis = await projectsApi.createAnalysis(projectId)
-      setAnalysisId(analysis.id)
-      const completedAnalysis = await waitForTrademarkAnalysis(projectId, analysis.id)
-      if (completedAnalysis.status === 'FAILED') {
-        throw new Error(completedAnalysis.errorMessage ?? '상표 분석에 실패했어요.')
-      }
-      const matches = await projectsApi.getMatches(projectId, analysis.id)
-      setTrademarkMatches(matches)
-      setTrademarkSimilarity(completedAnalysis.maxSimilarity)
-      setTrademarkRiskLabel(completedAnalysis.riskLabel ?? '')
-      setTrademarkRiskDescription(completedAnalysis.riskDescription ?? '')
-      setTrademarkDisclaimer(completedAnalysis.disclaimer ?? '')
-      setTrademarkAnalysisCompleted(true)
+      const analysisCompleted = await runTrademarkAnalysisForCandidate(projectId, candidate, requestEpoch)
+      if (!analysisCompleted) return
       setMode('trademark-result')
     } catch (error) {
+      if (requestEpoch !== assetEpochRef.current) return
       setAnalysisError(error instanceof Error ? error.message : '상표 분석 중 문제가 발생했어요.')
       setMode('result')
     }
   }
 
-  const requestBrandKit = async () => {
-    if (!projectId || !selectedCandidateId) return
+  const pollBrandKit = async (initial: BrandKit, brandKitRequestEpoch: number, shouldStop?: () => boolean) => {
+    if (initial.status !== 'QUEUED' && initial.status !== 'RUNNING') return
+    const requestEpoch = assetEpochRef.current
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2_000))
+      if (shouldStop?.() || requestEpoch !== assetEpochRef.current
+          || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return
+      const next = await projectsApi.getBrandKit(initial.projectId, initial.candidateId, initial.id)
+      if (shouldStop?.() || requestEpoch !== assetEpochRef.current
+          || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return
+      setBrandKit(next)
+      if (next.status === 'SUCCEEDED' || next.status === 'FAILED') return
+    }
+  }
+
+  const requestBrandKit = async (
+    candidateId: string | null = selectedCandidateId,
+    targetProjectId: string | null = projectId,
+    cardInfo?: BusinessCardInfoInput,
+  ) => {
+    if (!targetProjectId || !candidateId) return
+    const requestEpoch = assetEpochRef.current
+    const brandKitRequestEpoch = ++brandKitRequestEpochRef.current
     setBrandKitError('')
     try {
-      const requested = await projectsApi.requestBrandKit(projectId, selectedCandidateId)
+      const requested = await projectsApi.requestBrandKit(
+        targetProjectId,
+        candidateId,
+        { kitType: brandKitType ?? 'THUMBNAIL', ...(cardInfo ? { cardInfo } : {}) },
+      )
+      if (requestEpoch !== assetEpochRef.current
+          || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return
       setBrandKit(requested)
-      if (requested.status === 'QUEUED' || requested.status === 'RUNNING') {
-        for (let attempt = 0; attempt < 60; attempt += 1) {
-          await new Promise((resolve) => window.setTimeout(resolve, 2_000))
-          const next = await projectsApi.getBrandKit(projectId, selectedCandidateId)
-          setBrandKit(next)
-          if (next.status === 'SUCCEEDED' || next.status === 'FAILED') break
-        }
-      }
+      await pollBrandKit(requested, brandKitRequestEpoch)
     } catch (error) {
+      if (requestEpoch !== assetEpochRef.current
+          || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return
       setBrandKitError(error instanceof Error ? error.message : '브랜드 키트를 요청하지 못했어요.')
     }
   }
 
   const openBrandKitSelection = () => {
     setBrandKitError('')
+    setBrandKitType(null)
     setMode('brand-kit')
   }
 
-  const createSelectedBrandKit = () => {
+  const downloadBrandKitArchive = async (kit: BrandKit) => {
+    if (brandKitDownloading) return
+    setBrandKitDownloading(true)
+    setBrandKitError('')
+    try {
+      const blob = await projectsApi.downloadBrandKit(kit.projectId, kit.candidateId, kit.id)
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = kit.kitType === 'BUSINESS_CARD'
+        ? 'genmark-business-card.zip'
+        : 'genmark-thumbnail.zip'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+    } catch (error) {
+      setBrandKitError(error instanceof Error ? error.message : '브랜드 키트를 다운로드하지 못했어요.')
+    } finally {
+      setBrandKitDownloading(false)
+    }
+  }
+
+  const openBusinessCardModal = (target: { candidateId: string; projectId: string } | null = null) => {
+    setBusinessCardTarget(target)
+    setBusinessCardInfoErrors({})
+    setBusinessCardInfo((current) => ({
+      ...current,
+      name: current.name || authUser?.name?.trim() || '',
+      company: current.company || (brandKind === 'ci' ? companyName : brandName).trim(),
+      email: current.email || authUser?.email?.trim() || '',
+    }))
+    setBusinessCardModalOpen(true)
+  }
+
+  const runSelectedBrandKit = async (cardInfo?: BusinessCardInfoInput) => {
     if (!brandKitType) return
-    if (!projectId || !selectedCandidateId) {
+    if (!projectId) {
       setBrandKitError('로고 후보를 선택한 뒤 브랜드 키트를 만들 수 있어요.')
       return
     }
-    void requestBrandKit()
+
+    if (logoCandidates.length === 0 && selectedCandidateId) {
+      await requestBrandKit(selectedCandidateId, projectId, cardInfo)
+      return
+    }
+
+    const candidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
+    if (!candidate) {
+      setBrandKitError('로고 후보를 선택한 뒤 브랜드 키트를 만들 수 있어요.')
+      return
+    }
+
+    try {
+      let candidateId = selectedCandidateId
+      if (!candidate.selected || candidate.id !== selectedCandidateId) {
+        const selected = await projectsApi.selectCandidate(projectId, candidate.id)
+        candidateId = selected.id
+        setSelectedCandidateId(selected.id)
+        setLogoCandidates((current) => current.map((item) => ({ ...item, selected: item.id === selected.id })))
+      }
+      await requestBrandKit(candidateId, projectId, cardInfo)
+    } catch (error) {
+      setBrandKitError(error instanceof Error ? error.message : '로고 후보를 선택하지 못했어요.')
+    }
   }
 
-  const downloadLogo = async (candidate: { name: string; subtitle?: string; candidateId?: string; storageKey?: string }): Promise<boolean> => {
-    if (!candidate.storageKey) return false
+  const createSelectedBrandKit = async () => {
+    if (!brandKitType) return
+    if (brandKitType === 'BUSINESS_CARD') {
+      openBusinessCardModal()
+      return
+    }
+    await runSelectedBrandKit()
+  }
+
+  const submitBusinessCardInfo = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const normalized: BusinessCardInfoInput = {
+      name: businessCardInfo.name.trim(),
+      title: businessCardInfo.title?.trim() || undefined,
+      company: businessCardInfo.company?.trim() || undefined,
+      phone: businessCardInfo.phone?.trim() || undefined,
+      email: businessCardInfo.email?.trim() || undefined,
+      address: businessCardInfo.address?.trim() || undefined,
+    }
+    const errors: { name?: string; email?: string } = {}
+    if (!normalized.name) errors.name = '명함에 표시할 이름을 입력해 주세요.'
+    if (normalized.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized.email)) {
+      errors.email = '이메일 주소 형식을 확인해 주세요.'
+    }
+    if (Object.keys(errors).length > 0) {
+      setBusinessCardInfoErrors(errors)
+      return
+    }
+
+    setBusinessCardInfo(normalized)
+    setBusinessCardInfoErrors({})
+    setBusinessCardModalOpen(false)
+    const target = businessCardTarget
+    setBusinessCardTarget(null)
+    if (target) await requestBrandKit(target.candidateId, target.projectId, normalized)
+    else await runSelectedBrandKit(normalized)
+  }
+
+  const downloadLogo = async (candidate: { name: string; subtitle?: string; candidateId?: string; storageKey?: string; svgUrl?: string | null }): Promise<boolean> => {
+    if (!candidate.storageKey && !candidate.svgUrl) return false
 
     try {
       let blob: Blob
+      let extension = 'png'
       if (projectId && candidate.candidateId) {
         const download = await projectsApi.downloadCandidate(projectId, candidate.candidateId)
         setDownloadHistory((current) => [download, ...current.filter((item) => item.downloadId !== download.downloadId)])
-        blob = await downloadAuthenticatedFile(download.imageUrl)
+        if (candidate.svgUrl) {
+          const svg = await projectsApi.getCandidateSvg(candidate.svgUrl)
+          blob = new Blob([svg], { type: 'image/svg+xml' })
+          extension = 'svg'
+        } else {
+          blob = await downloadAuthenticatedFile(download.imageUrl)
+        }
+      } else if (candidate.svgUrl) {
+        const svg = await projectsApi.getCandidateSvg(candidate.svgUrl)
+        blob = new Blob([svg], { type: 'image/svg+xml' })
+        extension = 'svg'
       } else {
-        const response = await fetch(getLogoCandidateImageUrl(candidate.storageKey))
+        const response = await fetch(getLogoCandidateImageUrl(candidate.storageKey as string))
         if (!response.ok) throw new Error('로고 파일을 불러오지 못했어요.')
         blob = await response.blob()
       }
 
       const link = document.createElement('a')
       link.href = URL.createObjectURL(blob)
-      link.download = `${candidate.name.toLowerCase()}-logo.png`
+      link.download = `${candidate.name.toLowerCase()}-logo.${extension}`
       link.click()
       window.setTimeout(() => URL.revokeObjectURL(link.href), 0)
       return true
@@ -1176,9 +2017,17 @@ function CustomerApp() {
     }
   }
 
-  const requestLogoDownload = (candidate: { name: string; subtitle: string; candidateId?: string; storageKey?: string }) => {
+  const requestLogoDownload = (candidate: { name: string; subtitle: string; candidateId?: string; storageKey?: string; svgUrl?: string | null }) => {
     setPendingDownload(candidate)
     setCreditModal('credit')
+  }
+
+  const openCreditSurvey = () => {
+    setSurveyRating(5)
+    setSurveyImprovements([])
+    setSurveyComment('')
+    setProjectError('')
+    setCreditModal('survey')
   }
 
   const downloadWithCredit = () => {
@@ -1192,7 +2041,13 @@ function CustomerApp() {
   }
 
   const submitSurveyResponse = async () => {
-    const result = await meApi.submitSurvey()
+    if (surveyRating !== 1 && surveyRating !== 5) throw new Error('만족도를 선택해주세요.')
+    const input: SurveySubmitInput = {
+      rating: surveyRating,
+      improvements: surveyImprovements,
+      comment: surveyComment.trim() || undefined,
+    }
+    const result = await meApi.submitSurvey(input)
     setRemainingCredits(result.creditBalance)
     setSurveySubmitted(true)
   }
@@ -1304,7 +2159,7 @@ function CustomerApp() {
   )
 
   const renderResumePromptModal = () => (
-    <div className="modal-backdrop" role="presentation">
+    <div ref={activeModalRef} className="modal-backdrop" role="presentation">
       <section className="credit-modal resume-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="resume-prompt-title">
         <p className="resume-prompt-brand">GenMark</p>
         <h2 id="resume-prompt-title">기존에 작성된<br /><strong>내용이 있습니다</strong></h2>
@@ -1320,6 +2175,34 @@ function CustomerApp() {
         </div>
       </section>
     </div>
+  )
+
+  const renderLogoCreationIntroScreen = () => (
+    <main
+      className={`logo-intro-screen ${logoIntroStage === 'opening' ? 'is-opening' : 'is-ready'}`}
+      aria-labelledby={logoIntroStage === 'ready' ? 'logo-intro-title' : undefined}
+      aria-label={logoIntroStage === 'opening' ? '브랜드 시작 안내' : undefined}
+    >
+      <button className="logo-intro-back" type="button" onClick={() => setMode('home')}>
+        <ArrowLeft aria-hidden="true" size={19} strokeWidth={1.8} /> 홈으로
+      </button>
+      <section className={`logo-intro-opening ${logoIntroStage === 'ready' ? 'is-complete' : ''}`} aria-live="polite" aria-label="브랜드 시작 문구">
+        <p id="logo-intro-title" className="logo-intro-opening-copy">
+          <span>브랜드의 방향과</span>
+          <br />
+          <span>취향을 담아</span>
+          <br />
+          <span>나만의 로고를</span>
+          <br />
+          <span>완성해보세요</span>
+        </p>
+        {logoIntroStage === 'ready' && (
+          <button className="logo-intro-continue" type="button" onClick={startLogoCreationFromIntro}>
+            계속하기 <ChevronRight aria-hidden="true" size={22} strokeWidth={1.8} />
+          </button>
+        )}
+      </section>
+    </main>
   )
 
   const renderIndustrySelectionScreen = () => (
@@ -1559,7 +2442,7 @@ function CustomerApp() {
               role="tab"
               aria-selected={toneMode === 'direct'}
               className={toneMode === 'direct' ? 'tone-mode-tab active' : 'tone-mode-tab'}
-              onClick={() => { setToneMode('direct'); setColorSelectionMode('manual'); setManualColors((current) => current.length >= 2 ? current : ['#9765e9', '#dcaff5']); setManualColorsSelected(false); setColorPickerOpen(true); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
+            onClick={() => { setToneMode('direct'); setToneSelection(null); setColorSelectionMode('manual'); setManualColors((current) => [uniqueColors(current)[0] ?? DEFAULT_MANUAL_COLOR]); setColorPickerOpen(false); setTonePaletteTarget(null); setTonePaletteDraft(null) }}
             >직접 지정</button>
           </div>
           <h1 id="tone-selection-title">톤앤매너와<br />색상을 골라주세요</h1>
@@ -1570,8 +2453,7 @@ function CustomerApp() {
         <section className="tone-options" aria-label="톤앤매너 선택">
           {toneOptions.map((tone) => {
             const selected = toneSelection === tone.id
-            const toneColors = customToneColors[tone.id] ?? tone.colors
-            const canAddColor = toneColors.length < 4
+            const toneColor = (customToneColors[tone.id] ?? tone.colors)[0]
             return (
               <div className="tone-option-shell" key={tone.id}>
               <button
@@ -1581,7 +2463,7 @@ function CustomerApp() {
                  onClick={() => { setToneSelection((current) => current === tone.id ? null : tone.id); setColorSelectionMode('tone') }}
               >
                 <span className="tone-swatches" aria-hidden="true">
-                  {toneColors.map((color, index) => <i key={`${tone.id}-${index}-${color}`} style={{ background: color }} />)}
+                  <i style={{ background: toneColor }} />
                 </span>
                 <span className="tone-option-copy">
                   <strong>{tone.label}</strong>
@@ -1592,7 +2474,7 @@ function CustomerApp() {
               <button
                 className="tone-custom-trigger"
                 type="button"
-                aria-label={`${tone.label} 색상 직접 지정`}
+                aria-label={`${tone.label} 색상 편집`}
                 aria-expanded={tonePaletteTarget?.toneId === tone.id}
               onClick={() => {
                 if (tonePaletteTarget?.toneId === tone.id) {
@@ -1600,29 +2482,15 @@ function CustomerApp() {
                   setTonePaletteDraft(null)
                   return
                 }
-                const currentColors = customToneColors[tone.id] ?? tone.colors
-                if (!canAddColor) {
-                  setTonePaletteDraft({ toneId: tone.id, colors: [...currentColors] })
-                  setTonePaletteTarget({ toneId: tone.id, slot: 0 })
-                  return
-                }
-                setTonePaletteDraft({ toneId: tone.id, colors: [...currentColors, '#eadfff'] })
-                setTonePaletteTarget({ toneId: tone.id, slot: currentColors.length })
+                setTonePaletteDraft({ toneId: tone.id, colors: [toneColor] })
+                setTonePaletteTarget({ toneId: tone.id, slot: 0 })
               }}
-              ><Plus aria-hidden="true" size={20} strokeWidth={1.9} /></button>
+              ><Pencil aria-hidden="true" size={13} strokeWidth={2} /> Edit</button>
               {tonePaletteTarget?.toneId === tone.id && (
                 <div className="tone-inline-picker" role="group" aria-label={`${tone.label} 색상 지정`}>
-                  <div className="tone-inline-picker-heading"><strong>색상을 선택하세요</strong><span>기존 색상을 조정하거나 새 색상을 하나씩 추가할 수 있어요.</span></div>
-                  <div className="tone-picker-slots">
-                    {(tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors).map((_, slot) => {
-                      const colors = tonePaletteDraft?.toneId === tone.id
-                        ? tonePaletteDraft.colors
-                        : customToneColors[tone.id] ?? tone.colors
-                      return <button key={slot} type="button" className={tonePaletteTarget.slot === slot ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setTonePaletteTarget({ toneId: tone.id, slot })}><i style={{ background: colors[slot] }} /><span>{slot < 2 ? `${slot + 1}번째 색` : `추가 색상 ${slot - 1}`}</span></button>
-                    })}
-                  </div>
+                  <div className="tone-inline-picker-heading"><strong>색상을 선택하세요</strong><span>톤에 어울리는 대표 색상 1개를 조정할 수 있어요.</span></div>
                   <ToneColorPalette
-                    value={hexToRgb((tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors)[tonePaletteTarget.slot])}
+                    value={hexToRgb((tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors)[0])}
                     onChange={(color) => updateToneColorFromHex(tone.id, tonePaletteTarget.slot, rgbToHex(color))}
                     onComplete={() => {
                       if (tonePaletteDraft?.toneId === tone.id) {
@@ -1634,7 +2502,7 @@ function CustomerApp() {
                     ariaLabel={`${tone.label} 색상 팔레트`}
                   />
                   <div className="tone-inline-picker-footer">
-                    <span>선택한 색상 · {(tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors).join(' / ')}</span>
+                    <span>선택한 색상 · {(tonePaletteDraft?.toneId === tone.id ? tonePaletteDraft.colors : customToneColors[tone.id] ?? tone.colors)[0]}</span>
                     <button type="button" className="tone-inline-reset" onClick={() => resetToneColors(tone.id)}>초기화</button>
                   </div>
                 </div>
@@ -1645,69 +2513,56 @@ function CustomerApp() {
         </section>
         )}
 
-        {toneMode === 'direct' && (<section className="tone-color-card tone-direct-card" aria-label="직접 색상 지정">
+        {toneMode === 'direct' && (<section className="tone-color-card tone-direct-card" aria-label="직접 색상과 분위기 지정">
           <div className="tone-direct-swatches" aria-label="직접 선택한 색상">
-            {manualColors.map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
+            <i style={{ background: manualColors[0] || DEFAULT_MANUAL_COLOR }} />
             <button
-              className="tone-direct-custom-trigger"
+              className="tone-direct-edit-trigger"
               type="button"
-              aria-label={manualColors.length < 4 ? '색상 추가' : '색상 편집'}
+              aria-label="직접 지정 색상 편집"
               aria-expanded={colorPickerOpen}
               onClick={() => {
-                if (manualColors.length >= 4) {
-                  setManualColorSlot(0)
-                  setColorPickerOpen(true)
-                  return
-                }
-                setManualColors((current) => [...current, '#eadfff'])
-                setManualColorSlot(manualColors.length)
+                setManualColorSlot(0)
                 setColorPickerOpen(true)
               }}
-            ><Plus aria-hidden="true" size={19} strokeWidth={1.9} /></button>
+            ><Pencil aria-hidden="true" size={13} strokeWidth={2} /> Edit</button>
           </div>
-          <div>
-            <h2>직접 색상 지정</h2>
-            <p>원하는 색상을 직접 지정할 수 있어요</p>
+          <div className="tone-direct-copy">
+            <h2>색상과 분위기 직접 지정</h2>
+            <p>원하는 색상과 분위기를 직접 지정할 수 있어요</p>
+            <label className="tone-direct-mood-field">
+              <span>원하는 분위기 <small>필수</small></span>
+              <input
+                type="text"
+                value={directTone}
+                maxLength={100}
+                placeholder="예: 차분하고 고급스러운, 대담하고 세련된"
+                aria-label="직접 입력할 분위기"
+                onChange={(event) => setDirectTone(event.target.value)}
+              />
+            </label>
           </div>
-          <button
-            className="tone-auto-chip tone-picker-trigger"
-            type="button"
-            aria-expanded={colorPickerOpen}
-            aria-controls="tone-color-picker"
-            onClick={() => {
-              setColorSelectionMode('manual')
-              if (!colorPickerOpen) setManualColorSlot(0)
-              setColorPickerOpen((current) => !current)
-            }}
-          >
-            <span className="tone-picker-summary" aria-hidden="true">{manualColors.map((color, index) => <i className="tone-picker-swatch" key={`${color}-${index}`} style={{ background: color }} />)}</span>
-            직접
-          </button>
-
           {colorPickerOpen && (
             <div className="tone-color-picker tone-color-picker-inline" id="tone-color-picker" role="group" aria-label="RGB 색상 선택">
               <div className="tone-color-picker-heading">
                 <strong>원하는 색상 선택</strong>
                 <button type="button" aria-label="색상 팔레트 닫기" onClick={() => setColorPickerOpen(false)}>×</button>
               </div>
-              <div className="tone-picker-slots direct-slots">
-                {manualColors.map((color, slot) => <button key={slot} type="button" className={manualColorSlot === slot ? 'tone-picker-slot active' : 'tone-picker-slot'} onClick={() => setManualColorSlot(slot)}><i style={{ background: color }} /><span>{slot < 2 ? `${slot + 1}번째 색` : `추가 색상 ${slot - 1}`}</span></button>)}
-              </div>
               <ToneColorPalette
-                value={hexToRgb(manualColors[manualColorSlot] ?? manualColors[0])}
-              onChange={(color) => { updateManualColorFromHex(rgbToHex(color)); setManualColorsSelected(true) }}
+                value={hexToRgb(manualColors[0] || DEFAULT_MANUAL_COLOR)}
+                onChange={(color) => updateManualColorFromHex(rgbToHex(color))}
                 onComplete={() => setColorPickerOpen(false)}
                 ariaLabel="색상 팔레트"
               />
               <div className="tone-color-picker-footer">
-                <span>선택한 색상 · {manualColors.join(' / ')}</span>
+                <span>선택한 색상 · {manualColors[0] || DEFAULT_MANUAL_COLOR}</span>
                 <button type="button" className="tone-inline-reset" onClick={resetManualColors}>초기화</button>
               </div>
             </div>
           )}
         </section>)}
 
-        <button className="tone-next" type="button" onClick={() => void saveProjectStep('tone', 'style')} disabled={projectSaving || (toneMode === 'recommended' ? !toneSelection : !manualColorsSelected)}>
+        <button className="tone-next" type="button" onClick={() => void saveProjectStep('tone', 'style')} disabled={projectSaving || (toneMode === 'recommended' ? !toneSelection : !directTone.trim() || !getSelectedColors()[0])}>
           {projectSaving ? '저장 중...' : '다음'} <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
         </button>
         {projectError && <p className="project-error" role="alert">{projectError}</p>}
@@ -1723,7 +2578,7 @@ function CustomerApp() {
 
         <header className="logo-style-heading">
           <h1 id="logo-style-title">어떤 형태의 로고가<br />필요한가요?</h1>
-          <p>잘 모르겠다면 활용도가 높은 <strong>‘심볼+이름’</strong>을 추천해요.</p>
+          <p>잘 모르겠다면 활용도가 높은 <strong>‘콤비네이션’</strong>을 추천해요.</p>
         </header>
 
         <section className="logo-style-options" aria-label="로고 형태 선택">
@@ -1744,17 +2599,14 @@ function CustomerApp() {
                   }}
                 >
                 <span className={`logo-style-preview ${option.id}`} aria-hidden="true">
-                  {option.id === 'symbol' && <span className="style-symbol-mark">✦</span>}
-                  {option.id === 'wordmark' && <span className="style-wordmark-text">LUNÉE</span>}
-                  {option.id === 'combination' && <><span className="style-combination-mark">◈</span><span className="style-combination-text">LUNÉE</span></>}
-                  {option.id === 'lettermark' && <span className="style-lettermark-text">LN</span>}
+                  <img src={logoStylePreviewImages[option.id]} alt="" />
                 </span>
-                <span className="logo-style-copy">
-                  <strong>{option.label}</strong>
-                  <span>{option.description}</span>
-                  <span className="logo-style-fit"><em>적합한 경우</em>{option.fit}</span>
-                  {option.recommended && <small className="logo-style-recommend"><Sparkle /> 처음 만드는 브랜드에 추천</small>}
-                </span>
+                  <span className="logo-style-copy">
+                    {option.recommended && <small className="logo-style-recommend"><Sparkle /> 처음 만드는 브랜드에 추천</small>}
+                    <strong>{option.label}</strong>
+                    <span>{option.description}</span>
+                    <span className="logo-style-fit"><CircleCheck aria-hidden="true" size={17} strokeWidth={2} />{option.fit}</span>
+                  </span>
                 <span className="logo-style-radio" aria-hidden="true">{selected && <Check size={22} strokeWidth={2.5} />}</span>
                 </button>
                 {shapeInputOpen && (
@@ -1786,27 +2638,11 @@ function CustomerApp() {
   )
 
   const renderFeaturedHero = () => (
-    <section className="featured-hero" aria-labelledby="featured-title">
-      <img className="featured-art" src="/aurora-bubbles.png" alt="핑크와 보라색의 투명한 구체가 겹쳐진 스킨케어 이미지" />
+    <section className="featured-hero" aria-label="NOVAIRE STUDIO 브랜드 로고 소개">
+      <img className="featured-art" src="/home/lunee-studio-white.png" alt="LUNÉE 금색 로고 이미지" />
       <div className="featured-scrim" />
-      <div className="featured-lockup">
-        <h1 id="featured-title">LUMIÈRE</h1>
-        <p className="featured-subtitle">RADIANT SKINCARE</p>
-        <span className="featured-rule" />
-        <p className="featured-korean">빛나는 피부의 시작</p>
-        <span className="featured-tag">럭셔리 스킨케어</span>
-      </div>
       <div className="featured-dots" aria-label="대표 큐레이션 진행 상태">
         <span className="active" /><span /><span /><span />
-      </div>
-      <div className="hero-create-bar">
-        <div>
-          <strong>5분 만에 완성하는</strong>
-          <span>프리미엄 브랜드 로고</span>
-        </div>
-        <button className="gradient-button hero-create-button" type="button" onClick={startOnboarding} disabled={authRestoring}>
-          <Sparkle /> 로고 생성 시작
-        </button>
       </div>
     </section>
   )
@@ -1911,7 +2747,6 @@ function CustomerApp() {
         <section className="brand-choice-content" aria-label="CI와 BI 로고 선택">
           <div className="brand-choice-list">
             <article className="brand-choice-card ci-card">
-              <div className="brand-choice-art-wrap"><img src="/ci-white.svg" alt="회사와 기업을 대표하는 CI 로고 예시" /></div>
               <div className="brand-choice-copy">
                 <div className="brand-choice-heading">
                   <span className="brand-choice-label">회사 · 기업 로고</span>
@@ -1923,7 +2758,6 @@ function CustomerApp() {
               </div>
             </article>
             <article className="brand-choice-card bi-card">
-              <div className="brand-choice-art-wrap"><img src="/bi-white.svg" alt="제품과 화장품 브랜드를 대표하는 BI 로고 예시" /></div>
               <div className="brand-choice-copy">
                 <div className="brand-choice-heading">
                   <span className="brand-choice-label">제품 · 브랜드 로고</span>
@@ -1960,24 +2794,92 @@ function CustomerApp() {
     )
   }
 
+  const openFinalEditModal = (kind: FinalEditKind) => {
+    const initialToneMode = toneMode
+    const initialTone = initialToneMode === 'direct'
+      ? directTone
+      : toneSelection ?? toneOptions[0].id
+    const initialToneId = toneOptions.some((option) => option.id === initialTone)
+      ? initialTone as ToneOption
+      : toneOptions[0].id
+    setFinalEditDraft({
+      companyName, companyMotto, brandName, targetAge,
+      valuesText: coreValueInputMode === 'category' ? coreValues.map((value) => coreValueLabels[value] ?? value).join(', ') : brandValueDescription,
+      tone: initialTone,
+      colors: initialToneMode === 'direct' ? [...getSelectedColors()] : [...getToneColors(initialToneId)],
+      logoStyle: logoStyle ?? '', logoShape: logoShapePrompt,
+    })
+    setFinalEditToneMode(initialToneMode)
+    setFinalEditModal(kind)
+  }
+
+  const openRegenerationConfirm = () => {
+    setRegenerationConfirmOpen(true)
+    setRegenerationCreditsLoading(true)
+    void meApi.getCredits()
+      .then((result) => setRemainingCredits(result.balance))
+      .catch(() => undefined)
+      .finally(() => setRegenerationCreditsLoading(false))
+  }
+
+  const saveFinalEditModal = () => {
+    if (!finalEditModal) return
+    if (finalEditModal === 'identity') {
+      setCompanyName(finalEditDraft.companyName)
+      setBrandName(finalEditDraft.brandName)
+      setTargetAge(finalEditDraft.targetAge)
+    } else if (finalEditModal === 'values') {
+      setCompanyMotto(finalEditDraft.companyMotto)
+      setBrandValueDescription(finalEditDraft.valuesText)
+      if (brandKind === 'bi') { setCoreValueInputMode('direct'); setCoreValues([]) }
+    } else if (finalEditModal === 'tone') {
+      if (finalEditToneMode === 'direct') {
+        setDirectTone(finalEditDraft.tone.trim())
+        setToneMode('direct')
+      } else {
+        const selectedTone = toneOptions.some((option) => option.id === finalEditDraft.tone)
+          ? finalEditDraft.tone as ToneOption
+          : toneOptions[0].id
+        setToneSelection(selectedTone)
+        setToneMode('recommended')
+      }
+    } else if (finalEditModal === 'color') {
+      const colors = uniqueColors(finalEditDraft.colors).slice(0, 1)
+      if (toneMode === 'recommended' && toneSelection) {
+        setCustomToneColors((current) => ({ ...current, [toneSelection]: colors }))
+        setManualColors(colors)
+        setColorSelectionMode('tone')
+      } else {
+        setManualColors(colors)
+        setColorSelectionMode('manual')
+      }
+    } else {
+      setLogoStyle(finalEditDraft.logoStyle || null)
+      setLogoShapePrompt(finalEditDraft.logoShape)
+    }
+    setFinalEditModal(null)
+  }
+
   const renderFinalRequestScreen = () => {
     const displayValue = (value: string | undefined, fallback = '입력하지 않음') => value?.trim() || fallback
-    const selectedToneLabel = toneOptions.find((option) => option.id === toneSelection)?.label ?? toneSelection
+    const selectedToneLabel = toneMode === 'direct'
+      ? displayValue(directTone)
+      : toneOptions.find((option) => option.id === toneSelection)?.label ?? displayValue(toneSelection ?? undefined)
     const selectedLogoStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? '선택하지 않음'
     const selectedBrandValues = coreValues.length > 0
       ? coreValues.map((value) => coreValueLabels[value] ?? value).join(', ')
       : displayValue(brandValueDescription)
     const summaryRows = brandKind === 'ci'
       ? [
-          { key: 'company-name', label: '회사명', value: displayValue(companyName), icon: 'name', editMode: 'company-details' as ViewMode },
-          { key: 'company-motto', label: '회사 모토', value: displayValue(companyMotto), icon: 'value', editMode: 'company-details' as ViewMode },
-          { key: 'mood', label: '원하는 분위기', value: selectedToneLabel, icon: 'mood', editMode: 'tone' as ViewMode },
+          { key: 'company-name', label: '회사명', value: displayValue(companyName), icon: 'name', editKind: 'identity' as FinalEditKind },
+          { key: 'company-motto', label: '회사 모토', value: displayValue(companyMotto), icon: 'value', editKind: 'values' as FinalEditKind },
+          { key: 'mood', label: '원하는 분위기', value: selectedToneLabel, icon: 'mood', editKind: 'tone' as FinalEditKind },
         ]
       : [
-          { key: 'brand-name', label: '브랜드명', value: displayValue(brandName), icon: 'name', editMode: 'brand-details' as ViewMode },
-          { key: 'audience', label: '주요 고객', value: displayValue(targetAgeOptions.find((option) => option.id === targetAge)?.label), icon: 'audience', editMode: 'brand-details' as ViewMode },
-          { key: 'value', label: '핵심 가치', value: selectedBrandValues, icon: 'value', editMode: 'brand-details' as ViewMode },
-          { key: 'mood', label: '분위기', value: selectedToneLabel, icon: 'mood', editMode: 'tone' as ViewMode },
+          { key: 'brand-name', label: '브랜드명', value: displayValue(brandName), icon: 'name', editKind: 'identity' as FinalEditKind },
+          { key: 'audience', label: '주요 고객', value: displayValue(targetAgeOptions.find((option) => option.id === targetAge)?.label), icon: 'audience', editKind: 'identity' as FinalEditKind },
+          { key: 'value', label: '핵심 가치', value: selectedBrandValues, icon: 'value', editKind: 'values' as FinalEditKind },
+          { key: 'mood', label: '분위기', value: selectedToneLabel, icon: 'mood', editKind: 'tone' as FinalEditKind },
         ]
 
     return (
@@ -2002,34 +2904,33 @@ function CustomerApp() {
                   })()}
                   <span className="final-summary-label">{row.label}</span>
                   <span className="final-summary-value">{row.value}</span>
-                  <button className="final-edit-button" type="button" onClick={() => setMode(row.editMode)}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+                  <button className="final-edit-button" type="button" onClick={() => openFinalEditModal(row.editKind)}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
                 </div>
               ))}
               <div className="final-summary-row">
                 <Palette className="final-detail-icon" aria-hidden="true" size={22} strokeWidth={1.8} />
                 <span className="final-summary-label">선호 색상</span>
-                <span className="final-color-swatches" aria-label="선호 색상 4개">
-                  {getSelectedColors().map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
-                </span>
-                  <button className="final-edit-button" type="button" onClick={() => setMode('tone')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+                  <span className="final-color-swatches" aria-label="선호 색상 1개">
+                    {getSelectedColors().map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
+                  </span>
+                  <button className="final-edit-button" type="button" onClick={() => openFinalEditModal('color')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
               <div className="final-summary-row">
                 <TypeIcon className="final-detail-icon" aria-hidden="true" size={22} strokeWidth={1.8} />
                 <span className="final-summary-label">로고 타입</span>
                 <span className="final-summary-value">{selectedLogoStyle}{logoStyle === 'combination' && <em>추천</em>}</span>
-                <button className="final-edit-button" type="button" onClick={() => setMode('style')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+                <button className="final-edit-button" type="button" onClick={() => openFinalEditModal('style')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
               <div className="final-summary-row">
                 <Shapes className="final-detail-icon" aria-hidden="true" size={22} strokeWidth={1.8} />
                 <span className="final-summary-label">원하는 로고 모양</span>
                 <span className="final-summary-value">{displayValue(logoShapePrompt)}</span>
-                <button className="final-edit-button" type="button" onClick={() => setMode('style')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+                <button className="final-edit-button" type="button" onClick={() => openFinalEditModal('style')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
             </div>
           </section>
 
-          <button className="final-generate-button" type="button" onClick={() => void startLogoGeneration()} disabled={generationLoading}>
-            <span className="final-sparkle-cluster" aria-hidden="true"><i>✧</i><i>✧</i><i>✧</i></span>
+          <button className="final-generate-button" type="button" onClick={() => openTrademarkSelection('generation')} disabled={generationLoading}>
             로고 생성하기
             <ChevronRight className="final-generate-arrow" aria-hidden="true" size={28} strokeWidth={1.8} />
           </button>
@@ -2047,6 +2948,7 @@ function CustomerApp() {
       { number: '3', icon: 'palette', text: '색상과 글씨체를 조합하고 있어요' },
       { number: '4', icon: 'pen', text: '로고 후보를 생성하고 있어요' },
       { number: '5', icon: 'folder', text: '결과를 비교하기 쉽게 정리하고 있어요' },
+      ...(trademarkAnalysisRequested ? [{ number: '6', icon: 'search', text: '유사도를 분석하고 있어요' }] : []),
     ]
 
     return (
@@ -2054,7 +2956,7 @@ function CustomerApp() {
         <section className="logo-loading-content">
           <header className="logo-loading-heading">
             <h1 id="logo-loading-title">브랜드 정보를 바탕으로<br />로고를 만들고 있어요</h1>
-            <p>서로 다른 방향의 로고 후보 4개를 준비하고 있어요.</p>
+            <p>요청하신 로고 1개를 준비하고 있어요.</p>
           </header>
 
           <div className="logo-loading-orb" aria-label="로고 생성 진행 중">
@@ -2070,9 +2972,10 @@ function CustomerApp() {
                 <span className={`logo-loading-step-icon icon-${step.icon}`} aria-hidden="true">
                   {step.icon === 'clipboard' ? <ClipboardCheck size={47} strokeWidth={1.8} />
                     : step.icon === 'mood' ? <Heart size={47} strokeWidth={1.8} fill="currentColor" />
-                      : step.icon === 'palette' ? <Palette size={47} strokeWidth={1.8} />
-                        : step.icon === 'pen' ? <PenLine size={47} strokeWidth={1.8} />
-                          : <FolderCheck size={47} strokeWidth={1.8} />}
+                        : step.icon === 'palette' ? <Palette size={47} strokeWidth={1.8} />
+                          : step.icon === 'pen' ? <PenLine size={47} strokeWidth={1.8} />
+                          : step.icon === 'folder' ? <FolderCheck size={47} strokeWidth={1.8} />
+                            : <Search size={47} strokeWidth={1.8} />}
                 </span>
                 <p>{step.text}</p>
                 {index === loadingStep && !generationError && <span className="logo-loading-dots" aria-label="진행 중"><i /><i /><i /></span>}
@@ -2175,7 +3078,6 @@ function CustomerApp() {
         <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => setMode(trademarkEntry === 'generation' ? 'final' : 'result')} />
         <header className="trademark-selection-header">
           <div className="trademark-selection-brand"><BrandLogo className="trademark-selection-brand-mark" /><span>GenMark AI</span></div>
-          <button className="trademark-help" type="button" aria-label="상표 분석 도움말"><CircleHelp aria-hidden="true" size={23} strokeWidth={1.8} /></button>
         </header>
 
         <section className="trademark-selection-content">
@@ -2213,12 +3115,24 @@ function CustomerApp() {
           </section>
 
           <div className="trademark-selection-actions">
-            <button className="trademark-check-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(false); setTrademarkAnalysisCompleted(false); void startTrademarkAnalysis() }}>
+            <button className="trademark-check-button" type="button" onClick={() => {
+              setTrademarkAnalysisSkipped(false)
+              setTrademarkAnalysisRequested(true)
+              setTrademarkAnalysisCompleted(false)
+              if (trademarkEntry === 'generation') void startLogoGeneration(true)
+              else void startTrademarkAnalysis()
+            }}>
               <span className="trademark-check-search" aria-hidden="true" />
               <span>비슷한 상표 이미지 확인하기</span>
               <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
             </button>
-            <button className="trademark-skip-button" type="button" onClick={() => { setTrademarkAnalysisSkipped(true); setTrademarkAnalysisCompleted(false); setMode(trademarkEntry === 'result' ? 'result' : 'loading') }}>
+            <button className="trademark-skip-button" type="button" onClick={() => {
+              setTrademarkAnalysisSkipped(true)
+              setTrademarkAnalysisRequested(false)
+              setTrademarkAnalysisCompleted(false)
+              if (trademarkEntry === 'generation') void startLogoGeneration(false)
+              else setMode('result')
+            }}>
               <span>지금은 건너뛰기</span>
               <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
             </button>
@@ -2230,16 +3144,80 @@ function CustomerApp() {
     )
   }
 
+  const renderTrademarkResultScreenRedesign = () => {
+    const topMatch = trademarkMatches[0]
+    const displayedTrademarkScore = trademarkSimilarity ?? topMatch?.similarity ?? TRADEMARK_SCORE_FALLBACK
+    const matchImage = topMatch ? trademarkMatchImages.find((image) => image.rank === topMatch.rank) : undefined
+    const selectedCandidate = logoCandidates[resultCandidate]
+    const generatedLogoSrc = selectedCandidate ? getLogoCandidateImageUrl(selectedCandidate.storageKey) : resultPreviewImageUrl
+    const scoreTone = displayedTrademarkScore >= 60 ? 'caution' : 'low'
+    const scoreLabel = trademarkRiskLabel || (scoreTone === 'caution' ? '확인이 필요해요' : '낮은 유사도')
+    const comparisonInsight = topMatch?.note?.trim() || (scoreTone === 'caution'
+      ? '원형 배치와 곡선 중심의 실루엣에서 비슷한 요소가 비교적 뚜렷하게 보였어요.'
+      : '원형 배치와 곡선 중심의 실루엣에서 일부 비슷한 요소를 발견했어요.')
+
+    return (
+      <main className="trademark-result-screen trademark-result-screen-redesign" aria-labelledby="trademark-result-title">
+        <header className="trademark-result-header trademark-result-header-redesign">
+          <button className="trademark-result-back" type="button" aria-label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={22} strokeWidth={1.8} /></button>
+          <div className="trademark-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
+        </header>
+
+        <section className="trademark-result-content trademark-result-content-redesign">
+          <div className="trademark-result-complete trademark-result-complete-redesign"><CircleCheck aria-hidden="true" size={17} strokeWidth={2} /> 분석을 마쳤어요</div>
+          <h1 id="trademark-result-title">생성한 로고의<br /><strong>상표 유사도를 확인했어요</strong></h1>
+          <p className="trademark-result-lead">KIPRIS 등록 상표 이미지와 비교해 현재 로고가 얼마나 비슷한지 살펴봤어요.</p>
+
+          <section className="trademark-compare-board" aria-label="생성 로고와 KIPRIS 상표 비교">
+            <article className="trademark-generated-card">
+              <div className="trademark-visual-label"><Sparkles aria-hidden="true" size={16} strokeWidth={1.8} /><span>생성한 로고</span></div>
+              <div className="trademark-generated-art">
+                <img src={generatedLogoSrc} alt="AI가 생성한 로고" />
+              </div>
+            </article>
+
+            <article className={`trademark-score-card ${scoreTone}`}>
+              <div className="trademark-score-card-heading"><BarChart3 aria-hidden="true" size={18} strokeWidth={1.8} /><span>유사도 점수</span></div>
+              <strong>{displayedTrademarkScore}<small>점</small></strong>
+              <span className="trademark-score-status">{scoreLabel}</span>
+              <p>비교 점수가 낮을수록 기존 상표와 겹치는 인상이 적어요.</p>
+            </article>
+          </section>
+
+          <section className="trademark-analysis-copy" aria-label="23점이 나온 이유">
+            <div className="trademark-analysis-copy-visual" aria-label={topMatch ? `${topMatch.name} KIPRIS 등록 상표` : 'KIPRIS 비교 상표 이미지'}>
+              {matchImage ? <img src={matchImage.src} alt={`${topMatch?.name ?? 'KIPRIS'} 등록 상표`} /> : <Search aria-hidden="true" size={30} strokeWidth={1.7} />}
+            </div>
+              <div>
+              <p className="trademark-analysis-copy-lead">{comparisonInsight}</p>
+            </div>
+          </section>
+
+          <p className="trademark-result-disclaimer trademark-result-disclaimer-redesign"><Info aria-hidden="true" size={16} strokeWidth={1.8} /><span>이 결과는 이미지 유사도에 대한 참고 자료예요. 상표 등록 가능 여부를 확정하지 않으니, 실제 출원 전에는 전문가의 검토를 권장해요.</span></p>
+
+          <div className="trademark-result-actions trademark-result-actions-redesign">
+            <button className="trademark-result-primary" type="button" onClick={() => setMode('result')}>로고 결과로 돌아가기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+          </div>
+        </section>
+      </main>
+    )
+  }
+
   const renderTrademarkResultScreen = () => {
     const matches = trademarkMatches
     const topMatch = matches[0]
+    const hasTrademarkMatch = Boolean(topMatch)
+    const displayedTrademarkScore = trademarkSimilarity ?? topMatch?.similarity ?? TRADEMARK_SCORE_FALLBACK
+    const displayedRiskLabel = trademarkRiskLabel || (hasTrademarkMatch ? '분석 완료' : '낮은 유사도')
+    const displayedRiskDescription = trademarkRiskDescription || (hasTrademarkMatch
+      ? '실제 상표 등록 전에는 전문가의 확인을 권장해요.'
+      : '기존 등록 상표와 시각적으로 비슷한 정도가 낮아요. 실제 상표 등록 전에는 전문가의 확인을 권장해요.')
 
     return (
       <main className="trademark-result-screen" aria-labelledby="trademark-result-title">
         <header className="trademark-result-header">
           <button className="trademark-result-back" type="button" aria-label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
           <div className="trademark-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
-          <button className="trademark-result-help" type="button" aria-label="상표 분석 도움말"><CircleHelp aria-hidden="true" size={24} strokeWidth={1.8} /></button>
         </header>
 
         <section className="trademark-result-content">
@@ -2251,30 +3229,30 @@ function CustomerApp() {
             <div className="trademark-result-summary-icon" aria-hidden="true"><span /><i /><b /></div>
             <div className="trademark-result-summary-copy">
               <span>가장 유사한 상표</span>
-              <strong>{topMatch?.name ?? '분석 결과 없음'}</strong>
-              <p>{topMatch?.category ?? '비슷한 상표가 없어요.'}</p>
+              <strong>{topMatch?.name ?? '비슷한 상표를 찾지 못했어요'}</strong>
+              <p>{topMatch?.category ?? '현재 로고와 유사도가 낮은 편이에요.'}</p>
             </div>
             <div className="trademark-result-score">
-              <strong>{trademarkSimilarity ?? topMatch?.similarity ?? 0}%</strong>
+              <strong>{displayedTrademarkScore}점</strong>
               <span>이미지 유사도</span>
             </div>
           </section>
 
-          <section className={`trademark-risk-card ${trademarkRiskLabel === '안전' ? 'safe' : 'caution'}`} aria-label="유사도 위험 범주">
+          <section className={`trademark-risk-card ${trademarkRiskLabel === '안전' || (!trademarkRiskLabel && !hasTrademarkMatch) ? 'safe' : 'caution'}`} aria-label="유사도 위험 범주">
             <div className="trademark-risk-mark" aria-hidden="true"><Check size={24} strokeWidth={2.5} /></div>
             <div>
-              <div className="trademark-risk-heading"><strong>{trademarkRiskLabel || '분석 완료'}</strong><span>{trademarkSimilarity ?? 0}% 유사도</span></div>
-              <p>{trademarkRiskDescription || '실제 상표 등록 전에는 전문가의 확인을 권장해요.'}</p>
+              <div className="trademark-risk-heading"><strong>{displayedRiskLabel}</strong><span>{displayedTrademarkScore}점</span></div>
+              <p>{displayedRiskDescription}</p>
             </div>
           </section>
 
           <section className="trademark-match-section" aria-labelledby="trademark-match-title">
             <div className="trademark-match-heading">
               <h2 id="trademark-match-title">비슷한 상표 이미지</h2>
-              <span>상위 {matches.length}건</span>
+              <span>{matches.length > 0 ? `상위 ${matches.length}건` : '유사 상표 없음'}</span>
             </div>
             <div className="trademark-match-list">
-              {matches.map((match) => (
+              {matches.length > 0 ? matches.map((match) => (
                 <article className="trademark-match-row" key={match.name}>
                   <span className="trademark-match-rank">{match.rank}</span>
                   <div className="trademark-match-visual trademark-match-placeholder" aria-hidden="true"><i /><b /><em /></div>
@@ -2282,10 +3260,16 @@ function CustomerApp() {
                     <strong>{match.name}</strong>
                     <span>{match.category}</span>
                     <p>출원번호 {match.applicationNumber}</p>
+                    {match.note?.trim() && <p className="trademark-match-note">{match.note}</p>}
                   </div>
-                  <strong className="trademark-match-score">{match.similarity}%</strong>
+                  <strong className="trademark-match-score">{match.similarity}점</strong>
                 </article>
-              ))}
+              )) : (
+                <div className="trademark-match-empty">
+                  <strong>유사도가 높은 상표를 찾지 못했어요</strong>
+                  <p>현재 로고와 비슷한 등록 상표가 많지 않은 편이에요.</p>
+                </div>
+              )}
             </div>
           </section>
 
@@ -2310,13 +3294,18 @@ function CustomerApp() {
     const sourceCandidates = isResultPreview && logoCandidates.length === 0 ? resultPreviewCandidates : logoCandidates
     const candidates = sourceCandidates.map((candidate, index) => ({ ...candidate, ...candidateProfiles[index] }))
     const candidate = candidates[resultCandidate] ?? candidates[0]
+    const candidateImageUrl = candidate && !isResultPreview && editorSvgPreviewUrl
+      ? editorSvgPreviewUrl
+      : candidate
+        ? (isResultPreview ? resultPreviewImageUrl : getLogoCandidateImageUrl(candidate.storageKey))
+        : resultPreviewImageUrl
 
     if (!candidate) {
       return (
         <main className="logo-result-screen" aria-labelledby="logo-result-title">
           <section className="logo-result-content">
             <h1 id="logo-result-title">로고 후보를 아직 불러오지 못했어요</h1>
-            <p className="logo-result-lead">로고 생성이 완료되면 후보 4개가 이곳에 표시됩니다.</p>
+            <p className="logo-result-lead">로고 생성이 완료되면 결과 1개가 이곳에 표시됩니다.</p>
             {generationError && <p className="generation-error" role="alert">{generationError}</p>}
             <button className="final-generate-button" type="button" onClick={() => void startLogoGeneration()}>다시 확인하기</button>
           </section>
@@ -2328,66 +3317,106 @@ function CustomerApp() {
       <main className="logo-result-screen" aria-labelledby="logo-result-title">
         <header className="logo-result-header">
           <div className="logo-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
-          <button className="logo-result-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={23} strokeWidth={1.8} /></button>
         </header>
 
         <section className="logo-result-content">
           <div className="logo-result-complete"><CircleCheck aria-hidden="true" size={21} strokeWidth={1.8} /> 로고 후보가 완성됐어요</div>
           <h1 id="logo-result-title">가장 마음에 드는 로고를 선택해주세요</h1>
           <p className="logo-result-lead">후보를 비교하고 색상이나 글씨체를 수정할 수 있어요.</p>
-          <div className="logo-result-counter" aria-label={`로고 ${resultCandidate + 1} / 4`}>{resultCandidate + 1} / 4</div>
-
           <section className="logo-candidate-panel" aria-label="로고 후보 미리보기">
             <button className={resultLiked ? 'logo-candidate-action like liked' : 'logo-candidate-action like'} type="button" aria-label={resultLiked ? '찜 취소' : '찜'} aria-pressed={resultLiked} onClick={() => isResultPreview ? setResultLiked((current) => !current) : void toggleCandidatePin(candidate)}>
               <Heart size={22} strokeWidth={1.9} fill={resultLiked ? 'currentColor' : 'none'} />
             </button>
-            <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => { const next = (resultCandidate + candidates.length - 1) % candidates.length; if (isResultPreview) setResultCandidate(next); else void selectLogoCandidate(candidates[next], next) }}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>
+            {candidates.length > 1 && <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => { const next = (resultCandidate + candidates.length - 1) % candidates.length; if (isResultPreview) setResultCandidate(next); else void selectLogoCandidate(candidates[next], next) }}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>}
             <div className="logo-candidate-art">
               <img
                 className="logo-candidate-image"
-                src={isResultPreview ? resultPreviewImageUrl : getLogoCandidateImageUrl(candidate.storageKey)}
+                src={candidateImageUrl}
                 alt={`${candidate.name} AI 생성 로고`}
               />
-              <strong>{candidate.name}</strong>
-              <small>{candidate.subtitle}</small>
             </div>
-            <button className="logo-candidate-arrow next" type="button" aria-label="다음 후보" onClick={() => { const next = (resultCandidate + 1) % candidates.length; if (isResultPreview) setResultCandidate(next); else void selectLogoCandidate(candidates[next], next) }}><ChevronRight aria-hidden="true" size={26} strokeWidth={1.8} /></button>
+            {candidates.length > 1 && <button className="logo-candidate-arrow next" type="button" aria-label="다음 후보" onClick={() => { const next = (resultCandidate + 1) % candidates.length; if (isResultPreview) setResultCandidate(next); else void selectLogoCandidate(candidates[next], next) }}><ChevronRight aria-hidden="true" size={26} strokeWidth={1.8} /></button>}
               <button className="logo-candidate-action download" type="button" aria-label="로고 파일 다운로드" disabled={isResultPreview} onClick={() => requestLogoDownload({ ...candidate, candidateId: candidate.id })}>
               <Download size={21} strokeWidth={1.9} />
             </button>
           </section>
           {candidate.pinnedAt ? <p className="logo-pin-expiry">찜한 로고예요. 3일 뒤 자동으로 사라져요.</p> : null}
           {pinError && <p className="project-error" role="alert">{pinError}</p>}
-          <div className="logo-result-dots" aria-label="후보 선택">
-            {candidates.map((item, index) => <button key={item.id} className={index === resultCandidate ? 'active' : ''} type="button" aria-label={`후보 ${index + 1}`} aria-pressed={index === resultCandidate} onClick={() => isResultPreview ? setResultCandidate(index) : void selectLogoCandidate(item, index)} />)}
-          </div>
+          {(() => {
+            const displayValue = (value: string | undefined, fallback = '입력하지 않음') => value?.trim() || fallback
+            const selectedToneLabel = toneMode === 'direct'
+              ? displayValue(directTone)
+              : toneOptions.find((option) => option.id === toneSelection)?.label ?? displayValue(toneSelection ?? undefined)
+            const selectedLogoStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? '선택하지 않음'
+            const selectedBrandValues = coreValues.length > 0
+              ? coreValues.map((value) => coreValueLabels[value] ?? value).join(', ')
+              : displayValue(brandValueDescription)
+            const summaryRows = brandKind === 'ci'
+              ? [
+                  { key: 'company-name', label: '회사명', value: displayValue(companyName), icon: 'name' },
+                  { key: 'company-motto', label: '회사 모토', value: displayValue(companyMotto), icon: 'value' },
+                  { key: 'mood', label: '원하는 분위기', value: selectedToneLabel, icon: 'mood' },
+                ]
+              : [
+                  { key: 'brand-name', label: '브랜드명', value: displayValue(brandName), icon: 'name' },
+                  { key: 'audience', label: '주요 고객', value: displayValue(targetAgeOptions.find((option) => option.id === targetAge)?.label), icon: 'audience' },
+                  { key: 'value', label: '핵심 가치', value: selectedBrandValues, icon: 'value' },
+                  { key: 'mood', label: '분위기', value: selectedToneLabel, icon: 'mood' },
+                ]
 
-          <section className="logo-result-details" aria-label="로고 디자인 상세">
-            <div className="logo-result-detail-row"><span className="result-detail-icon compass" aria-hidden="true"><Compass size={23} strokeWidth={1.8} /></span><strong>디자인 방향</strong><span>{candidate.direction}</span></div>
-            <div className="logo-result-detail-row"><span className="result-detail-icon type" aria-hidden="true"><TypeIcon size={23} strokeWidth={1.8} /></span><strong>추천 글씨체</strong><span>우아한 세리프 + 깔끔한 산세리프</span></div>
-            <div className="logo-result-detail-row"><span className="result-detail-icon drop" aria-hidden="true"><Droplets size={23} strokeWidth={1.8} /></span><strong>브랜드 컬러</strong><span className="result-color-swatches"><i /><i /><i /><i /></span></div>
-            <div className="logo-result-detail-row feeling"><span className="result-detail-icon heart" aria-hidden="true"><Heart size={26} strokeWidth={1.8} /></span><strong>이 로고가 전달하는 느낌</strong><span>부드럽고 깨끗하면서도<br />프리미엄한 스킨케어 브랜드 이미지</span></div>
-          </section>
+            return (
+              <section className="logo-result-details result-summary-details" aria-label="로고 생성 조건">
+                {summaryRows.map((row) => {
+                  const SummaryIcon = finalSummaryIconMap[row.icon] ?? Shapes
+                  return (
+                    <div className="logo-result-detail-row" key={row.key}>
+                      <span className="result-detail-icon" aria-hidden="true"><SummaryIcon size={22} strokeWidth={1.8} /></span>
+                      <strong>{row.label}</strong>
+                      <span>{row.value}</span>
+                    </div>
+                  )
+                })}
+                <div className="logo-result-detail-row">
+                  <span className="result-detail-icon" aria-hidden="true"><Palette size={22} strokeWidth={1.8} /></span>
+                  <strong>선호 색상</strong>
+                  <span className="result-color-swatches" aria-label="선호 색상 1개">
+                    {getSelectedColors().map((color, index) => <i key={`${color}-${index}`} style={{ background: color }} />)}
+                  </span>
+                </div>
+                <div className="logo-result-detail-row">
+                  <span className="result-detail-icon" aria-hidden="true"><TypeIcon size={22} strokeWidth={1.8} /></span>
+                  <strong>로고 타입</strong>
+                  <span>{selectedLogoStyle}{logoStyle === 'combination' && <em>추천</em>}</span>
+                </div>
+                <div className="logo-result-detail-row">
+                  <span className="result-detail-icon" aria-hidden="true"><Shapes size={22} strokeWidth={1.8} /></span>
+                  <strong>원하는 로고 모양</strong>
+                  <span>{displayValue(logoShapePrompt)}</span>
+                </div>
+              </section>
+            )
+          })()}
 
           <section className={trademarkAnalysisCompleted ? 'logo-result-trademark analyzed' : 'logo-result-trademark'} aria-label="상표 이미지 유사도">
             <span className="trademark-result-icon" aria-hidden="true"><Search size={44} strokeWidth={1.8} /></span>
             {trademarkAnalysisCompleted ? (
-              <div><strong>상표 이미지 유사도 분석 완료</strong><p>가장 높은 유사도는 {trademarkSimilarity ?? 0}%로, 현재 <b>{trademarkRiskLabel || '분석 완료'}</b> 범위예요.</p><button type="button" onClick={() => setMode('trademark-result')}>유사도 분석 결과 보기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+              <div><strong>상표 이미지 유사도 분석 완료</strong><p>가장 높은 유사도는 {trademarkSimilarity ?? TRADEMARK_SCORE_FALLBACK}점으로, 현재 <b>{trademarkRiskLabel || '낮은 유사도'}</b> 범위예요.</p><button type="button" onClick={() => setMode('trademark-result')}>유사도 분석 결과 보기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
             ) : !canAnalyzeTrademark ? (
               <div><strong>상표 이미지 유사도</strong><p>선택한 로고 스타일은 이미지 유사도 분석을 지원하지 않아요.</p></div>
             ) : trademarkAnalysisSkipped ? (
               <div><strong>상표 이미지 유사도</strong><p>이전 단계에서 유사도 분석을 건너뛰었어요.</p></div>
             ) : (
-              <div><strong>상표 이미지 유사도</strong><p>아직 상표 이미지 유사도를 확인하지 않았어요.</p><button type="button" onClick={() => openTrademarkSelection('result')}>비슷한 상표 이미지 확인하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+              <div><strong>상표 이미지 유사도</strong><p>아직 상표 이미지 유사도를 확인하지 않았어요.</p><button type="button" onClick={() => { setTrademarkAnalysisSkipped(false); setTrademarkAnalysisRequested(true); void startTrademarkAnalysis() }}>비슷한 상표 이미지 확인하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
             )}
           </section>
+          {analysisError && <p className="project-error" role="alert">{analysisError}</p>}
 
           <div className="logo-result-actions">
-            <button className="logo-result-edit" type="button" onClick={() => setMode('edit')}><Pencil aria-hidden="true" size={23} strokeWidth={1.8} />색상 · 글씨체 수정<ChevronRight aria-hidden="true" size={25} strokeWidth={1.8} /></button>
+            <button className="logo-result-edit" type="button" onClick={() => { setEditorTestMode(false); setMode('edit') }}><Pencil aria-hidden="true" size={23} strokeWidth={1.8} />로고 수정<ChevronRight aria-hidden="true" size={25} strokeWidth={1.8} /></button>
           </div>
 
           <div className="logo-result-utility-grid">
-            <button className="utility-primary" type="button" onClick={() => void startLogoGeneration()}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />조건을 바꿔<br />다시 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+            <button className="utility-primary" type="button" onClick={openRegenerationConfirm}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />조건을 바꿔<br />다시 만들기<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
             <button className="utility-secondary" type="button" onClick={openBrandKitSelection}><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />{brandKit?.status === 'SUCCEEDED' ? '브랜드 키트 확인하기' : '브랜드 키트 만들기'}<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
           </div>
           {brandKit && <p className="project-error" role="status">브랜드 키트 상태: {brandKit.status === 'QUEUED' || brandKit.status === 'RUNNING' ? '생성 중' : brandKit.status === 'SUCCEEDED' ? '완료' : '실패'}</p>}
@@ -2399,10 +3428,20 @@ function CustomerApp() {
 
   const renderBrandKitSelectionScreen = () => {
     const options: Array<{ type: BrandKit['kitType']; title: string; caption: string; description: string; icon: typeof CreditCard }> = [
-      { type: 'BUSINESS_CARD', title: '명함', caption: '첫 인사를 더 또렷하게', description: '브랜드의 인상을 담은 명함 시안을 만들어요.', icon: CreditCard },
+      { type: 'BUSINESS_CARD', title: '명함', caption: '첫 인사를 더 또렷하게', description: '기업의 인상을 담은 명함 앞·뒷면 시안을 만들어요.', icon: CreditCard },
       { type: 'THUMBNAIL', title: '제품 썸네일', caption: '제품을 한눈에 보여주기', description: '상품 페이지와 SNS에 쓸 썸네일 시안을 만들어요.', icon: ImageIcon },
     ]
     const selectedOption = options.find((option) => option.type === brandKitType)
+    const completedStorageKeys = brandKit?.status === 'SUCCEEDED'
+      ? brandKit.storageKeys?.length
+        ? brandKit.storageKeys
+        : brandKit.storageKey
+          ? [brandKit.storageKey]
+          : []
+      : []
+    const completedBrandKit = brandKit?.status === 'SUCCEEDED' && completedStorageKeys.length > 0 ? brandKit : null
+    const brandKitImageUrls = completedStorageKeys.map(getLogoCandidateImageUrl)
+    const missingBusinessCardBack = completedBrandKit?.kitType === 'BUSINESS_CARD' && brandKitImageUrls.length < 2
 
     return (
       <main className="brand-kit-selection-screen" aria-labelledby="brand-kit-selection-title">
@@ -2415,33 +3454,88 @@ function CustomerApp() {
             <span>필요한 활용처를 골라 주세요.</span>
           </header>
 
-          <div className="brand-kit-choice-grid" role="radiogroup" aria-label="브랜드 키트 종류 선택">
-            {options.map((option) => {
-              const Icon = option.icon
-              const selected = option.type === brandKitType
-              return (
-                <button
-                  key={option.type}
-                  className={selected ? 'brand-kit-choice selected' : 'brand-kit-choice'}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => setBrandKitType(option.type)}
-                >
-                  <span className="brand-kit-choice-visual" aria-hidden="true"><Icon size={40} strokeWidth={1.6} /></span>
-                  <span className="brand-kit-choice-copy"><strong>{option.title}</strong><em>{option.caption}</em><small>{option.description}</small></span>
-                  <span className="brand-kit-choice-radio" aria-hidden="true">{selected ? <Check size={18} strokeWidth={2.6} /> : null}</span>
-                </button>
-              )
-            })}
-          </div>
+          {completedBrandKit && brandKitImageUrls.length > 0 ? (
+            <section className="brand-kit-result-preview" aria-labelledby="brand-kit-result-title">
+              <div className="brand-kit-result-images">
+                {brandKitImageUrls.map((imageUrl, index) => {
+                  const sideLabel = completedBrandKit.kitType === 'BUSINESS_CARD'
+                    ? index === 0 ? '앞면' : '뒷면'
+                    : '완성본'
+                  return (
+                    <figure className="brand-kit-result-image" key={`${imageUrl}-${index}`}>
+                      <figcaption>
+                        <strong>{sideLabel}</strong>
+                        {completedBrandKit.kitType !== 'BUSINESS_CARD' && (
+                          <a href={imageUrl} download="genmark-thumbnail.png">
+                            <Download aria-hidden="true" size={17} strokeWidth={1.9} />다운로드
+                          </a>
+                        )}
+                      </figcaption>
+                      <img src={imageUrl} alt={`완성된 ${completedBrandKit.kitType === 'BUSINESS_CARD' ? `명함 ${sideLabel}` : '제품 썸네일'} 브랜드 키트`} />
+                    </figure>
+                  )
+                })}
+              </div>
+              <div className="brand-kit-result-copy">
+                <span>브랜드 키트 완성</span>
+                {completedBrandKit.preliminary && <span className="brand-kit-preliminary-badge">임시 결과</span>}
+                <h2 id="brand-kit-result-title">{completedBrandKit.kitType === 'BUSINESS_CARD' ? '명함' : '제품 썸네일'} 시안이 준비됐어요.</h2>
+                <p>{missingBusinessCardBack ? '이 결과는 이전 방식으로 만든 앞면만 있어요. 아래 버튼으로 뒷면까지 바로 만들 수 있어요.' : completedBrandKit.kitType === 'BUSINESS_CARD' ? '앞면과 뒷면을 확인한 뒤 ZIP 파일 하나로 함께 받을 수 있어요.' : '선택한 로고가 실제 활용 이미지에 적용된 결과예요.'}</p>
+                {completedBrandKit.warnings?.length ? (
+                  <ul className="brand-kit-warnings" aria-label="브랜드 키트 경고">
+                    {completedBrandKit.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                  </ul>
+                ) : null}
+                {completedBrandKit.kitType === 'BUSINESS_CARD' && !missingBusinessCardBack && (
+                  <button className="brand-kit-download-button" type="button" disabled={brandKitDownloading} onClick={() => void downloadBrandKitArchive(completedBrandKit)}>
+                    <Download aria-hidden="true" size={18} strokeWidth={1.9} />
+                    {brandKitDownloading ? '묶는 중…' : '앞면·뒷면 한 번에 받기'}
+                  </button>
+                )}
+                {missingBusinessCardBack && (
+                  <button className="brand-kit-regenerate-button" type="button" onClick={() => openBusinessCardModal({ candidateId: completedBrandKit.candidateId, projectId: completedBrandKit.projectId })}>
+                    앞면·뒷면 다시 만들기
+                    <RefreshCw aria-hidden="true" size={18} strokeWidth={1.9} />
+                  </button>
+                )}
+              </div>
+            </section>
+          ) : (
+            <div className="brand-kit-choice-grid" role="radiogroup" aria-label="브랜드 키트 종류 선택">
+              {options.map((option) => {
+                const Icon = option.icon
+                const selected = option.type === brandKitType
+                return (
+                  <button
+                    key={option.type}
+                    className={selected ? 'brand-kit-choice selected' : 'brand-kit-choice'}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setBrandKitType(option.type)}
+                  >
+                    <span className="brand-kit-choice-visual" aria-hidden="true"><Icon size={40} strokeWidth={1.6} /></span>
+                    <span className="brand-kit-choice-copy"><strong>{option.title}</strong><em>{option.caption}</em><small>{option.description}</small></span>
+                    <span className="brand-kit-choice-radio" aria-hidden="true">{selected ? <Check size={18} strokeWidth={2.6} /> : null}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           <div className="brand-kit-selection-footer">
-            <p aria-live="polite">{selectedOption ? `${selectedOption.title} 키트를 만들 준비가 됐어요.` : '원하는 브랜드 키트를 선택해 주세요.'}</p>
-            <button className="brand-kit-create-button" type="button" disabled={!brandKitType} onClick={createSelectedBrandKit}>
-              {selectedOption ? `${selectedOption.title} 키트 만들기` : '브랜드 키트 선택하기'}
-              <ChevronRight aria-hidden="true" size={23} strokeWidth={1.9} />
-            </button>
+            <p aria-live="polite">{brandKitImageUrls.length > 0 ? '완성된 이미지를 확인하거나 내려받을 수 있어요.' : selectedOption ? `${selectedOption.title} 키트를 만들 준비가 됐어요.` : '원하는 브랜드 키트를 선택해 주세요.'}</p>
+            {brandKitImageUrls.length > 0 ? (
+              <button className="brand-kit-create-button secondary" type="button" onClick={() => { setBrandKit(null); setBrandKitType(null) }}>
+                새 시안 만들기
+                <ChevronRight aria-hidden="true" size={23} strokeWidth={1.9} />
+              </button>
+            ) : (
+              <button className="brand-kit-create-button" type="button" disabled={!brandKitType} onClick={createSelectedBrandKit}>
+                {selectedOption ? `${selectedOption.title} 키트 만들기` : '브랜드 키트 선택하기'}
+                <ChevronRight aria-hidden="true" size={23} strokeWidth={1.9} />
+              </button>
+            )}
             {brandKit && <p className="brand-kit-status" role="status">{brandKit.status === 'QUEUED' || brandKit.status === 'RUNNING' ? '브랜드 키트를 만들고 있어요.' : brandKit.status === 'SUCCEEDED' ? '브랜드 키트가 준비됐어요.' : '브랜드 키트 생성에 문제가 생겼어요.'}</p>}
             {brandKitError && <p className="brand-kit-error" role="alert">{brandKitError}</p>}
           </div>
@@ -2451,72 +3545,172 @@ function CustomerApp() {
   }
 
   const renderLogoEditScreen = () => {
-    const fontOptions = ['LUVÉRA', 'LUVÉRA', 'LUVÉRA', 'LUVÉRA']
+    const candidates = logoCandidates.length > 0 ? logoCandidates : resultPreviewCandidates
+    const safeCandidateIndex = Math.min(resultCandidate, Math.max(0, candidates.length - 1))
+    const candidate = candidates[safeCandidateIndex]
+    const fallbackImageUrl = logoCandidates.length > 0 && candidate
+      ? getLogoCandidateImageUrl(candidate.storageKey)
+      : resultPreviewImageUrl
+    const editorImageUrl = editorSvgPreviewUrl ?? fallbackImageUrl
+    const showCandidateNavigation = candidates.length > 1
+    const handleEditorSvgClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+      const target = (event.target as Element).closest('[data-genmark-editor-element]')
+      const targetId = target?.getAttribute('data-genmark-editor-element')
+      selectEditorTarget(targetId ?? '')
+    }
+
+    const getEditorSvgPoint = (svg: SVGSVGElement, clientX: number, clientY: number) => {
+      const matrix = svg.getScreenCTM()
+      if (!matrix) return null
+      const point = svg.createSVGPoint()
+      point.x = clientX
+      point.y = clientY
+      return point.matrixTransform(matrix.inverse())
+    }
+
+    const handleEditorSvgPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+      const target = (event.target as Element).closest('[data-genmark-editor-element]')
+      const targetId = target?.getAttribute('data-genmark-editor-element')
+      if (!targetId) return
+
+      const svg = event.currentTarget.querySelector<SVGSVGElement>('svg')
+      const startPoint = svg ? getEditorSvgPoint(svg, event.clientX, event.clientY) : null
+      if (!startPoint) return
+
+      const draft = targetId === editTarget
+        ? { offsetX: editorOffsetX, offsetY: editorOffsetY }
+        : (editorDrafts[targetId] ?? createEditorDraft(editorColor))
+      selectEditorTarget(targetId)
+      editorDragRef.current = {
+        pointerId: event.pointerId,
+        target: targetId,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startSvgX: startPoint.x,
+        startSvgY: startPoint.y,
+        startOffsetX: draft.offsetX,
+        startOffsetY: draft.offsetY,
+      }
+      event.currentTarget.setPointerCapture(event.pointerId)
+      event.preventDefault()
+    }
+
+    const handleEditorSvgPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+      const drag = editorDragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) return
+      const svg = event.currentTarget.querySelector<SVGSVGElement>('svg')
+      const point = svg ? getEditorSvgPoint(svg, event.clientX, event.clientY) : null
+      if (!point) return
+      updateEditorOffsets(drag.startOffsetX + point.x - drag.startSvgX, drag.startOffsetY + point.y - drag.startSvgY)
+    }
+
+    const handleEditorSvgPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+      if (!editorDragRef.current || editorDragRef.current.pointerId !== event.pointerId) return
+      editorDragRef.current = null
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    const handleEditorCanvasKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        selectEditorTarget('')
+        return
+      }
+      if (!editTarget || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+      const step = event.shiftKey ? 10 : 2
+      const nextX = editorOffsetX + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0)
+      const nextY = editorOffsetY + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0)
+      event.preventDefault()
+      updateEditorOffsets(nextX, nextY)
+    }
+
+    const moveEditorCandidate = (offset: number) => {
+      if (!showCandidateNavigation) return
+      setResultCandidate((current) => (current + offset + candidates.length) % candidates.length)
+    }
+
+    const renderEditorColorControl = () => (
+      <div className="editor-color-control">
+        <div className="editor-color-row">
+          <span>색상</span>
+          <div className="editor-color-display">
+            <i className="editor-color-display-swatch" style={{ background: editorColor }} aria-hidden="true" />
+            <button
+              className="editor-color-edit"
+              type="button"
+              disabled={!editTarget}
+              aria-label="색상 편집"
+              aria-expanded={editorColorPickerOpen}
+              aria-controls="editor-color-picker"
+              onClick={() => setEditorColorPickerOpen((current) => !current)}
+            >
+              <PenLine aria-hidden="true" size={13} strokeWidth={2} /> Edit
+            </button>
+          </div>
+        </div>
+        {editorColorPickerOpen && (
+          <div className="editor-color-picker tone-color-picker tone-color-picker-inline" id="editor-color-picker" role="group" aria-label="로고 요소 색상 팔레트">
+            <ToneColorPalette
+              value={hexToRgb(editorColor)}
+              onChange={(color) => {
+                const nextColor = rgbToHex(color)
+                setEditorColor(nextColor)
+                setEditorColorChanged(true)
+                updateCurrentEditorDraft({ color: nextColor, colorChanged: true })
+                markEditorDirty()
+              }}
+              onComplete={() => setEditorColorPickerOpen(false)}
+              ariaLabel={`${editTarget ? '선택한 요소' : '로고 요소'} 색상 팔레트`}
+            />
+            <div className="editor-color-picker-footer">
+              <span>원하는 색상을 자유롭게 선택할 수 있어요.</span>
+              <button type="button" onClick={() => {
+                const baseColor = projectColors[0] ?? '#7B5CDF'
+                setEditorColor(baseColor)
+                setEditorColorChanged(false)
+                updateCurrentEditorDraft({ color: baseColor, colorChanged: false })
+                markEditorDirty()
+              }}>초기화</button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
 
     return (
       <main className="logo-editor-screen" aria-labelledby="logo-editor-title">
         <header className="logo-editor-header">
           <button className="logo-editor-back" type="button" aria-label="결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
           <div className="logo-editor-brand"><BrandLogo /><strong>GenMark AI</strong></div>
-          <button className="logo-editor-save" type="button" onClick={() => void saveEditorChanges()}>{editorSaved ? '저장됨' : '저장'}<ChevronDown aria-hidden="true" size={16} strokeWidth={1.8} /></button>
-          <button className="logo-editor-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={22} strokeWidth={1.8} /></button>
+          <button className="logo-editor-save" type="button" disabled={editorLoading || editorSaving || !editorSvgSource} onClick={() => void saveEditorChanges()}>{editorSaving ? '저장 중' : editorSaved ? '저장됨' : '저장'}<ChevronDown aria-hidden="true" size={16} strokeWidth={1.8} /></button>
         </header>
 
         <section className="logo-editor-content">
-          <div className="logo-editor-meta">
-            <div className="logo-editor-counter"><button type="button" aria-label="이전 후보" onClick={() => setResultCandidate((current) => (current + 3) % 4)}><ChevronLeft size={18} strokeWidth={1.8} /></button><strong>후보 {resultCandidate + 1} / 4</strong><button type="button" aria-label="다음 후보" onClick={() => setResultCandidate((current) => (current + 1) % 4)}><ChevronRight size={18} strokeWidth={1.8} /></button></div>
-            <span className="logo-editor-autosave"><Check size={15} strokeWidth={2} /> 자동 저장됨</span>
-          </div>
-
           <section className="logo-editor-preview-card" aria-label="로고 편집 캔버스">
             <div className="logo-editor-artboard">
-              <button className={editTarget === 'symbol' ? 'editor-uploaded-logo-target selected' : 'editor-uploaded-logo-target'} type="button" aria-label="루네리아 로고 수정" onClick={() => setEditTarget('symbol')}>
-                <img className="editor-uploaded-logo" src="/luneria-edit-logo.png" alt="Luneria 로고" style={{ transform: `scale(${editorScale / 100}) rotate(${editorRotation}deg)`, opacity: editorOpacity / 100 }} />
-                {editTarget === 'symbol' && <span className="editor-selection-trash" aria-hidden="true" />}
-              </button>
-              {editTarget === 'symbol' && <span className="editor-rotate-handle" aria-hidden="true"><RefreshCw size={22} strokeWidth={1.8} /></span>}
-            </div>
-            <div className="logo-editor-preview-footer">
-              <div className="editor-history"><button type="button" aria-label="실행 취소"><ArrowLeft size={20} strokeWidth={1.8} /></button><button type="button" aria-label="다시 실행"><ArrowRight size={20} strokeWidth={1.8} /></button></div>
+              <div className="editor-uploaded-logo-target" role="button" tabIndex={0} aria-label="수정할 로고 요소 선택" aria-describedby="editor-move-help" onClick={(event) => { if (event.target === event.currentTarget) selectEditorTarget(''); else handleEditorSvgClick(event) }} onKeyDown={handleEditorCanvasKeyDown}>
+                {editorSvgPreviewSource ? <div className="editor-uploaded-logo-svg" aria-label="SVG 로고 편집 미리보기" onClick={handleEditorSvgClick} onPointerDown={handleEditorSvgPointerDown} onPointerMove={handleEditorSvgPointerMove} onPointerUp={handleEditorSvgPointerUp} onPointerCancel={handleEditorSvgPointerUp} dangerouslySetInnerHTML={{ __html: editorSvgPreviewSource }} /> : <img className="editor-uploaded-logo" src={editorImageUrl} alt="선택한 AI 생성 로고" style={editorSvgPreviewUrl ? { objectFit: 'contain' } : { objectFit: 'contain', transform: `scale(${editorScale / 100}) rotate(${editorRotation}deg)`, opacity: editorOpacity / 100 }} />}
+              </div>
+              <p id="editor-move-help" className="editor-move-hint">요소를 선택한 뒤 드래그하거나 방향키로 이동할 수 있어요.</p>
             </div>
           </section>
 
           <section className="logo-editor-panel" aria-labelledby="logo-editor-title">
             <h1 id="logo-editor-title" className="sr-only">로고 수정</h1>
-            <div className="logo-editor-tabs" role="tablist" aria-label="수정할 로고 요소">
-              <button className={editTarget === 'symbol' ? 'active' : ''} type="button" role="tab" aria-selected={editTarget === 'symbol'} onClick={() => setEditTarget('symbol')}>심볼</button>
-              <button className={editTarget === 'text' ? 'active' : ''} type="button" role="tab" aria-selected={editTarget === 'text'} onClick={() => setEditTarget('text')}>글자</button>
-              <button type="button" role="tab" aria-selected="false" onClick={() => setEditTarget('text')}>배치</button>
+            <div className="editor-control-section element-controls">
+              <div className="editor-control-heading"><strong>{editTarget ? '선택한 요소 설정' : '요소를 선택해 주세요'}</strong><button type="button" aria-label="선택한 요소 설정 초기화" disabled={!editTarget} onClick={resetEditorControls}><RefreshCw aria-hidden="true" size={14} strokeWidth={2} />초기화</button></div>
+              <label className="editor-slider-row"><span>크기</span><input disabled={!editTarget} type="range" min="70" max="140" value={editorScale} onChange={(event) => { const value = Number(event.target.value); setEditorScale(value); updateCurrentEditorDraft({ scale: value }); markEditorDirty() }} /></label>
+              <label className="editor-slider-row"><span>회전</span><input disabled={!editTarget} type="range" min="-180" max="180" value={editorRotation} onChange={(event) => { const value = Number(event.target.value); setEditorRotation(value); updateCurrentEditorDraft({ rotation: value }); markEditorDirty() }} /></label>
+              <label className="editor-slider-row"><span>투명도</span><input disabled={!editTarget} type="range" min="30" max="100" value={editorOpacity} onChange={(event) => { const value = Number(event.target.value); setEditorOpacity(value); updateCurrentEditorDraft({ opacity: value }); markEditorDirty() }} /></label>
+              {renderEditorColorControl()}
             </div>
-
-            {editTarget === 'text' ? (
-              <div className="editor-control-section text-controls">
-                <label className="editor-field-label" htmlFor="editor-brand-name">브랜드명</label>
-                <input id="editor-brand-name" value={editorBrandName} onChange={(event) => setEditorBrandName(event.target.value)} />
-                <div className="editor-control-heading"><strong>추천 글씨체</strong><span>상업적 이용 가능 <b>ⓘ</b></span></div>
-                <div className="editor-font-grid">
-                  {fontOptions.map((font, index) => <button key={index} type="button" className={index === 0 ? 'selected' : ''} style={{ fontFamily: index === 0 ? 'Georgia, serif' : index === 1 ? 'Arial, sans-serif' : index === 2 ? 'Garamond, serif' : 'Times New Roman, serif' }}>{font}{index === 0 && <Check aria-hidden="true" size={11} strokeWidth={2.5} />}</button>)}
-                </div>
-                <div className="editor-control-heading"><strong>글자 설정</strong><button type="button" onClick={() => { setEditorScale(100); setEditorLetterSpacing(0) }}>초기화</button></div>
-                <label className="editor-slider-row"><span>크기</span><input type="range" min="70" max="140" value={editorScale} onChange={(event) => setEditorScale(Number(event.target.value))} /><output>{editorScale}%</output></label>
-                <label className="editor-slider-row"><span>자간</span><input type="range" min="-4" max="12" value={editorLetterSpacing} onChange={(event) => setEditorLetterSpacing(Number(event.target.value))} /><output>{editorLetterSpacing}</output></label>
-                <label className="editor-slider-row"><span>행간</span><input type="range" min="0" max="12" value={0} readOnly /><output>0</output></label>
-                <label className="editor-color-row"><span>색상</span><select value={editorColor} onChange={(event) => setEditorColor(event.target.value)}><option value="#7B5CDF">●  #7B5CDF</option><option value="#E36BAE">●  #E36BAE</option><option value="#2D3047">●  #2D3047</option></select></label>
-              </div>
-            ) : (
-              <div className="editor-control-section symbol-controls">
-                <div className="editor-control-heading"><strong>로고 설정</strong><button type="button" onClick={() => { setEditorScale(100); setEditorRotation(0); setEditorOpacity(100) }}>초기화</button></div>
-                <label className="editor-slider-row"><span>크기</span><input type="range" min="70" max="140" value={editorScale} onChange={(event) => setEditorScale(Number(event.target.value))} /><output>{editorScale}%</output></label>
-                <label className="editor-slider-row"><span>회전</span><input type="range" min="-180" max="180" value={editorRotation} onChange={(event) => setEditorRotation(Number(event.target.value))} /><output>{editorRotation}°</output></label>
-                <label className="editor-slider-row"><span>투명도</span><input type="range" min="30" max="100" value={editorOpacity} onChange={(event) => setEditorOpacity(Number(event.target.value))} /><output>{editorOpacity}%</output></label>
-              </div>
-            )}
           </section>
 
           <div className="logo-editor-actions">
-            <button className="logo-editor-apply" type="button" onClick={() => void saveEditorChanges().then(() => setMode('result'))}>수정 적용하기</button>
-            {canAnalyzeTrademark && <button className="logo-editor-trademark" type="button" onClick={() => openTrademarkSelection('result')}>상표 이미지 유사도 다시 확인하기</button>}
+            <button className="logo-editor-apply" type="button" disabled={editorLoading || editorSaving || !editorSvgSource} onClick={() => void saveEditorChanges().then((saved) => { if (saved && !EDITOR_TEST_MODE) setMode('result') })}>{editorSaving ? '저장 중...' : '적용하기'}</button>
           </div>
+          {editorLoading && <p className="project-error" role="status">SVG 로고를 불러오고 있어요.</p>}
+          {editorError && <p className="project-error" role="alert">{editorError}</p>}
           <p className="logo-editor-note">· 로고의 형태나 배치를 변경하면 상표 이미지 유사도에 영향을 줄 수 있어요.</p>
         </section>
       </main>
@@ -2524,63 +3718,271 @@ function CustomerApp() {
   }
 
   const renderMypageScreen = () => {
-    const displayUserName = brandName.trim() || '사용자'
-    const completedProjects = [{ id: 'luvera', name: 'LUVÉRA', detail: '스킨케어 · 콤비네이션', status: '로고 생성 완료' }]
+    if (!authRestoring && !loggedIn) {
+      const goToLogin = () => { setLoginDestination('mypage'); setLoginReturnMode('home'); setMode('login') }
+      return (
+        <main className="mypage-screen" aria-labelledby="mypage-title">
+          <header className="main-header">
+            <a className="main-brand" href="#home" aria-label="GenMark AI 홈" onClick={() => setMode('home')}>
+              <BrandLogo />
+              <span>GenMark AI</span>
+            </a>
+          </header>
+          <section className="mypage-content mypage-login-gate">
+            <div className="mypage-login-gate-icon"><UserRound aria-hidden="true" size={30} strokeWidth={1.6} /></div>
+            <h1 id="mypage-title">로그인을 진행해주세요.</h1>
+            <p>마이페이지는 로그인 후 이용하실 수 있어요.</p>
+            <button className="gradient-button" type="button" onClick={goToLogin}>
+              로그인하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} />
+            </button>
+          </section>
+        </main>
+      )
+    }
+    const useMypageMock = MYPAGE_MOCK_MODE && !authRestoring && !loggedIn
+    const displayUserName = useMypageMock ? '김명은' : authUser?.name?.trim() || '사용자'
+    const displayEmail = useMypageMock ? '연결된 이메일 정보가 없어요. tkss1217@gmail.com' : authUser?.email?.trim() || '연결된 이메일 정보가 없어요.'
+    const displayCompanyName = useMypageMock ? '육하원칙' : companyName.trim() || '아직 입력된 회사명이 없어요.'
+    const displayCompanyMotto = useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : companyMotto.trim() || '브랜드 프로젝트에서 회사 모토를 입력해보세요.'
+    const selectedLogo = logoCandidates.find((candidate) => candidate.id === selectedCandidateId)
+      ?? logoCandidates.find((candidate) => candidate.selected)
+    const projectName = (brandKind === 'ci' ? companyName : brandName).trim()
+    const projectDescription = (brandKind === 'ci' ? companyMotto : brandValueDescription).trim()
+    const selectedIndustry = industryOptions.find((option) => option.id === industrySelection)?.title ?? '업종 미입력'
+    const selectedStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? '스타일 미입력'
+    const completedProjects = useMypageMock ? [{
+      id: 'mypage-mock-completed-brand',
+      name: '육하원칙',
+      detail: '뷰티 · 콤비네이션',
+      description: '완성된 브랜드 로고 목업',
+      candidate: { id: 'mypage-mock-completed-candidate', storageKey: 'mypage/mock-completed-brand.png' } as LogoCandidate,
+    }] : projectId && selectedLogo && projectName
+      ? [{
+          id: projectId,
+          name: projectName,
+          detail: `${selectedIndustry} · ${selectedStyle}`,
+          description: projectDescription,
+          candidate: selectedLogo,
+        }]
+      : []
+    const displayDownloadHistory: DownloadRecord[] = useMypageMock ? [
+      {
+        downloadId: -1,
+        candidateId: 'mypage-mock-pinned-1',
+        projectType: 'BI',
+        imageUrl: '/mypage/mock-pinned/mypage-mock-pinned-1.png',
+        firstTime: false,
+        downloadedAt: '2026-08-14T09:00:00.000Z',
+      },
+      {
+        downloadId: -2,
+        candidateId: 'mypage-mock-pinned-2',
+        projectType: 'BI',
+        imageUrl: '/mypage/mock-pinned/mypage-mock-pinned-2.png',
+        firstTime: false,
+        downloadedAt: '2026-08-14T09:05:00.000Z',
+      },
+    ] : downloadHistory
+    const displayPinnedLogos: PinnedLogo[] = useMypageMock ? [
+      { candidateId: 'mypage-mock-pinned-1', projectType: 'BI', storageKey: 'mypage/pinned/lysenne.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
+      { candidateId: 'mypage-mock-pinned-2', projectType: 'BI', storageKey: 'mypage/pinned/sunwave.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
+      { candidateId: 'mypage-mock-pinned-3', projectType: 'BI', storageKey: 'mypage/pinned/gn.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
+      { candidateId: 'mypage-mock-pinned-4', projectType: 'BI', storageKey: 'mypage/pinned/vastel.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
+      { candidateId: 'mypage-mock-pinned-5', projectType: 'BI', storageKey: 'mypage/pinned/rk.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
+    ] : pinnedLogos
+    const savedBrandKitStorageKeys = brandKit?.status === 'SUCCEEDED'
+      ? brandKit.storageKeys?.length
+        ? brandKit.storageKeys
+        : brandKit.storageKey
+          ? [brandKit.storageKey]
+          : []
+      : []
+    const savedBrandKitImageUrls = savedBrandKitStorageKeys.map(getLogoCandidateImageUrl)
+    const mockBrandKitItems = [
+      { image: '/mypage/mock-brand-kit/lavenor.png', name: 'LAVENOR' },
+      { image: '/mypage/mock-brand-kit/aurelis.png', name: 'AURELIS' },
+      { image: '/mypage/mock-brand-kit/solairea.png', name: 'SOLAIREA' },
+      { image: '/mypage/mock-brand-kit/noirel.png', name: 'NOIRÉL' },
+      { image: '/mypage/mock-brand-kit/citrea.png', name: 'CITRÉA' },
+    ]
+    const getPinnedImageUrl = (item: PinnedLogo) => useMypageMock
+      ? `/mypage/mock-pinned/${item.candidateId}.png`
+      : getLogoCandidateImageUrl(item.storageKey)
+    const remainingPinDays = (expiresAt: string) => Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000))
+    const beginProfileEdit = () => {
+      setProfileCompanyNameDraft(useMypageMock ? '육하원칙' : companyName)
+      setProfileCompanyMottoDraft(useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : companyMotto)
+      setProfileEditing(true)
+    }
+    const saveProfileEdit = (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      setCompanyName(profileCompanyNameDraft.trim())
+      setCompanyMotto(profileCompanyMottoDraft.trim())
+      setProfileEditing(false)
+    }
+    const downloadHistoryItem = async (item: DownloadRecord) => {
+      try {
+        if (item.imageUrl.startsWith('/')) {
+          const link = document.createElement('a')
+          link.href = item.imageUrl
+          link.download = `genmark-${item.projectType.toLowerCase()}-${item.candidateId}.png`
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+          return
+        }
+        const blob = await downloadAuthenticatedFile(item.imageUrl)
+        const link = document.createElement('a')
+        link.href = URL.createObjectURL(blob)
+        link.download = `genmark-${item.projectType.toLowerCase()}-${item.candidateId}.png`
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        URL.revokeObjectURL(link.href)
+      } catch (error) {
+        setProjectError(error instanceof Error ? error.message : '다운로드 파일을 불러오지 못했어요.')
+      }
+    }
 
     return (
       <main className="mypage-screen" aria-labelledby="mypage-title">
         <header className="workspace-header">
           <button className="workspace-back" type="button" aria-label="홈으로 돌아가기" onClick={() => setMode('home')}><ChevronLeft aria-hidden="true" size={23} strokeWidth={1.8} /></button>
           <div className="workspace-brand"><BrandLogo /><strong>GenMark AI</strong></div>
-          <button className="workspace-help" type="button" aria-label="도움말"><CircleHelp aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         </header>
 
         <section className="mypage-content">
           <header className="mypage-heading">
-            <p className="mypage-eyebrow">마이페이지</p>
             <h1 id="mypage-title">{displayUserName}님의 브랜드 작업</h1>
-            <p>작성 중인 프로젝트와 완성된 로고를 한곳에서 확인하세요.</p>
+            <p>프로필과 저장된 브랜드 자산을 한곳에서 확인하세요.</p>
           </header>
 
+          <section className="mypage-profile-panel" aria-labelledby="profile-title">
+            <div className="profile-identity">
+              <span className="profile-avatar" aria-hidden="true">{displayUserName.slice(0, 1)}</span>
+              <div><h2 id="profile-title">{displayUserName}</h2><p>{displayEmail}</p></div>
+            </div>
+            <form className="profile-details" onSubmit={saveProfileEdit}>
+              <div className="profile-edit-actions">
+                {profileEditing ? (
+                  <><button type="button" onClick={() => setProfileEditing(false)}>취소</button><button className="save" type="submit">저장</button></>
+                ) : (
+                  <button type="button" onClick={beginProfileEdit}><Pencil aria-hidden="true" size={13} strokeWidth={2} />수정</button>
+                )}
+              </div>
+              <dl className="profile-detail-list">
+                <div>
+                  <dt><Building2 size={17} strokeWidth={1.8} />회사명</dt>
+                  <dd>{profileEditing ? <input aria-label="회사명 수정" maxLength={80} value={profileCompanyNameDraft} onChange={(event) => setProfileCompanyNameDraft(event.target.value)} placeholder="회사명을 입력해주세요." /> : displayCompanyName}</dd>
+                </div>
+                <div>
+                  <dt><Sparkles size={17} strokeWidth={1.8} />회사 모토</dt>
+                  <dd>{profileEditing ? <textarea aria-label="회사 모토 수정" maxLength={300} rows={2} value={profileCompanyMottoDraft} onChange={(event) => setProfileCompanyMottoDraft(event.target.value)} placeholder="회사 모토를 입력해주세요." /> : displayCompanyMotto}</dd>
+                </div>
+              </dl>
+            </form>
+          </section>
 
           <section className="mypage-section" aria-labelledby="completed-title">
             <div className="section-title-row"><div><h2 id="completed-title">완성한 브랜드</h2><p>생성한 로고와 분석 결과를 다시 확인할 수 있어요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
             {completedProjects.length > 0 ? completedProjects.map((project) => (
               <article className="completed-project-card" key={project.id}>
-                <div className="completed-project-preview" aria-hidden="true"><span><Sparkles size={22} strokeWidth={1.5} /></span><strong>{project.name}</strong><small>COSMETICS</small></div>
-                <div className="completed-project-info"><div className="project-info-heading"><strong>{project.name}</strong><span className="project-status"><Check size={14} strokeWidth={2.3} /> {project.status}</span></div><p>{project.detail}</p><div className="project-status-list"><span><Check size={14} strokeWidth={2} /> 로고 생성 완료</span><span><Check size={14} strokeWidth={2} /> 상표 이미지 분석 완료</span><span><Check size={14} strokeWidth={2} /> 브랜드 키트 완료</span></div></div>
+                <div className="completed-project-preview"><img src={useMypageMock ? '/mypage/mock-completed-brand.png' : getLogoCandidateImageUrl(project.candidate.storageKey)} alt={`${project.name} 선택 로고`} /></div>
+                <div className="completed-project-info"><div className="project-info-heading"><strong>{project.name}</strong><span className="project-status"><Check size={14} strokeWidth={2.3} /> 로고 선택 완료</span></div><p>{project.detail}</p>{project.description && <p className="project-description">{project.description}</p>}<div className="project-status-list"><span><Check size={14} strokeWidth={2} /> 로고 생성 완료</span><span className={trademarkAnalysisCompleted ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 상표 분석 {trademarkAnalysisCompleted ? '완료' : '미완료'}</span><span className={brandKit?.status === 'SUCCEEDED' ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 브랜드킷 {brandKit?.status === 'SUCCEEDED' ? '완료' : '미완료'}</span></div></div>
                 <div className="project-action-grid">
                   <button type="button" onClick={() => setMode('result')}><ImageIcon size={19} strokeWidth={1.8} />결과 보기</button>
-                  <button type="button" onClick={() => setMode('trademark-result')}><Search size={19} strokeWidth={1.8} />유사도 결과 보기</button>
-                  <button type="button" onClick={() => downloadLogo({ name: project.name, subtitle: 'COSMETICS' })}><Download size={19} strokeWidth={1.8} />로고 다운로드</button>
-                  <button type="button" onClick={() => setMode('result')}><FolderCheck size={19} strokeWidth={1.8} />브랜드 키트 만들기</button>
+                  <button type="button" disabled={!trademarkAnalysisCompleted} onClick={() => setMode('trademark-result')}><Search size={19} strokeWidth={1.8} />유사도 결과</button>
+                  <button type="button" onClick={() => requestLogoDownload({ name: project.name, subtitle: selectedIndustry, candidateId: project.candidate.id, storageKey: project.candidate.storageKey, svgUrl: project.candidate.svgUrl })}><Download size={19} strokeWidth={1.8} />로고 다운로드</button>
+                  <button type="button" onClick={openBrandKitSelection}><FolderCheck size={19} strokeWidth={1.8} />브랜드킷 만들기</button>
                   <button type="button" onClick={() => setMode('style')}><RefreshCw size={19} strokeWidth={1.8} />다시 생성하기</button>
                 </div>
               </article>
             )) : (
-              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 만든 브랜드가 없어요</h3><p>첫 번째 화장품 브랜드 로고를 만들어보세요.</p><button className="gradient-button" type="button" onClick={startOnboarding} disabled={authRestoring}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
+              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 완성한 브랜드가 없어요</h3><p>로고를 생성하고 최종 후보를 선택하면 이곳에 표시돼요.</p><button className="gradient-button" type="button" onClick={startOnboarding} disabled={authRestoring}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
             )}
           </section>
 
-          {pinnedLogos.length > 0 && (
-            <section className="mypage-section" aria-labelledby="pinned-title">
-              <div className="section-title-row"><div><h2 id="pinned-title">찜한 로고</h2><p>찜한 로고는 3일 동안 보관돼요.</p></div><Heart aria-hidden="true" size={27} strokeWidth={1.8} /></div>
+          <section className="mypage-section" aria-labelledby="download-history-title">
+            <div className="section-title-row"><div><h2 id="download-history-title">내 다운로드 목록</h2><p>CI·BI 유형별로 최근 20개까지 보관돼요. 한도를 넘으면 오래된 기록부터 자동으로 정리됩니다.</p></div></div>
+            {displayDownloadHistory.length > 0 ? (
+              useMypageMock ? (
+                <div className="download-logo-grid">
+                  {displayDownloadHistory.map((item) => (
+                    <article className="download-logo-card" key={item.downloadId}>
+                      <img src={item.imageUrl} alt="다운로드한 로고" />
+                      <div><strong>{item.projectType} 로고</strong><p>{new Date(item.downloadedAt).toLocaleString('ko-KR')}에 저장</p><button type="button" onClick={() => void downloadHistoryItem(item)}>다시 받기</button></div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="mypage-record-list">
+                  {displayDownloadHistory.map((item) => (
+                    <article className="mypage-record-row" key={item.downloadId}>
+                      <span className="record-icon"><Download size={19} strokeWidth={1.8} /></span>
+                      <div><strong>{item.projectType} 로고</strong><p>{new Date(item.downloadedAt).toLocaleString('ko-KR')}에 저장</p></div>
+                      <button type="button" onClick={() => void downloadHistoryItem(item)}>다시 받기</button>
+                    </article>
+                  ))}
+                </div>
+              )
+            ) : <div className="mypage-inline-empty"><Download size={22} strokeWidth={1.6} /><span>아직 다운로드한 로고가 없어요.</span></div>}
+          </section>
+
+          <section className="mypage-section" aria-labelledby="pinned-title">
+              <div className="section-title-row"><div><h2 id="pinned-title">찜한 로고</h2><p>찜한 로고는 3일 동안 잠시 보관돼요. 기간이 지나면 목록에서 자동으로 사라집니다.</p></div></div>
+            {displayPinnedLogos.length > 0 ? (
               <div className="pinned-logo-grid">
-                {pinnedLogos.map((item) => (
+                {displayPinnedLogos.map((item) => (
                   <article className="pinned-logo-card" key={item.candidateId}>
-                    <img src={getLogoCandidateImageUrl(item.storageKey)} alt="찜한 로고" />
-                    <div><strong>{item.projectType ?? 'BRAND'} 로고</strong><span>{new Date(item.expiresAt).toLocaleDateString('ko-KR')}까지 보관</span></div>
+                    <img src={getPinnedImageUrl(item)} alt="찜한 로고" />
+                    <div><strong>{item.projectType ?? '브랜드'} 로고</strong><span>{remainingPinDays(item.expiresAt)}일 후 목록에서 사라져요</span><small>{new Date(item.expiresAt).toLocaleDateString('ko-KR')}까지 보관</small></div>
                   </article>
                 ))}
               </div>
-            </section>
-          )}
-
-          <section className="mypage-section download-history-section" aria-labelledby="download-history-title">
-            <div className="section-title-row"><div><h2 id="download-history-title">다운로드 기록</h2><p>다운로드한 로고는 유형별로 최대 20개까지 보관돼요.</p></div><Download aria-hidden="true" size={27} strokeWidth={1.8} /></div>
-            <p className="download-history-count">현재 {downloadHistory.length}개의 다운로드 기록이 있어요.</p>
+            ) : <div className="mypage-inline-empty"><Heart size={22} strokeWidth={1.6} /><span>잠시 보관하고 싶은 로고를 찜해보세요.</span></div>}
           </section>
 
+          <section className="mypage-section" aria-labelledby="brand-kit-list-title">
+            <div className="section-title-row"><div><h2 id="brand-kit-list-title">내 브랜드킷</h2><p>선택한 로고로 만든 명함과 제품 썸네일을 확인하세요.</p></div></div>
+            {useMypageMock ? (
+              <div className="pinned-logo-grid brand-kit-mock-grid">
+                {mockBrandKitItems.map((item) => (
+                  <article className="pinned-logo-card" key={item.name}>
+                    <img src={item.image} alt={`${item.name} 제품 썸네일`} />
+                    <div><strong>{item.name}</strong><span>제품 썸네일</span><small>브랜드 키트 목업</small></div>
+                  </article>
+                ))}
+              </div>
+            ) : brandKit?.status === 'SUCCEEDED' && savedBrandKitImageUrls.length > 0 ? (
+              <article className="mypage-brand-kit-result">
+                <div className="mypage-brand-kit-images">
+                  {savedBrandKitImageUrls.map((imageUrl, index) => {
+                    const label = brandKit.kitType === 'BUSINESS_CARD'
+                      ? index === 0 ? '앞면' : '뒷면'
+                      : '제품 썸네일'
+                    return (
+                      <figure className="mypage-brand-kit-image" key={`${imageUrl}-${index}`}>
+                        <figcaption>{label}</figcaption>
+                        <img src={imageUrl} alt={`완성된 ${label}`} />
+                      </figure>
+                    )
+                  })}
+                </div>
+                <button className="mypage-brand-kit-download" type="button" disabled={brandKitDownloading} onClick={() => void downloadBrandKitArchive(brandKit)}>
+                  <Download aria-hidden="true" size={18} strokeWidth={1.9} />
+                  {brandKitDownloading ? '묶는 중…' : brandKit.kitType === 'BUSINESS_CARD' ? '앞면·뒷면 한 번에 다운로드' : '다운로드'}
+                </button>
+              </article>
+            ) : brandKit ? (
+              <article className="brand-kit-summary-row">
+                <span className="record-icon"><FolderCheck size={20} strokeWidth={1.8} /></span>
+                <div><strong>{brandKit.kitType === 'BUSINESS_CARD' ? '명함' : '제품 썸네일'}</strong><p>{brandKit.status === 'SUCCEEDED' ? '생성이 완료됐어요.' : brandKit.status === 'FAILED' ? '생성에 실패했어요.' : '현재 생성 중이에요.'}</p></div>
+                <span className={`brand-kit-state ${brandKit.status.toLowerCase()}`}>{brandKit.status === 'SUCCEEDED' ? '완료' : brandKit.status === 'FAILED' ? '실패' : '생성 중'}</span>
+              </article>
+            ) : <div className="mypage-inline-empty"><FolderCheck size={22} strokeWidth={1.6} /><span>아직 만든 브랜드킷이 없어요.</span></div>}
+          </section>
+
+          {projectError && <p className="project-error mypage-project-error" role="alert">{projectError}</p>}
           <button className="survey-entry-card" type="button" onClick={() => { setSurveySubmitted(false); setMode('survey') }}><span><MessageSquare aria-hidden="true" size={23} strokeWidth={1.8} /></span><div><strong>서비스를 이용해보셨나요?</strong><p>더 쉬운 브랜드 제작을 위해 의견을 들려주세요.</p></div><ChevronRight aria-hidden="true" size={21} strokeWidth={1.8} /></button>
         </section>
       </main>
@@ -2604,7 +4006,7 @@ function CustomerApp() {
 
             <section className="survey-section" aria-labelledby="rating-title"><h2 id="rating-title">결과에 얼마나 만족하시나요?</h2><div className="rating-options" role="radiogroup" aria-label="결과 만족도"><button type="button" role="radio" aria-checked={surveyRating === 5} className={surveyRating === 5 ? 'rating-choice like selected' : 'rating-choice like'} onClick={() => setSurveyRating(5)}><ThumbsUp aria-hidden="true" size={34} strokeWidth={1.7} fill={surveyRating === 5 ? 'currentColor' : 'none'} /><span>좋아요</span></button><button type="button" role="radio" aria-checked={surveyRating === 1} className={surveyRating === 1 ? 'rating-choice dislike selected' : 'rating-choice dislike'} onClick={() => setSurveyRating(1)}><ThumbsDown aria-hidden="true" size={34} strokeWidth={1.7} fill={surveyRating === 1 ? 'currentColor' : 'none'} /><span>싫어요</span></button></div></section>
 
-            <section className="survey-section" aria-labelledby="improvement-title"><h2 id="improvement-title">어떤 부분이 더 좋아졌으면 하나요?</h2><p className="survey-helper">개선이 필요하다고 느낀 항목을 모두 선택해주세요.</p><div className="improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'improvement-option selected' : 'improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}><span>{selected ? <Check size={16} strokeWidth={2.4} /> : <Plus size={16} strokeWidth={1.8} />}</span>{item}</button> })}</div></section>
+            <section className="survey-section" aria-labelledby="improvement-title"><h2 id="improvement-title">어떤 부분이 더 좋아졌으면 하나요?</h2><p className="survey-helper">개선이 필요하다고 느낀 항목을 모두 선택해주세요.</p><div className="improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'improvement-option selected' : 'improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div></section>
 
             <section className="survey-section" aria-labelledby="comment-title"><h2 id="comment-title">추가 의견</h2><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /><div className="survey-character-count">{surveyComment.length} / 500</div></section>
 
@@ -2616,8 +4018,81 @@ function CustomerApp() {
     )
   }
 
+  const renderFinalEditModal = () => {
+    if (!finalEditModal) return null
+    const title = finalEditModal === 'identity' ? '기본 정보를 수정하세요' : finalEditModal === 'values' ? '핵심 가치를 수정하세요' : finalEditModal === 'tone' ? '분위기를 수정하세요' : finalEditModal === 'color' ? '색상을 수정하세요' : '로고 타입과 모양을 수정하세요'
+    return <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFinalEditModal(null) }}>
+      <section className="credit-modal final-edit-modal" role="dialog" aria-modal="true" aria-labelledby="final-edit-title">
+        <button className="modal-close" type="button" aria-label="수정 닫기" onClick={() => setFinalEditModal(null)}><X size={22} /></button>
+        <h2 id="final-edit-title">{title}</h2>
+        {finalEditModal === 'identity' && (brandKind === 'ci' ? <label>회사명<input autoFocus value={finalEditDraft.companyName} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, companyName: event.target.value }))} /></label> : <><label>브랜드명<input autoFocus value={finalEditDraft.brandName} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, brandName: event.target.value }))} /></label><label>주요 고객<select value={finalEditDraft.targetAge} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, targetAge: event.target.value }))}>{targetAgeOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label></>)}
+        {finalEditModal === 'values' && <label>{brandKind === 'ci' ? '회사 모토' : '핵심 가치'}<textarea autoFocus value={brandKind === 'ci' ? finalEditDraft.companyMotto : finalEditDraft.valuesText} onChange={(event) => setFinalEditDraft((draft) => brandKind === 'ci' ? { ...draft, companyMotto: event.target.value } : { ...draft, valuesText: event.target.value })} maxLength={300} /></label>}
+        {finalEditModal === 'tone' && <div className="final-tone-editor">
+          <div className="final-tone-mode-toggle" role="tablist" aria-label="분위기 입력 방식">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={finalEditToneMode === 'recommended'}
+              className={finalEditToneMode === 'recommended' ? 'active' : ''}
+              onClick={() => {
+                const tone = toneOptions.some((option) => option.id === finalEditDraft.tone)
+                  ? finalEditDraft.tone as ToneOption
+                  : toneSelection ?? toneOptions[0].id
+                setFinalEditToneMode('recommended')
+                setFinalEditDraft((draft) => ({ ...draft, tone, colors: [...getToneColors(tone)] }))
+              }}
+            >추천</button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={finalEditToneMode === 'direct'}
+              className={finalEditToneMode === 'direct' ? 'active' : ''}
+              onClick={() => {
+                setFinalEditToneMode('direct')
+                setFinalEditDraft((draft) => ({ ...draft, tone: toneMode === 'direct' ? directTone : '' }))
+              }}
+            >직접 입력</button>
+          </div>
+          {finalEditToneMode === 'recommended' ? (
+            <label>분위기<select autoFocus value={finalEditDraft.tone} onChange={(event) => { const tone = event.target.value as ToneOption; setFinalEditDraft((draft) => ({ ...draft, tone, colors: [...getToneColors(tone)] })) }}>{toneOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
+          ) : (
+            <label>분위기<input autoFocus type="text" value={finalEditDraft.tone} maxLength={100} placeholder="예: 차분하고 고급스러운, 대담하고 세련된" onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, tone: event.target.value }))} /></label>
+          )}
+        </div>}
+        {finalEditModal === 'color' && <div className="final-tone-color-field">
+          <span>색상</span>
+          <div className="final-edit-color-row">
+            <label className="final-tone-color-control" aria-label="선택한 색상 수정">
+              <span className="final-tone-color-swatch" style={{ background: finalEditDraft.colors[0] ?? '#9765e9' }} aria-hidden="true" />
+              <span className="final-tone-color-edit"><Pencil aria-hidden="true" size={13} strokeWidth={2} /> Edit</span>
+              <input
+                type="color"
+                value={finalEditDraft.colors[0] ?? '#9765e9'}
+                aria-label="선택 색상"
+                onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, colors: [event.target.value] }))}
+              />
+            </label>
+          </div>
+        </div>}
+        {finalEditModal === 'style' && <><label>로고 타입<select autoFocus value={finalEditDraft.logoStyle} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, logoStyle: event.target.value as LogoStyle }))}>{logoStyleOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label><label>원하는 로고 모양<textarea value={finalEditDraft.logoShape} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, logoShape: event.target.value }))} maxLength={100} /></label></>}
+        <div className="credit-modal-actions"><button className="gradient-button" type="button" disabled={finalEditModal === 'tone' && finalEditToneMode === 'direct' && !finalEditDraft.tone.trim()} onClick={saveFinalEditModal}>저장하기</button><button className="modal-secondary-button" type="button" onClick={() => setFinalEditModal(null)}>취소</button></div>
+      </section>
+    </div>
+  }
+
+  const renderRegenerationConfirmModal = () => <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRegenerationConfirmOpen(false) }}>
+    <section className="credit-modal regeneration-modal" role="dialog" aria-modal="true" aria-labelledby="regeneration-title">
+      <button className="modal-close" type="button" aria-label="재생성 취소" onClick={() => setRegenerationConfirmOpen(false)}><X size={22} /></button>
+      <h2 id="regeneration-title">새 로고를 다시 만들까요?</h2>
+      <p>재생성하면 크레딧 <strong>1개</strong>가 소모돼요.</p>
+      <p>현재 남은 크레딧은 <strong>{remainingCredits}개</strong>예요.</p>
+      {remainingCredits < 1 ? <p className="project-error" role="alert">크레딧이 부족해 재생성할 수 없어요.</p> : null}
+          <div className="credit-modal-actions"><button className="gradient-button" type="button" disabled={regenerationCreditsLoading || remainingCredits < 1 || generationLoading} onClick={() => { setRegenerationConfirmOpen(false); void startLogoGeneration() }}>{regenerationCreditsLoading ? '잔액 확인 중…' : '크레딧 사용하고 재생성'}</button><button className="modal-secondary-button" type="button" onClick={() => setRegenerationConfirmOpen(false)}>취소</button></div>
+    </section>
+  </div>
+
   const renderCreditModal = () => (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreditModal(null) }}>
+    <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreditModal(null) }}>
       <section className="credit-modal" role="dialog" aria-modal="true" aria-labelledby="credit-modal-title">
         <button className="modal-close" type="button" aria-label="크레딧 안내 닫기" onClick={() => setCreditModal(null)}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         <div className="credit-modal-icon"><Download aria-hidden="true" size={28} strokeWidth={1.8} /></div>
@@ -2625,7 +4100,7 @@ function CustomerApp() {
         <p>현재 남은 크레딧은 <strong>{remainingCredits}개</strong>예요.</p>
         <p>짧은 설문조사에 참여하시면 크레딧 <strong>1개</strong>를 더 드릴게요. 지금 의견을 남겨볼까요?</p>
         <div className="credit-modal-actions">
-          <button className="gradient-button" type="button" onClick={() => setCreditModal('survey')}>설문 참여하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+          <button className="gradient-button" type="button" onClick={openCreditSurvey}>설문 참여하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
           <button className="modal-secondary-button" type="button" onClick={remainingCredits > 0 ? downloadWithCredit : () => setCreditModal(null)}>{remainingCredits > 0 ? '크레딧 사용하고 다운로드' : '닫기'}</button>
         </div>
       </section>
@@ -2633,15 +4108,105 @@ function CustomerApp() {
   )
 
   const renderCreditSurveyModal = () => (
-    <div className="modal-backdrop" role="presentation">
+    <div ref={activeModalRef} className="modal-backdrop" role="presentation">
       <section className="credit-modal survey-modal" role="dialog" aria-modal="true" aria-labelledby="credit-survey-title">
         <button className="modal-close" type="button" aria-label="설문 닫기" onClick={() => setCreditModal(null)}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         <div className="survey-modal-heading"><MessageSquare aria-hidden="true" size={24} strokeWidth={1.8} /><div><h2 id="credit-survey-title">잠깐만 의견을 들려주세요</h2><p>설문에 참여하시면 크레딧 1개를 드려요.</p></div></div>
         <form onSubmit={submitCreditSurvey}>
           <div className="modal-survey-block"><h3>결과에 얼마나 만족하시나요?</h3><div className="modal-rating-options" role="radiogroup" aria-label="결과 만족도"><button type="button" role="radio" aria-checked={surveyRating === 5} className={surveyRating === 5 ? 'modal-rating-choice like selected' : 'modal-rating-choice like'} onClick={() => setSurveyRating(5)}><ThumbsUp aria-hidden="true" size={24} strokeWidth={1.8} fill={surveyRating === 5 ? 'currentColor' : 'none'} /><span>좋아요</span></button><button type="button" role="radio" aria-checked={surveyRating === 1} className={surveyRating === 1 ? 'modal-rating-choice dislike selected' : 'modal-rating-choice dislike'} onClick={() => setSurveyRating(1)}><ThumbsDown aria-hidden="true" size={24} strokeWidth={1.8} fill={surveyRating === 1 ? 'currentColor' : 'none'} /><span>싫어요</span></button></div></div>
-          <div className="modal-survey-block"><h3>어떤 부분이 더 좋아졌으면 하나요?</h3><div className="modal-improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'modal-improvement-option selected' : 'modal-improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}><span>{selected ? <Check size={13} strokeWidth={2.4} /> : <Plus size={13} strokeWidth={1.8} />}</span>{item}</button> })}</div></div>
-          <div className="modal-survey-block"><h3>추가 의견</h3><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /></div>
+          {surveyRating === 1 && <div className="survey-followup" aria-live="polite"><div className="survey-followup-inner">
+            <div className="modal-survey-block"><h3>어떤 부분이 더 좋아졌으면 하나요?</h3><div className="modal-improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'modal-improvement-option selected' : 'modal-improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div></div>
+            <div className="modal-survey-block"><h3>추가 의견</h3><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /></div>
+          </div></div>}
           <button className="gradient-button modal-submit" type="submit">의견 보내고 크레딧 받기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+        </form>
+      </section>
+    </div>
+  )
+
+  const closeBusinessCardModal = () => {
+    setBusinessCardModalOpen(false)
+    setBusinessCardTarget(null)
+    setBusinessCardInfoErrors({})
+  }
+
+  const updateBusinessCardInfo = (field: keyof BusinessCardInfoInput, value: string) => {
+    setBusinessCardInfo((current) => ({ ...current, [field]: value }))
+    if (field === 'name' || field === 'email') {
+      setBusinessCardInfoErrors((current) => ({ ...current, [field]: undefined }))
+    }
+  }
+
+  const renderBusinessCardModal = () => (
+    <div
+      ref={activeModalRef}
+      className="modal-backdrop business-card-backdrop"
+      role="presentation"
+      onMouseDown={(event) => { if (event.target === event.currentTarget) closeBusinessCardModal() }}
+      onKeyDown={(event) => { if (event.key === 'Escape') closeBusinessCardModal() }}
+    >
+      <section className="credit-modal business-card-modal" role="dialog" aria-modal="true" aria-labelledby="business-card-modal-title" aria-describedby="business-card-modal-description">
+        <button className="modal-close" type="button" aria-label="명함 정보 입력 닫기" onClick={closeBusinessCardModal}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
+        <header className="business-card-modal-intro">
+          <div className="business-card-modal-icon" aria-hidden="true"><CreditCard size={30} strokeWidth={1.7} /></div>
+          <div>
+            <h2 id="business-card-modal-title">명함에 들어갈 정보를 알려주세요</h2>
+            <p id="business-card-modal-description">입력한 정보는 이번 명함 결과에 연결해 저장합니다.</p>
+          </div>
+        </header>
+        <form className="business-card-form" noValidate onSubmit={submitBusinessCardInfo}>
+          <div className="business-card-form-grid">
+            <label className="business-card-field">
+              <span>이름 <em>필수</em></span>
+              <input
+                autoFocus
+                required
+                maxLength={40}
+                autoComplete="name"
+                value={businessCardInfo.name}
+                aria-invalid={Boolean(businessCardInfoErrors.name)}
+                aria-describedby={businessCardInfoErrors.name ? 'business-card-name-error' : undefined}
+                onChange={(event) => updateBusinessCardInfo('name', event.target.value)}
+                placeholder="김명은"
+              />
+              {businessCardInfoErrors.name && <small id="business-card-name-error" className="business-card-field-error" role="alert">{businessCardInfoErrors.name}</small>}
+            </label>
+            <label className="business-card-field">
+              <span>직책</span>
+              <input maxLength={40} autoComplete="organization-title" value={businessCardInfo.title ?? ''} onChange={(event) => updateBusinessCardInfo('title', event.target.value)} placeholder="대표 / 디자이너" />
+            </label>
+            <label className="business-card-field business-card-field-wide">
+              <span>회사명</span>
+              <input maxLength={60} autoComplete="organization" value={businessCardInfo.company ?? ''} onChange={(event) => updateBusinessCardInfo('company', event.target.value)} placeholder="회사 또는 브랜드 이름" />
+            </label>
+            <label className="business-card-field">
+              <span>전화번호</span>
+              <input type="tel" maxLength={40} autoComplete="tel" value={businessCardInfo.phone ?? ''} onChange={(event) => updateBusinessCardInfo('phone', event.target.value)} placeholder="010-1234-5678" />
+            </label>
+            <label className="business-card-field">
+              <span>이메일</span>
+              <input
+                type="email"
+                maxLength={80}
+                autoComplete="email"
+                value={businessCardInfo.email ?? ''}
+                aria-invalid={Boolean(businessCardInfoErrors.email)}
+                aria-describedby={businessCardInfoErrors.email ? 'business-card-email-error' : undefined}
+                onChange={(event) => updateBusinessCardInfo('email', event.target.value)}
+                placeholder="hello@example.com"
+              />
+              {businessCardInfoErrors.email && <small id="business-card-email-error" className="business-card-field-error" role="alert">{businessCardInfoErrors.email}</small>}
+            </label>
+            <label className="business-card-field business-card-field-wide">
+              <span>주소</span>
+              <input maxLength={120} autoComplete="street-address" value={businessCardInfo.address ?? ''} onChange={(event) => updateBusinessCardInfo('address', event.target.value)} placeholder="명함에 표시할 주소" />
+            </label>
+          </div>
+          <p className="business-card-form-note"><Info aria-hidden="true" size={16} strokeWidth={1.9} /> 비워 둔 선택 정보는 명함에 표시되지 않아요.</p>
+          <div className="business-card-form-actions">
+            <button className="modal-secondary-button" type="button" onClick={closeBusinessCardModal}>취소</button>
+            <button className="gradient-button" type="submit">이 정보로 명함 만들기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.9} /></button>
+          </div>
         </form>
       </section>
     </div>
@@ -2670,7 +4235,6 @@ function CustomerApp() {
             <span>{authLoading ? '로그인 처리 중…' : 'Google로 계속하기'}</span>
           </button>
         </div>
-        <p className="login-terms">계속하면 GenMark AI의 <a href="#terms">이용약관</a>과<br /><a href="#privacy">개인정보 처리방침</a>에 동의하게 됩니다.</p>
         <button className="skip-login" type="button" onClick={() => setMode(loginReturnMode)}>나중에 할게요 <span aria-hidden="true">›</span></button>
       </section>
     </main>
@@ -2678,12 +4242,12 @@ function CustomerApp() {
 
   return (
     <div className="app-shell light-shell">
+      {loggingOut && <div className="page-transition-overlay" aria-hidden="true" />}
       {mode === 'login' ? (
         <header className="login-header">
           <button className="login-back" type="button" onClick={() => setMode(loginReturnMode)}>‹ <span>{loginReturnMode === 'hero' ? '랜딩' : '홈'}</span></button>
-          <span className="login-header-state">안전하게 저장하기</span>
         </header>
-      ) : mode === 'onboarding' || mode === 'industry' || mode === 'brand-details' || mode === 'company-details' || mode === 'hero' || mode === 'choice' || mode === 'tone' || mode === 'style' || mode === 'final' || mode === 'loading' || mode === 'trademark-loading' || mode === 'trademark-selection' || mode === 'trademark-result' || mode === 'result' || mode === 'brand-kit' || mode === 'edit' || mode === 'mypage' || mode === 'survey' ? null : (
+      ) : mode === 'logo-intro' || mode === 'onboarding' || mode === 'industry' || mode === 'brand-details' || mode === 'company-details' || mode === 'hero' || mode === 'choice' || mode === 'tone' || mode === 'style' || mode === 'final' || mode === 'loading' || mode === 'trademark-loading' || mode === 'trademark-selection' || mode === 'trademark-result' || mode === 'result' || mode === 'brand-kit' || mode === 'edit' || mode === 'mypage' || mode === 'survey' ? null : (
         <header className="main-header">
           <a className="main-brand" href="#home" aria-label="GenMark AI 홈" onClick={() => setMode('home')}>
             <BrandLogo />
@@ -2694,31 +4258,33 @@ function CustomerApp() {
             setLoginDestination('home')
             setMode('login')
           }}>
-            {authRestoring ? '확인 중…' : loggedIn ? '로그아웃' : '로그인'}
+            <span key={authRestoring ? 'checking' : loggedIn ? 'logout' : 'login'} className="outline-login-label">
+              {authRestoring ? '확인 중…' : loggedIn ? '로그아웃' : '로그인'}
+            </span>
           </button>
         </header>
       )}
 
-      {mode === 'login' ? renderLoginScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'industry' ? renderIndustrySelectionScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'company-details' ? renderCompanyDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'trademark-result' ? renderTrademarkResultScreen() : mode === 'result' ? renderLogoResultScreen() : mode === 'brand-kit' ? renderBrandKitSelectionScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'mypage' ? renderMypageScreen() : mode === 'survey' ? renderSurveyScreen() : mode === 'hero' ? (
+      {mode === 'login' ? renderLoginScreen() : mode === 'logo-intro' ? renderLogoCreationIntroScreen() : mode === 'onboarding' ? renderOnboardingScreen() : mode === 'industry' ? renderIndustrySelectionScreen() : mode === 'brand-details' ? renderBrandDetailsScreen() : mode === 'company-details' ? renderCompanyDetailsScreen() : mode === 'choice' ? renderChoiceScreen() : mode === 'tone' ? renderToneSelectionScreen() : mode === 'style' ? renderStyleSelectionScreen() : mode === 'final' ? renderFinalRequestScreen() : mode === 'loading' ? renderLoadingScreen() : mode === 'trademark-loading' ? renderTrademarkLoadingScreen() : mode === 'trademark-selection' ? renderTrademarkSelectionScreen() : mode === 'trademark-result' ? renderTrademarkResultScreenRedesign() : mode === 'result' ? renderLogoResultScreen() : mode === 'brand-kit' ? renderBrandKitSelectionScreen() : mode === 'edit' ? renderLogoEditScreen() : mode === 'mypage' ? renderMypageScreen() : mode === 'survey' ? renderSurveyScreen() : mode === 'hero' ? (
         renderAnimatedGalleryHeroScreen()
       ) : mode === 'home' ? (
         <main id="home" className="main-home">
           {renderFeaturedHero()}
 
           <section className="curation-section" aria-labelledby="curation-title">
+            <div className="section-heading">
+              <h2 id="curation-title">큐레이션 갤러리</h2>
+              <div className="gallery-controls">
+                <button type="button" aria-label="이전 로고 묶음 보기" onClick={() => scrollGallery(-1)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <button type="button" aria-label="다음 로고 묶음 보기" onClick={() => scrollGallery(1)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+              </div>
+            </div>
             <div className="filter-row" role="tablist" aria-label="로고 스타일 필터">
               {categories.map((category) => (
                 <button key={category} type="button" className={activeCategory === category ? 'filter-button active' : 'filter-button'} onClick={() => setActiveCategory(category)}>
                   {category}
                 </button>
               ))}
-            </div>
-            <div className="section-heading">
-              <h2 id="curation-title">큐레이션 갤러리</h2>
-              <div className="gallery-controls">
-                <button type="button" aria-label="이전 로고 보기" onClick={() => scrollGallery(-340)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-                <button type="button" aria-label="다음 로고 보기" onClick={() => scrollGallery(340)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-              </div>
             </div>
             <div
               className="gallery-track"
@@ -2727,42 +4293,34 @@ function CustomerApp() {
               onPointerMove={handleGalleryPointerMove}
               onPointerUp={handleGalleryPointerUp}
               onPointerCancel={handleGalleryPointerUp}
+              onScroll={handleGalleryScroll}
             >
               {filteredItems.map((item) => {
                 const liked = likedIds.includes(item.id)
                 return (
                   <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual ${item.tone}`} style={{ backgroundPosition: item.position }}>
+                    <div className={`gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }}>
                       <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
                         <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
                       </button>
-                      <div className="gallery-art-copy">
-                        <span aria-hidden="true">{item.id === 'luna' ? <CircleCheck size={32} strokeWidth={1.4} /> : item.id === 'sora' ? <Droplets size={32} strokeWidth={1.4} /> : <Sparkles size={32} strokeWidth={1.4} />}</span>
-                        <strong>{item.name}</strong>
-                        <small>{item.category === '콤비네이션' ? 'CLEAN BEAUTY' : item.category.toUpperCase()}</small>
-                      </div>
-                      <span className="visual-tag">{item.category}</span>
-                    </div>
-                    <div className="gallery-meta">
-                      <div>
-                        <h3>{item.name}</h3>
-                        <p>{item.meta}</p>
-                      </div>
-                      <div className="like-count"><Heart aria-hidden="true" size={17} strokeWidth={1.8} fill="currentColor" />{item.likes}</div>
                     </div>
                   </article>
                 )
               })}
             </div>
-            <div className="gallery-dots" aria-hidden="true"><span className="active" /><span /><span /><span /><span /></div>
+            <div className="gallery-dots" aria-hidden="true">
+              {Array.from({ length: Math.max(1, Math.ceil(filteredItems.length / 4)) }).map((_, index) => (
+                <span key={index} className={index === curationActiveDot ? 'active' : undefined} />
+              ))}
+            </div>
           </section>
 
           <section className="curation-section product-gallery-section" aria-labelledby="product-gallery-title">
             <div className="section-heading">
               <h2 id="product-gallery-title">제품 썸네일 갤러리</h2>
               <div className="gallery-controls">
-                <button type="button" aria-label="이전 제품 보기" onClick={() => scrollProductGallery(-340)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-                <button type="button" aria-label="다음 제품 보기" onClick={() => scrollProductGallery(340)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <button type="button" aria-label="이전 제품 묶음 보기" onClick={() => scrollProductGallery(-1)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <button type="button" aria-label="다음 제품 묶음 보기" onClick={() => scrollProductGallery(1)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
               </div>
             </div>
             <div
@@ -2772,41 +4330,63 @@ function CustomerApp() {
               onPointerMove={handleProductGalleryPointerMove}
               onPointerUp={handleProductGalleryPointerUp}
               onPointerCancel={handleProductGalleryPointerUp}
+              onScroll={handleProductGalleryScroll}
             >
               {productGalleryItems.map((item) => {
-                const liked = likedIds.includes(item.id)
                 return (
                   <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundPosition: item.position }}>
-                      <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
-                        <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
-                      </button>
-                      <div className="gallery-art-copy">
-                        <span aria-hidden="true"><Droplets size={32} strokeWidth={1.4} /></span>
-                        <strong>{item.name}</strong>
-                        <small>PRODUCT THUMBNAIL</small>
-                      </div>
-                      <span className="visual-tag">{item.category}</span>
-                    </div>
-                    <div className="gallery-meta">
-                      <div>
-                        <h3>{item.name}</h3>
-                        <p>{item.meta}</p>
-                      </div>
-                      <div className="like-count"><Heart aria-hidden="true" size={17} strokeWidth={1.8} fill="currentColor" />{item.likes}</div>
-                    </div>
+                    <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
                   </article>
                 )
               })}
             </div>
-            <div className="gallery-dots" aria-hidden="true"><span className="active" /><span /><span /><span /><span /></div>
+            <div className="gallery-dots" aria-hidden="true">
+              {Array.from({ length: Math.max(1, Math.ceil(productGalleryItems.length / 4)) }).map((_, index) => (
+                <span key={index} className={index === productActiveDot ? 'active' : undefined} />
+              ))}
+            </div>
+          </section>
+
+          <section className="curation-section business-card-gallery-section" aria-labelledby="business-card-gallery-title">
+            <div className="section-heading">
+              <h2 id="business-card-gallery-title">명함 갤러리</h2>
+              <div className="gallery-controls">
+                <button type="button" aria-label="이전 명함 묶음 보기" onClick={() => scrollBusinessCardGallery(-1)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <button type="button" aria-label="다음 명함 묶음 보기" onClick={() => scrollBusinessCardGallery(1)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+              </div>
+            </div>
+            <div
+              className="gallery-track"
+              ref={businessCardGalleryRef}
+              onPointerDown={handleBusinessCardGalleryPointerDown}
+              onPointerMove={handleBusinessCardGalleryPointerMove}
+              onPointerUp={handleBusinessCardGalleryPointerUp}
+              onPointerCancel={handleBusinessCardGalleryPointerUp}
+              onScroll={handleBusinessCardGalleryScroll}
+            >
+              {businessCardGalleryItems.map((item) => {
+                return (
+                  <article className="gallery-card" key={item.id}>
+                    <div className={`gallery-visual business-card-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
+                  </article>
+                )
+              })}
+            </div>
+            <div className="gallery-dots" aria-hidden="true">
+              {Array.from({ length: Math.max(1, Math.ceil(businessCardGalleryItems.length / 4)) }).map((_, index) => (
+                <span key={index} className={index === businessCardActiveDot ? 'active' : undefined} />
+              ))}
+            </div>
           </section>
         </main>
       ) : null}
 
-      {!['loading', 'trademark-loading', 'hero', 'login'].includes(mode) && <nav className="bottom-nav" aria-label="주요 메뉴">
+      {!['loading', 'trademark-loading', 'hero', 'login', 'logo-intro'].includes(mode) && <nav className="bottom-nav" aria-label="주요 메뉴">
         <button className={mode === 'home' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setMode('home')}>
           <House className="nav-icon" aria-hidden="true" size={26} strokeWidth={1.8} /><span>홈</span>
+        </button>
+        <button className="nav-item nav-item-create" type="button" onClick={openLogoCreationIntro} disabled={authRestoring}>
+          <Sparkles className="nav-icon" aria-hidden="true" size={26} strokeWidth={1.8} /><span>로고 생성</span>
         </button>
         <button className={mode === 'mypage' || mode === 'survey' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setMode('mypage')}>
           <UserRound className="nav-icon" aria-hidden="true" size={26} strokeWidth={1.8} /><span>마이페이지</span>
@@ -2814,6 +4394,9 @@ function CustomerApp() {
       </nav>}
 
       {creditModal === 'credit' ? renderCreditModal() : creditModal === 'survey' ? renderCreditSurveyModal() : null}
+      {finalEditModal && renderFinalEditModal()}
+      {regenerationConfirmOpen && renderRegenerationConfirmModal()}
+      {businessCardModalOpen && renderBusinessCardModal()}
       {resumePromptProject && renderResumePromptModal()}
     </div>
   )

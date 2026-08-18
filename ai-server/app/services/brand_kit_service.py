@@ -18,14 +18,18 @@ import binascii
 import re
 import time
 from io import BytesIO
+from pathlib import Path
 from typing import Optional, Tuple
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 from app.core.exceptions import BrandKitInvalidImage
 from app.schemas.brand_kit import (
+    CATEGORY_LABEL,
+    HEADLINE_MAX_CHARS,
     KIT_SIZE,
+    TEXT_AREA_LIMIT,
     BrandKitImage,
     BrandKitRequest,
     BrandKitResponse,
@@ -138,6 +142,31 @@ def _logo_rgba(logo: Image.Image) -> Image.Image:
     return rgba
 
 
+# 이 밝기 이상이면 "비어 있어야 할 면"으로 본다.
+# Recraft 벡터는 stroke 없이 채운 도형으로 그려서, 글자 속·도형 안쪽이 흰색 path로
+# 온다. 흰 배경에서는 안 보이지만 유색 명함 위에 얹으면 흰 덩어리로 드러난다
+# (실측 확인됨 - 진한 청록 명함에서 워드마크가 흰 글자로 뒤집혀 보였다).
+_WHITE_KNOCKOUT_LUMA = 245
+
+
+def knockout_white(rgba: Image.Image) -> Image.Image:
+    """흰색에 가까운 불투명 픽셀을 투명하게 만든다.
+
+    _logo_rgba는 "테두리와 연결된" 영역만 지운다 - 로고 안쪽 연한 면에 구멍이
+    나는 걸 막기 위해서다. 유색 바탕에 얹을 때는 반대로 안쪽 흰 면도 비워야
+    바탕색이 비쳐 로고가 제대로 읽힌다. 흰색만 대상으로 하므로 아이보리·연분홍
+    같은 의미 있는 옅은 면은 건드리지 않는다.
+    """
+    rgba = rgba.convert("RGBA")
+    arr = np.asarray(rgba, dtype=np.int16)
+    luma = 0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
+    alpha = np.asarray(rgba.getchannel("A"), dtype=np.uint8)
+    alpha = np.where(luma >= _WHITE_KNOCKOUT_LUMA, 0, alpha).astype(np.uint8)
+    out = rgba.copy()
+    out.putalpha(Image.fromarray(alpha, "L"))
+    return out
+
+
 def _trim(img: Image.Image) -> Image.Image:
     bbox = img.getchannel("A").getbbox() if img.mode == "RGBA" else img.getbbox()
     return img.crop(bbox) if bbox else img
@@ -157,86 +186,168 @@ def _readable_on(bg: Tuple[int, int, int]) -> Tuple[int, int, int]:
 
 
 # --------------------------------------------------------------------------- 명함
-def _compose_business_card(
-    logo: Image.Image, info: Optional[CardInfo], survey: dict
-) -> Image.Image:
-    """좌: 로고 / 우: 인적사항 2단 구성.
+# 명함 렌더링은 business_card.py(담당: 정혜리)에 위임한다.
+#
+# 한동안 이 파일에도 자체 명함 합성(좌우 2단 1063x591)이 있었으나, 앞/뒷면 분리와
+# 쇼케이스 연출까지 갖춘 business_card.py 쪽이 완성도가 높아 그쪽으로 통일했다.
+# 엔드포인트(/api/v1/generation/brand-kit)와 응답 스키마는 그대로라 백엔드는
+# 수정할 것이 없다.
+#
+# 사용자 정보(CardInfo)와 business_card.contact dict는 필드명이 다르다.
+# 스키마를 서로 맞추는 대신 여기서 변환한다 — 백엔드 계약(CardInfo)과 렌더러의
+# 내부 표현을 각자 바꿀 수 있게 두는 편이 낫다.
+_FONT_DIR = Path(__file__).resolve().parent.parent / "fonts" / "modern_sans"
+_CARD_FONT_BOLD = str(_FONT_DIR / "bold" / "Pretendard-Bold.ttf")
+_CARD_FONT_REGULAR = str(_FONT_DIR / "regular" / "Pretendard-Regular.ttf")
 
-    로고를 위, 정보를 아래에 쌓으면 명함 가로폭(1063px) 우측 절반이 통째로 비어
-    허전해진다(실측 확인됨). 좌우로 나눠 양쪽 무게를 맞춘다.
 
-    info가 없으면(백엔드가 아직 card_info를 안 보내는 상태) 회사명만 넣은 브랜드
-    카드로 합성한다. 레이아웃은 동일하므로 나중에 값이 채워지면 그대로 명함이 된다.
+def _card_contact(info: Optional[CardInfo]) -> dict:
+    if info is None:
+        return {}
+    return {
+        "title": (info.title or "").strip(),
+        "person_name": (info.name or "").strip(),
+        "mobile": (info.phone or "").strip(),
+        "email": (info.email or "").strip(),
+        "address": (info.address or "").strip(),
+    }
+
+
+# 앞면 배경이 이 밝기 이상이면 흰 로고가 묻힌다. 그만큼 눌러서 대비를 확보한다.
+_FRONT_BG_MAX_LUMA = 150.0
+
+
+def _card_front_bg(logo_rgba: Image.Image) -> Tuple[int, int, int]:
+    """명함 앞면 배경색 - 로고에 실제로 칠해진 대표색에서 만든다.
+
+    설문 색(사용자가 고른 HEX)을 쓰던 때가 있었다. 색을 하나만 고른 경우에는
+    force_single_color가 로고를 그 색으로 통일하므로 둘이 정확히 일치했지만,
+    두 개 이상 고르면 강제가 걸리지 않아 로고 잉크와 설문 첫 색이 서로 다른
+    파랑이 됐다 - 앞면 바탕과 뒷면 로고의 색이 미묘하게 어긋나 보였다
+    (실측 확인됨). 눈에 보이는 것은 로고에 칠해진 색이므로 그쪽을 정본으로 삼는다.
+
+    밝은 로고일 때 그대로 깔면 흰 로고가 묻히므로, 대비가 확보될 만큼만 누른다.
     """
-    W, H = KIT_SIZE["BUSINESS_CARD"]
-    accent = _pick_accent(survey)
-    tone = _tone(survey)
+    from app.services.business_card import _dominant_logo_color
 
-    card = Image.new("RGB", (W, H), (255, 255, 255))
-    d = ImageDraw.Draw(card)
+    r, g, b = _dominant_logo_color(logo_rgba)
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+    if lum <= _FRONT_BG_MAX_LUMA:
+        return (r, g, b)
+    scale = _FRONT_BG_MAX_LUMA / max(lum, 1.0)
+    return tuple(max(0, min(255, round(c * scale))) for c in (r, g, b))
 
-    # 좌측 세로 강조 바 — 로고 색을 카드에 계승시키는 최소 장치
-    d.rectangle([0, 0, 14, H], fill=accent)
 
-    # --- 좌측: 로고 (세로 중앙)
-    left_x, left_w = 84, 320
-    logo_img = _fit(_trim(_logo_rgba(logo)), left_w, int(H * 0.62))
-    card.paste(
-        logo_img,
-        (left_x + (left_w - logo_img.width) // 2, (H - logo_img.height) // 2),
-        logo_img,
+def tint_solid(rgba: Image.Image, color: Tuple[int, int, int]) -> Image.Image:
+    """알파는 그대로 두고 색만 한 가지로 덮는다.
+
+    앞면은 브랜드 색 바탕에 로고를 흰색으로 얹는다(역상 로고). 원래 색 그대로
+    올리면 바탕과 같은 계열이라 형태가 안 읽힌다.
+    """
+    rgba = rgba.convert("RGBA")
+    solid = Image.new("RGBA", rgba.size, color + (255,))
+    solid.putalpha(rgba.getchannel("A"))
+    return solid
+
+
+def _logo_already_has_brand_name(survey: dict, brand: str) -> bool:
+    """합성된 로고 이미지가 브랜드명을 포함하고 있는가.
+
+    /generate가 내보내는 로고는 심볼 스타일이 아닌 한 이름을 품고 있다. 판정을
+    프롬프트·로고합성과 같은 함수로 맞춰, 세 곳이 서로 다른 답을 내지 않게 한다.
+    """
+    if not brand:
+        return False
+    from app.services.logo_composer import _wants_text_overlay
+    from app.services.prompt_service import (
+        _normalize_survey,
+        model_draws_wordmark,
     )
 
-    # --- 세로 구분선
-    div_x = left_x + left_w + 56
-    d.line([div_x, 96, div_x, H - 96], fill=(228, 232, 239), width=2)
+    style_key = _normalize_survey(dict(survey)).get("style", "혼합형")
+    return model_draws_wordmark(survey) or _wants_text_overlay(survey, style_key, brand)
 
-    # --- 우측: 인적사항 (블록 전체를 세로 중앙에 맞춘다)
-    tx = div_x + 56
-    f_name = _resolve_font(44, weight="bold")
-    f_title = _resolve_font(24, weight="regular")
-    f_body = _resolve_font(22, weight="regular")
 
-    brand = _brand_name(survey)
-    if info is None:
-        headline, title, company, lines = brand or " ", None, "", []
-    else:
-        headline = info.name
-        title = (info.title or "").strip() or None
-        company = (info.company or brand or "").strip()
-        lines = [t.strip() for t in (info.phone, info.email, info.address) if t and t.strip()]
+def _compose_business_card(logo: Image.Image, info: Optional[CardInfo], survey: dict) -> Tuple[Image.Image, Image.Image]:
+    """명함 앞면과 뒷면을 만든다.
 
-    block_h = 56 + (34 if title else 0) + (30 if company else 0) + len(lines) * 32
-    y = (H - block_h) // 2
+    앞면은 로고 대표색 바탕에 흰 로고(역상), 뒷면은 흰 바탕에 원래 색 로고다.
+    앞면 배경을 설문 색에서 뽑던 때가 있었는데, 색을 두 개 이상 고르면 로고
+    잉크와 설문 첫 색이 달라져 앞뒤 색이 어긋나 보였다(실측 확인됨). 눈에 보이는
+    것은 로고에 칠해진 색이므로 그쪽을 정본으로 삼는다.
 
-    d.text((tx, y), headline, font=f_name, fill=(24, 28, 36))
-    y += 56
-    if title:
-        d.text((tx, y), title, font=f_title, fill=accent)
-        y += 34
-    if company:
-        d.text((tx, y), company, font=f_body, fill=(120, 128, 142))
-        y += 30
-    y += 12
-    for text in lines:
-        d.text((tx, y), text, font=f_body, fill=(96, 104, 118))
-        y += 32
+    info가 없으면(백엔드가 아직 card_info를 안 보내는 상태) 인적사항 영역이 비고
+    브랜드 정보만 남는다. 레이아웃은 동일하므로 값이 채워지면 그대로 명함이 된다.
+    """
+    from app.services.business_card import (
+        CARD_BACK_BG,
+        compose_card_back,
+        compose_card_front,
+    )
 
-    _ = tone  # 폰트 톤 반영은 후속 작업(현재는 기본 고딕 고정)
-    return card
+    # 배경색 추정에는 흰색을 남긴 상태를 쓰고(대표색 계산이 흔들리지 않도록),
+    # 실제로 카드에 얹는 이미지는 흰 면을 비운 버전을 쓴다.
+    logo_rgba = knockout_white(_logo_rgba(logo))
+    back_bg = CARD_BACK_BG
+    front_bg = _card_front_bg(logo_rgba)
+    # 앞면은 브랜드 색 바탕 + 흰 로고(역상), 뒷면은 흰 바탕 + 원래 색 로고.
+    logo_front = tint_solid(logo_rgba, (255, 255, 255))
+
+    brand = _brand_name(survey) or (info.company if info and info.company else "")
+    tagline = (survey.get("brand_direction") or survey.get("company_values_text") or "").strip()
+    # 태그라인이 길면 카드에서 잘린다. 문장이 아니라 한 줄 문구가 들어갈 자리다.
+    if len(tagline) > 40:
+        tagline = ""
+
+    # 로고 이미지에 이미 브랜드명이 들어 있으면 카드에 또 적지 않는다.
+    # 모델이 워드마크를 그렸거나(영문) logo_composer가 폰트로 합성했거나(한글)
+    # 어느 쪽이든 결과는 같다 - 로고 바로 밑에 같은 이름이 한 번 더 찍힌다
+    # (실측 확인됨 - 앞뒷면 모두에서 발생).
+    if _logo_already_has_brand_name(survey, brand):
+        brand = ""
+        tagline = ""
+
+    front = compose_card_front(
+        logo_front, brand, tagline, front_bg, _CARD_FONT_BOLD, _CARD_FONT_REGULAR
+    )
+    back = compose_card_back(
+        logo_rgba, brand, tagline, _card_contact(info), back_bg,
+        _CARD_FONT_BOLD, _CARD_FONT_REGULAR,
+    )
+    return front, back
 
 
 # --------------------------------------------------------------------------- 제품 썸네일
-def _compose_product_thumbnail(
-    logo: Image.Image, product_name: Optional[str], survey: dict
-) -> Image.Image:
-    W, H = KIT_SIZE["PRODUCT_THUMBNAIL"]
-    accent = _pick_accent(survey)
+def _draw_background(canvas: Image.Image, style: str, accent: tuple) -> tuple:
+    """배경을 그리고 그 위에 올릴 글자색 판단용 바탕색을 돌려준다.
 
-    # 강조색을 위쪽에 옅게 깔고 아래로 갈수록 밝아지는 세로 그라데이션.
-    # AI 연출 배경이 붙기 전까지의 임시 바탕이다.
-    canvas = Image.new("RGB", (W, H))
+    제품 누끼컷 업로드가 아직 없으므로, 로고만으로 만들 수 있는 범위로 한정한다.
+    제형 텍스처·원료 그래픽 연출은 제품 사진이 선행되어야 한다.
+    """
+    W, H = canvas.size
     d = ImageDraw.Draw(canvas)
+
+    if style == "SOLID_LIGHT":
+        # 아이보리 단색. 판매 채널에서 가장 무난하고 제품이 도드라진다.
+        base = (250, 249, 246)
+        d.rectangle([0, 0, W, H], fill=base)
+        return base
+
+    if style == "SOFT_SHADOW":
+        # 밝은 바탕 + 하단에 은은한 그림자. 제품이 놓인 느낌을 준다.
+        base = (252, 252, 253)
+        d.rectangle([0, 0, W, H], fill=base)
+        shadow = Image.new("L", (W, H), 0)
+        sd = ImageDraw.Draw(shadow)
+        sd.ellipse([int(W * 0.18), int(H * 0.60), int(W * 0.82), int(H * 0.78)], fill=70)
+        canvas.paste(
+            Image.new("RGB", (W, H), tuple(int(c * 0.55) for c in accent)),
+            (0, 0),
+            shadow.filter(ImageFilter.GaussianBlur(48)),
+        )
+        return base
+
+    # TONE_GRADIENT (기본) — 강조색을 위에 옅게 깔고 아래로 밝아진다
     top = tuple(int(c * 0.34 + 255 * 0.66) for c in accent)
     bottom = (252, 252, 253)
     for y in range(H):
@@ -245,16 +356,72 @@ def _compose_product_thumbnail(
             [(0, y), (W, y)],
             fill=tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3)),
         )
+    return bottom
 
-    logo_img = _fit(_trim(_logo_rgba(logo)), int(W * 0.56), int(H * 0.42))
-    canvas.paste(logo_img, ((W - logo_img.width) // 2, int(H * 0.30) - logo_img.height // 2), logo_img)
+
+def _text_area_ratio(before: Image.Image, after: Image.Image) -> float:
+    """글자를 그리기 전후를 비교해 텍스트가 덮은 면적 비율을 구한다.
+
+    폰트 메트릭으로 사각형 넓이를 재면 글자 사이 여백까지 포함되어 과대평가된다.
+    실제로 픽셀이 바뀐 자리만 세는 편이 채널 심사 기준에 가깝다.
+    """
+    a = np.asarray(before.convert("RGB"), dtype=np.int16)
+    b = np.asarray(after.convert("RGB"), dtype=np.int16)
+    changed = (np.abs(a - b).max(axis=2) > 8)
+    return float(changed.sum()) / float(changed.size)
+
+
+def _compose_product_thumbnail(
+    logo: Image.Image,
+    product_name: Optional[str],
+    survey: dict,
+    category: Optional[str] = None,
+    background_style: str = "TONE_GRADIENT",
+    headline: Optional[str] = None,
+) -> Tuple[Image.Image, float]:
+    """스마트스토어 규격(1000x1000) 제품 썸네일과 텍스트 면적 비율을 돌려준다."""
+    W, H = KIT_SIZE["PRODUCT_THUMBNAIL"]
+    accent = _pick_accent(survey)
+
+    canvas = Image.new("RGB", (W, H))
+    base = _draw_background(canvas, background_style, accent)
+    text_color = _readable_on(base)
+
+    # 카테고리 라벨이 들어가면 그만큼 로고를 아래로 내린다. 겹치면 둘 다 안 읽힌다.
+    logo_cy = 0.36 if category else 0.32
+    logo_img = _fit(_trim(_logo_rgba(logo)), int(W * 0.54), int(H * 0.38))
+    canvas.paste(
+        logo_img,
+        ((W - logo_img.width) // 2, int(H * logo_cy) - logo_img.height // 2),
+        logo_img,
+    )
+
+    # 글자를 그리기 직전 상태를 떠둔다. 이후 면적 비율 계산의 기준이 된다.
+    before = canvas.copy()
+    d = ImageDraw.Draw(canvas)
+
+    if category:
+        label = CATEGORY_LABEL.get(category, "")
+        if label:
+            d.text(
+                (W // 2, int(H * 0.06)), label,
+                font=_resolve_font(30, weight="regular"), fill=accent, anchor="ma",
+            )
 
     name = (product_name or _brand_name(survey) or "").strip()
     if name:
-        f = _resolve_font(46, weight="bold")
-        d.text((W // 2, int(H * 0.70)), name[:28], font=f, fill=_readable_on(bottom), anchor="ma")
+        d.text(
+            (W // 2, int(H * 0.66)), name[:28],
+            font=_resolve_font(46, weight="bold"), fill=text_color, anchor="ma",
+        )
 
-    return canvas
+    if headline:
+        d.text(
+            (W // 2, int(H * 0.79)), headline.strip()[:HEADLINE_MAX_CHARS],
+            font=_resolve_font(34, weight="regular"), fill=text_color, anchor="ma",
+        )
+
+    return canvas, _text_area_ratio(before, canvas)
 
 
 # --------------------------------------------------------------------------- 진입점
@@ -271,21 +438,41 @@ def create_brand_kit(req: BrandKitRequest) -> BrandKitResponse:
     warnings: list[str] = []
 
     if kit_type == "BUSINESS_CARD":
-        image = _compose_business_card(logo, req.card_info, req.survey)
+        # 명함은 앞/뒷면 두 장이다. images[]에 순서대로 담고, 최상위 imageBase64에는
+        # 앞면을 복제한다 — 백엔드가 최상위 한 장만 읽고 있어 수정 없이 붙는다.
+        front, back = _compose_business_card(logo, req.card_info, req.survey)
+        images = [front, back]
         if req.card_info is None:
             warnings.append(
-                "card_info가 없어 회사명만 넣은 브랜드 카드로 합성했습니다. "
-                "이름·직함·연락처를 보내면 명함으로 완성됩니다."
+                "card_info가 없어 인적사항 없이 브랜드 정보만 넣었습니다. "
+                "이름·직함·연락처를 보내면 명함 뒷면이 완성됩니다."
             )
     else:
-        image = _compose_product_thumbnail(logo, req.product_name, req.survey)
-        warnings.append("AI 연출 배경 미적용 — 톤 기반 그라데이션으로 대체했습니다.")
+        thumb, text_ratio = _compose_product_thumbnail(
+            logo, req.product_name, req.survey,
+            category=req.category,
+            background_style=req.background_style,
+            headline=req.headline,
+        )
+        images = [thumb]
+        # 판매 채널 가이드라인 자동 검수. 업로드 후 반려되어 재제작하는 비용을
+        # 생성 단계에서 미리 막는다.
+        if text_ratio > TEXT_AREA_LIMIT:
+            warnings.append(
+                f"텍스트가 이미지의 {text_ratio:.0%}를 차지합니다 "
+                f"(권장 {TEXT_AREA_LIMIT:.0%} 이하). 카피를 줄이면 채널 심사에 안전합니다."
+            )
+        if req.background_style == "TONE_GRADIENT":
+            warnings.append("AI 연출 배경 미적용 — 톤 기반 그라데이션으로 대체했습니다.")
 
-    encoded = _to_base64(image)
+    encoded = [_to_base64(img) for img in images]
     return BrandKitResponse(
         kitType=kit_type,
-        imageBase64=encoded,
-        images=[BrandKitImage(imageBase64=encoded, width=image.width, height=image.height)],
+        imageBase64=encoded[0],
+        images=[
+            BrandKitImage(imageBase64=b64, width=img.width, height=img.height)
+            for b64, img in zip(encoded, images)
+        ],
         preliminary=bool(warnings),
         warnings=warnings,
         elapsedMs=int((time.monotonic() - started) * 1000),

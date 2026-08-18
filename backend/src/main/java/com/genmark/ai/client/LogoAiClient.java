@@ -13,7 +13,7 @@ public interface LogoAiClient {
      * 배정받기 위해 {@code logo_candidates.ai_metadata_json}에 저장해둔다. AI가 값을
      * 안 주면 null일 수 있다.
      */
-    record GeneratedLogo(String imageBase64, Integer seed, Integer variantIndex) {}
+    record GeneratedLogo(String imageBase64, Integer seed, Integer variantIndex, String svg) {}
 
-    record LogoAiResult(boolean success, List<GeneratedLogo> logos) {}
+    record LogoAiResult(boolean success, String modelName, List<GeneratedLogo> logos) {}
 }

@@ -9,6 +9,8 @@ import com.genmark.ai.repository.TrademarkMatchRepository;
 import com.genmark.ai.web.exception.ApiException;
 import com.genmark.ai.web.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +21,9 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class TrademarkAnalysisProcessor {
+    private static final Logger log = LoggerFactory.getLogger(TrademarkAnalysisProcessor.class);
+    private static final int REQUESTED_MATCH_COUNT = 3;
+
     private final TrademarkAnalysisRepository analysisRepository;
     private final TrademarkMatchRepository matchRepository;
     private final TrademarkAiClient aiClient;
@@ -32,8 +37,13 @@ public class TrademarkAnalysisProcessor {
         analysis.setStartedAt(LocalDateTime.now());
         try {
             byte[] png = storage.read(analysis.getCandidate().getStorageKey());
-            TrademarkAiClient.Result result = aiClient.search(Base64.getEncoder().encodeToString(png), "combination", 3);
+            TrademarkAiClient.Result result = aiClient.search(Base64.getEncoder().encodeToString(png),
+                    analysis.getProject().getLogoStyle(), REQUESTED_MATCH_COUNT);
             validate(result);
+            if (result.matches().size() < REQUESTED_MATCH_COUNT) {
+                log.warn("상표 분석 {}의 유사 상표 결과가 요청 개수보다 적습니다: {}/{}",
+                        analysisId, result.matches().size(), REQUESTED_MATCH_COUNT);
+            }
             analysis.setMaxSimilarity(result.maxSimilarity());
             analysis.setRiskLevel(result.riskLevel());
             analysis.setDisclaimer(result.disclaimer());
@@ -41,7 +51,7 @@ public class TrademarkAnalysisProcessor {
                 TrademarkAiClient.Match match = result.matches().get(i);
                 matchRepository.save(TrademarkMatch.builder().analysis(analysis).rank(i + 1)
                         .applicationNumber(match.applicationNumber()).name(match.name()).category(match.category())
-                        .similarity(match.similarity()).imagePath(match.imagePath()).build());
+                        .similarity(match.similarity()).imagePath(match.imagePath()).note(match.note()).build());
             }
             analysis.setStatus(TrademarkAnalysis.Status.SUCCEEDED);
             analysis.getProject().setStatus(ProjectStatus.COMPLETED);
@@ -57,7 +67,8 @@ public class TrademarkAnalysisProcessor {
 
     private void validate(TrademarkAiClient.Result result) {
         if (result == null || result.riskLevel() == null || result.disclaimer() == null
-                || result.disclaimer().isBlank() || result.matches() == null || result.matches().size() != 3
+                || result.disclaimer().isBlank() || result.matches() == null || result.matches().isEmpty()
+                || result.matches().size() > REQUESTED_MATCH_COUNT
                 || result.maxSimilarity() < 0 || result.maxSimilarity() > 100) {
             throw new ApiException(ErrorCode.AI_INVALID_RESPONSE);
         }

@@ -6,15 +6,21 @@ import com.genmark.ai.service.LogoDownloadService;
 import com.genmark.ai.service.LogoPinService;
 import com.genmark.ai.web.dto.ApiSuccessResponse;
 import com.genmark.ai.web.dto.brandkit.BrandKitResponse;
+import com.genmark.ai.web.dto.brandkit.BrandKitCreateRequest;
+import jakarta.validation.Valid;
 import com.genmark.ai.web.dto.logo.LogoDownloadResponse;
 import com.genmark.ai.web.dto.logo.PinnedCandidateResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 생성된 로고에 대한 사용자 동작 — 찜(F12-3), 다운로드(F12-4), 브랜드킷(F14).
@@ -75,9 +81,10 @@ public class LogoActionController {
     @PostMapping("/brand-kits")
     public ResponseEntity<ApiSuccessResponse<BrandKitResponse>> createBrandKit(
             @AuthenticationPrincipal MemberPrincipal principal,
-            @PathVariable String projectId, @PathVariable String candidateId) {
+            @PathVariable String projectId, @PathVariable String candidateId,
+            @Valid @RequestBody(required = false) BrandKitCreateRequest request) {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiSuccessResponse.of(
-                brandKitService.create(projectId, candidateId, principal.id())));
+                brandKitService.create(projectId, candidateId, principal.id(), request)));
     }
 
     /** F14 브랜드킷 목록. */
@@ -87,5 +94,30 @@ public class LogoActionController {
             @PathVariable String projectId, @PathVariable String candidateId) {
         return ResponseEntity.ok(ApiSuccessResponse.of(
                 brandKitService.list(projectId, candidateId, principal.id())));
+    }
+
+    @GetMapping("/brand-kits/{brandKitId}")
+    public ResponseEntity<ApiSuccessResponse<BrandKitResponse>> brandKit(
+            @AuthenticationPrincipal MemberPrincipal principal,
+            @PathVariable String projectId, @PathVariable String candidateId,
+            @PathVariable String brandKitId) {
+        return ResponseEntity.ok(ApiSuccessResponse.of(
+                brandKitService.get(projectId, candidateId, brandKitId, principal.id())));
+    }
+
+    @GetMapping("/brand-kits/{brandKitId}/download")
+    public ResponseEntity<byte[]> downloadBrandKit(
+            @AuthenticationPrincipal MemberPrincipal principal,
+            @PathVariable String projectId, @PathVariable String candidateId,
+            @PathVariable String brandKitId) {
+        BrandKitService.BrandKitArchive archive = brandKitService.downloadArchive(
+                projectId, candidateId, brandKitId, principal.id());
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(archive.filename(), StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(archive.bytes());
     }
 }

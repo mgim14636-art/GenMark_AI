@@ -1,5 +1,6 @@
 import { getGoogleIdToken } from './lib/googleAuth'
 import { getKakaoAccessToken } from './lib/kakaoAuth'
+import { AuthPopupError } from './lib/authPopup'
 import { tokenStorage } from './lib/tokenStorage'
 
 export type AuthProvider = 'kakao' | 'google'
@@ -116,6 +117,9 @@ const request = async <T>(path: string, init: RequestInit = {}, retry = true): P
 
 const normalizeProviderError = (error: unknown) => {
   if (error instanceof AuthError) return error
+  if (error instanceof AuthPopupError) {
+    return new AuthError(error.message, error.code)
+  }
   const message = error instanceof Error ? error.message : '소셜 로그인에 실패했습니다.'
   return new AuthError(message, 'PROVIDER_LOGIN_FAILED')
 }
@@ -215,3 +219,35 @@ const downloadFileWithToken = async (token: string | null, path: string, refresh
 
 export const downloadAuthenticatedFile = (path: string) => downloadFileWithToken(accessToken, path, true)
 export const downloadAuthenticatedFileWithToken = (token: string, path: string) => downloadFileWithToken(token, path)
+
+export const apiBlobRequest = async (imageUrl: string, retry = true): Promise<Blob> => {
+  const headers = new Headers({ Accept: 'image/*' })
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+
+  const response = await fetch(imageUrl, { headers })
+  if (response.status === 401 && retry && await refreshAccessToken()) {
+    return apiBlobRequest(imageUrl, false)
+  }
+
+  if (!response.ok) {
+    throw new AuthError('상표 이미지를 불러오지 못했어요.', 'TRADEMARK_IMAGE_ERROR', response.status)
+  }
+
+  return response.blob()
+}
+
+export const apiTextRequest = async (url: string, init: RequestInit = {}, retry = true): Promise<string> => {
+  const headers = new Headers(init.headers)
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  if (!headers.has('Accept')) headers.set('Accept', 'image/svg+xml, text/plain')
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+
+  const response = await fetch(url, { ...init, headers })
+  if (response.status === 401 && retry && await refreshAccessToken()) {
+    return apiTextRequest(url, init, false)
+  }
+  if (!response.ok) {
+    throw new AuthError('SVG 파일을 처리하지 못했어요.', 'SVG_REQUEST_ERROR', response.status)
+  }
+  return response.text()
+}

@@ -24,4 +24,5 @@ public class TrademarkMatch {
     @Column(length = 100) private String category;
     @Column(nullable = false) private int similarity;
     @Column(name = "image_path", length = 500) private String imagePath;
+    @Column(columnDefinition = "TEXT") private String note;
 }

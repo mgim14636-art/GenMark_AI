@@ -86,7 +86,8 @@ public class BiProjectService {
                 .filter(Objects::nonNull).toList();
         return new BiProjectResponse(p.getPublicId(), p.getStatus(), p.getCurrentStep(), p.getIndustry(),
                 p.getBrandName(), valueCategories, p.getBrandDescription(), p.getTargetAge(), p.getTone(),
-                p.colorList(), p.getLogoStyle(), p.getAdditionalRequirements(), p.getCreatedAt(), p.getUpdatedAt());
+                p.getColorMode(), p.colorList(), p.getLogoStyle(), p.getLogoShape(), p.getAdditionalRequirements(),
+                p.getCreatedAt(), p.getUpdatedAt());
     }
 
     private void apply(BiProject p, BiProjectUpsertRequest r) {
@@ -99,17 +100,45 @@ public class BiProjectService {
         if (r.brandDescription() != null) p.setBrandDescription(r.brandDescription());
         if (r.targetAge() != null) p.setTargetAge(r.targetAge());
         if (r.tone() != null) p.setTone(r.tone());
-        if (r.color1() != null) p.setColor1(r.color1());
-        if (r.color2() != null) p.setColor2(r.color2());
-        if (r.color3() != null) p.setColor3(r.color3());
-        if (r.color4() != null) p.setColor4(r.color4());
+        if (r.colorMode() != null) p.setColorMode(r.colorMode());
+        applyPalette(p, r);
         if (r.logoStyle() != null) p.setLogoStyle(r.logoStyle());
         if (r.additionalRequirements() != null) p.setAdditionalRequirements(r.additionalRequirements());
+        if (r.logoShape() != null) {
+            String logoShape = r.logoShape().trim();
+            p.setLogoShape(logoShape.isEmpty() ? null : logoShape);
+            if (logoShape.isEmpty()) p.setAdditionalRequirements(removeLegacyLogoShape(p.getAdditionalRequirements()));
+        }
         if (hasBrief(p)) p.setStatus(ProjectStatus.BRIEF_READY);
+    }
+
+    private void applyPalette(BiProject p, BiProjectUpsertRequest r) {
+        boolean replacePalette = Boolean.TRUE.equals(r.paletteReplace()) || "TONE".equals(r.colorMode());
+        if (!replacePalette) {
+            if (r.color1() != null) p.setColor1(r.color1());
+            if (r.color2() != null) p.setColor2(r.color2());
+            if (r.color3() != null) p.setColor3(r.color3());
+            if (r.color4() != null) p.setColor4(r.color4());
+            return;
+        }
+
+        p.setColor1(r.color1());
+        p.setColor2(r.color2());
+        p.setColor3(r.color3());
+        p.setColor4(r.color4());
+        if ("MANUAL".equals(p.getColorMode()) && p.colorList().isEmpty()) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "직접 선택 색상은 한 개 이상 필요합니다.");
+        }
     }
 
     private boolean hasBrief(BiProject p) {
         return p.getBrandName() != null && !p.getBrandName().isBlank()
                 && p.getIndustry() != null && !p.getIndustry().isBlank();
+    }
+
+    private String removeLegacyLogoShape(String requirements) {
+        if (requirements == null) return null;
+        String cleaned = requirements.replaceAll("(?m)^\\s*로고 형태:\\s*.*(?:\\R|$)", "").trim();
+        return cleaned.isEmpty() ? null : cleaned;
     }
 }

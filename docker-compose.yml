@@ -16,6 +16,7 @@ services:
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
       AUTH_FAKE_PROVIDER_ENABLED: ${AUTH_FAKE_PROVIDER_ENABLED:-false}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      PRIVATE_UPLOAD_DIR: /app/private-uploads
       TRADEMARK_IMAGE_ROOT: /app/trademark-data
       TRADEMARK_IMAGE_MAX_BYTES: ${TRADEMARK_IMAGE_MAX_BYTES:-5242880}
       TZ: Asia/Seoul
@@ -23,6 +24,7 @@ services:
       - "${BACKEND_PORT:-8081}:8081"
     volumes:
       - backend_uploads:/app/uploads
+      - backend_private_uploads:/app/private-uploads
       - ./ai-server/data/trademarks:/app/trademark-data:ro
     networks: [genmark-net]
 
@@ -37,6 +39,10 @@ services:
       HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-recraft/recraft-v4-vector}
+      VALUE_KEYWORD_MODEL: ${VALUE_KEYWORD_MODEL:-upstage/solar-pro4}
+      VALUE_KEYWORD_TIMEOUT_SECONDS: ${VALUE_KEYWORD_TIMEOUT_SECONDS:-5}
+      MOTIF_TRANSLATION_MODEL: ${MOTIF_TRANSLATION_MODEL:-upstage/solar-pro4}
+      MOTIF_TRANSLATION_TIMEOUT_SECONDS: ${MOTIF_TRANSLATION_TIMEOUT_SECONDS:-5}
       KIPRIS_API_KEY: ${KIPRIS_API_KEY:-}
       EMBEDDINGS_PATH: /app/data/faiss/embeddings.npy
       IDS_PATH: /app/data/faiss/ids.csv
@@ -45,6 +51,7 @@ services:
       TRADEMARK_DATA_ROOT: /app/data/trademarks
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
+      NOTE_MODEL: ${NOTE_MODEL:-google/gemini-2.5-flash-lite}
       NOTE_TIMEOUT_SECONDS: ${NOTE_TIMEOUT_SECONDS:-8}
       DINO_MODEL_ID: facebook/dinov2-base
       DINO_MODEL_REVISION: ${DINO_MODEL_REVISION:-f9e44c814b77203eaa57a6bdbbd535f21ede1415}
@@ -102,4 +109,5 @@ networks:
 
 volumes:
   backend_uploads:
+  backend_private_uploads:
   local_db_data:

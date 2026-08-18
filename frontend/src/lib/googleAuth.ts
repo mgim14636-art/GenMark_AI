@@ -1,3 +1,5 @@
+import { runAuthPopup } from './authPopup'
+
 declare global {
   interface Window {
     google?: {
@@ -35,7 +37,7 @@ function loadGsiSdk(): Promise<void> {
 }
 
 let initialized = false
-let hiddenButtonEl: HTMLElement | null = null
+let currentHiddenButton: HTMLElement | null = null
 const googleClientId = import.meta.env.GOOGLE_CLIENT_ID || import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 // initialize()'s callback is fixed at init time, so route every call's
@@ -43,8 +45,6 @@ const googleClientId = import.meta.env.GOOGLE_CLIENT_ID || import.meta.env.VITE_
 // per call (re-initializing resets Google's internal config).
 let currentResolve: ((idToken: string) => void) | null = null
 let currentReject: ((error: unknown) => void) | null = null
-
-const RESPONSE_TIMEOUT_MS = 60_000
 
 function settleCurrent(idToken: string | null, error?: unknown) {
   if (idToken !== null) {
@@ -75,8 +75,12 @@ function ensureInitialized() {
   initialized = true
 }
 
-function ensureHiddenButton(): HTMLElement {
-  if (hiddenButtonEl) return hiddenButtonEl
+// A rendered button goes stale after it's been used for a completed sign-in
+// (Google tears down its internal iframe once the flow finishes), so a
+// second login attempt reusing the same cached button finds nothing there.
+// Render a fresh one on every attempt instead of caching across calls.
+function createHiddenButton(): HTMLElement {
+  currentHiddenButton?.remove()
 
   const container = document.createElement('div')
   container.style.position = 'fixed'
@@ -86,8 +90,31 @@ function ensureHiddenButton(): HTMLElement {
   document.body.appendChild(container)
 
   window.google!.accounts.id.renderButton(container, { type: 'standard' })
-  hiddenButtonEl = container
+  currentHiddenButton = container
   return container
+}
+
+const BUTTON_READY_TIMEOUT_MS = 3_000
+const BUTTON_POLL_INTERVAL_MS = 100
+
+// renderButton() doesn't guarantee the inner div[role="button"] exists the
+// instant it returns — Google finishes setting it up a beat later. Poll
+// briefly instead of checking exactly once, so a real-but-slightly-late
+// button doesn't get mistaken for a render failure.
+function waitForRealButton(container: HTMLElement): Promise<HTMLElement | null> {
+  const existing = container.querySelector<HTMLElement>('div[role="button"]')
+  if (existing) return Promise.resolve(existing)
+
+  return new Promise((resolve) => {
+    const start = Date.now()
+    const timer = setInterval(() => {
+      const found = container.querySelector<HTMLElement>('div[role="button"]')
+      if (found || Date.now() - start >= BUTTON_READY_TIMEOUT_MS) {
+        clearInterval(timer)
+        resolve(found)
+      }
+    }, BUTTON_POLL_INTERVAL_MS)
+  })
 }
 
 // Returns a Google **ID token** (JWT `credential`) — our backend verifies
@@ -99,17 +126,23 @@ function ensureHiddenButton(): HTMLElement {
 export async function getGoogleIdToken(): Promise<string> {
   await loadGsiSdk()
   ensureInitialized()
-  const button = ensureHiddenButton()
+  const button = createHiddenButton()
+  const realButton = await waitForRealButton(button)
 
-  return new Promise((resolve, reject) => {
-    currentResolve = resolve
-    currentReject = reject
-    const realButton = button.querySelector<HTMLElement>('div[role="button"]')
-    if (!realButton) {
-      settleCurrent(null, new Error('Google 로그인 버튼을 준비하지 못했어요.'))
-      return
-    }
-    realButton.click()
-    setTimeout(() => settleCurrent(null), RESPONSE_TIMEOUT_MS)
-  })
+  try {
+    return await runAuthPopup<string>(({ success, fail }) => {
+      currentResolve = success
+      currentReject = fail
+      if (!realButton) {
+        settleCurrent(null, new Error('Google 로그인 버튼을 준비하지 못했어요.'))
+        return
+      }
+      realButton.click()
+    }, 'Google')
+  } finally {
+    currentResolve = null
+    currentReject = null
+    currentHiddenButton?.remove()
+    currentHiddenButton = null
+  }
 }

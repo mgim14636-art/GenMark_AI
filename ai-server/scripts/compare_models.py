@@ -346,7 +346,7 @@ def main() -> int:
         print("\n--dry 모드: 호출하지 않고 종료합니다.")
         return 0
 
-    from app.services.flux_service import OPENROUTER_API_KEY as KEY
+    from app.services.logo_gen_service import OPENROUTER_API_KEY as KEY
     if not KEY:
         print("\nOPENROUTER_API_KEY가 없습니다. ai-server/.env를 확인하세요.")
         return 1

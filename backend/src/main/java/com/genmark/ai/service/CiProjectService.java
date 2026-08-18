@@ -98,8 +98,8 @@ public class CiProjectService {
 
     public CiProjectResponse toResponse(CiProject p) {
         return new CiProjectResponse(p.getPublicId(), p.getStatus(), p.getCurrentStep(), p.getIndustry(),
-                p.getCompanyName(), p.getCoreValues(), p.getTone(), p.colorList(), p.getLogoStyle(),
-                p.getAdditionalRequirements(), p.getCreatedAt(), p.getUpdatedAt());
+                p.getCompanyName(), p.getCoreValues(), p.getTone(), p.getColorMode(), p.colorList(), p.getLogoStyle(),
+                p.getLogoShape(), p.getAdditionalRequirements(), p.getCreatedAt(), p.getUpdatedAt());
     }
 
     private void apply(CiProject p, CiProjectUpsertRequest r) {
@@ -108,17 +108,45 @@ public class CiProjectService {
         if (r.companyName() != null) p.setCompanyName(r.companyName());
         if (r.coreValues() != null) p.setCoreValues(r.coreValues());
         if (r.tone() != null) p.setTone(r.tone());
-        if (r.color1() != null) p.setColor1(r.color1());
-        if (r.color2() != null) p.setColor2(r.color2());
-        if (r.color3() != null) p.setColor3(r.color3());
-        if (r.color4() != null) p.setColor4(r.color4());
+        if (r.colorMode() != null) p.setColorMode(r.colorMode());
+        applyPalette(p, r);
         if (r.logoStyle() != null) p.setLogoStyle(r.logoStyle());
         if (r.additionalRequirements() != null) p.setAdditionalRequirements(r.additionalRequirements());
+        if (r.logoShape() != null) {
+            String logoShape = r.logoShape().trim();
+            p.setLogoShape(logoShape.isEmpty() ? null : logoShape);
+            if (logoShape.isEmpty()) p.setAdditionalRequirements(removeLegacyLogoShape(p.getAdditionalRequirements()));
+        }
         if (hasBrief(p)) p.setStatus(ProjectStatus.BRIEF_READY);
+    }
+
+    private void applyPalette(CiProject p, CiProjectUpsertRequest r) {
+        boolean replacePalette = Boolean.TRUE.equals(r.paletteReplace()) || "TONE".equals(r.colorMode());
+        if (!replacePalette) {
+            if (r.color1() != null) p.setColor1(r.color1());
+            if (r.color2() != null) p.setColor2(r.color2());
+            if (r.color3() != null) p.setColor3(r.color3());
+            if (r.color4() != null) p.setColor4(r.color4());
+            return;
+        }
+
+        p.setColor1(r.color1());
+        p.setColor2(r.color2());
+        p.setColor3(r.color3());
+        p.setColor4(r.color4());
+        if ("MANUAL".equals(p.getColorMode()) && p.colorList().isEmpty()) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "직접 선택 색상은 한 개 이상 필요합니다.");
+        }
     }
 
     private boolean hasBrief(CiProject p) {
         return p.getCompanyName() != null && !p.getCompanyName().isBlank()
                 && p.getIndustry() != null && !p.getIndustry().isBlank();
+    }
+
+    private String removeLegacyLogoShape(String requirements) {
+        if (requirements == null) return null;
+        String cleaned = requirements.replaceAll("(?m)^\\s*로고 형태:\\s*.*(?:\\R|$)", "").trim();
+        return cleaned.isEmpty() ? null : cleaned;
     }
 }

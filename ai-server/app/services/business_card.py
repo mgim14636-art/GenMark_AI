@@ -7,9 +7,18 @@ class CardLayout:
     width: int = 1050
     height: int = 600
     logo_box_front: Tuple[int, int, int, int] = (400, 110, 650, 300)
+    # 로고 아래 브랜드명을 따로 적지 않을 때(로고가 이미 이름을 품은 경우) 쓰는 박스.
+    # 좁은 박스 그대로 두면 1050x600 카드 한가운데 작은 마크만 떠 있어 허전하다
+    # (실측 확인됨). 이름 자리를 로고가 넘겨받으므로 세로로도 중앙에 크게 앉힌다.
+    logo_box_front_solo: Tuple[int, int, int, int] = (265, 120, 785, 480)
     brand_name_center: Tuple[int, int] = (525, 335)
     tagline_center: Tuple[int, int] = (525, 372)
     logo_box_back: Tuple[int, int, int, int] = (60, 55, 175, 155)
+    # 앞면과 같은 이유 - 로고 옆 브랜드명·태그라인을 적지 않을 때 쓰는 박스.
+    # 기존 115x100은 1050x600 카드에서 눈에 띄지 않는다(실측 확인됨). 오른쪽
+    # 이름 자리가 비므로 그 폭을 로고가 넘겨받는다. 아래 연락처 블록(y=275~)과는
+    # 겹치지 않도록 세로는 208까지만 쓴다.
+    logo_box_back_solo: Tuple[int, int, int, int] = (60, 48, 300, 208)
     brand_name_pos_back: Tuple[int, int] = (195, 75)
     tagline_pos_back: Tuple[int, int] = (195, 112)
     name_right_edge: Tuple[int, int] = (960, 275)
@@ -47,6 +56,9 @@ def _dominant_logo_color(logo: Image.Image) -> tuple:
         return (40, 40, 40)
     return max(counts.items(), key=lambda kv: kv[1])[0]
 
+CARD_BACK_BG = (255, 255, 255)
+
+
 def derive_card_bg_colors(logo: Image.Image) -> Tuple[tuple, tuple]:
     """로고 색상에서 명함 앞/뒷면 배경색을 자동으로 유도한다.
 
@@ -60,9 +72,10 @@ def derive_card_bg_colors(logo: Image.Image) -> Tuple[tuple, tuple]:
     front = tuple(round(c * 0.55) for c in (r, g, b))
     if _luma(front) < 25:
         front = tuple(round(c * 0.55 + 15) for c in (r, g, b))
-    neutral = (245, 244, 240)
-    back = tuple(round(c * 0.12 + n * 0.88) for c, n in zip((r, g, b), neutral))
-    return front, back
+    # 뒷면은 흰색이다. 예전엔 로고색을 12% 섞은 틴트를 썼는데, 연락처를 읽는 면이
+    # 옅은 유색으로 깔려 "인쇄 사고"처럼 보였다. 앞면만 로고색에서 유도하고 뒷면은
+    # 중립을 지키는 편이 실제 명함 관행에도 맞다.
+    return front, CARD_BACK_BG
 
 def _resize_to_box(img: Image.Image, box: Tuple[int, int, int, int]) -> Tuple[Image.Image, Tuple[int, int]]:
     bx0, by0, bx1, by1 = box
@@ -94,8 +107,11 @@ def compose_card_front(logo: Image.Image, brand_name: str, tagline: str, bg_colo
     card = Image.new('RGB', (layout.width, layout.height), bg_color)
     draw = ImageDraw.Draw(card)
     text_color = _auto_text_color(bg_color)
-    logo_resized, pos = _resize_to_box(logo, layout.logo_box_front)
+    box = layout.logo_box_front if brand_name else layout.logo_box_front_solo
+    logo_resized, pos = _resize_to_box(logo, box)
     card.paste(logo_resized, pos, logo_resized)
+    if not brand_name:
+        return card
     name_font = ImageFont.truetype(font_path_bold, 40) if font_path_bold else ImageFont.load_default()
     _draw_centered(draw, layout.brand_name_center, brand_name, name_font, text_color)
     if tagline:
@@ -108,11 +124,13 @@ def compose_card_back(logo: Image.Image, brand_name: str, tagline: str, contact:
     draw = ImageDraw.Draw(card)
     text_color = _auto_text_color(bg_color)
     muted_color = tuple((max(0, min(255, c + (30 if _luma(bg_color) < 128 else -60))) for c in text_color))
-    logo_resized, pos = _resize_to_box(logo, layout.logo_box_back)
+    back_box = layout.logo_box_back if brand_name else layout.logo_box_back_solo
+    logo_resized, pos = _resize_to_box(logo, back_box)
     card.paste(logo_resized, pos, logo_resized)
-    brand_font = ImageFont.truetype(font_path_bold, 26) if font_path_bold else ImageFont.load_default()
-    draw.text(layout.brand_name_pos_back, brand_name, font=brand_font, fill=text_color)
-    if tagline:
+    if brand_name:
+        brand_font = ImageFont.truetype(font_path_bold, 26) if font_path_bold else ImageFont.load_default()
+        draw.text(layout.brand_name_pos_back, brand_name, font=brand_font, fill=text_color)
+    if brand_name and tagline:
         tag_font = ImageFont.truetype(font_path_regular, 13) if font_path_regular else ImageFont.load_default()
         draw.text(layout.tagline_pos_back, tagline, font=tag_font, fill=text_color)
     if contact.get('title') or contact.get('person_name'):

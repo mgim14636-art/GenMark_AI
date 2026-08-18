@@ -27,7 +27,8 @@ class TrademarkMatchResponseTest {
         LogoGeneration generation = LogoGeneration.builder().ciProject(project).build();
         LogoCandidate candidate = LogoCandidate.builder().generation(generation).build();
         TrademarkAnalysis analysis = TrademarkAnalysis.builder().id(11L).publicId("analysis-1").candidate(candidate).build();
-        TrademarkMatch match = TrademarkMatch.builder().analysis(analysis).rank(3).imagePath("raw/sample.jpg").build();
+        TrademarkMatch match = TrademarkMatch.builder().analysis(analysis).rank(3).imagePath("raw/sample.jpg")
+                .note("외곽선과 중앙 배치가 유사합니다.").build();
         when(analysisRepository.findByPublicIdAndCandidateGenerationCiProjectMemberId("analysis-1", 7L))
                 .thenReturn(Optional.of(analysis));
         when(matchRepository.findByAnalysisIdOrderByRank(11L)).thenReturn(List.of(match));
@@ -37,5 +38,6 @@ class TrademarkMatchResponseTest {
         assertThat(response.imageUrl()).isEqualTo(
                 "/api/v1/projects/project-1/trademark-analyses/analysis-1/matches/3/image");
         assertThat(response.imagePath()).isEqualTo("raw/sample.jpg");
+        assertThat(response.note()).isEqualTo("외곽선과 중앙 배치가 유사합니다.");
     }
 }

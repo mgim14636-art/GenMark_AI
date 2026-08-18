@@ -1,12 +1,18 @@
 package com.genmark.ai.service;
 
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.genmark.ai.entity.BrandKit;
+import com.genmark.ai.entity.BusinessCardInfo;
 import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.LogoCandidate;
 import com.genmark.ai.entity.ProjectLike;
 import com.genmark.ai.repository.BrandKitRepository;
 import com.genmark.ai.repository.LogoCandidateRepository;
 import com.genmark.ai.web.dto.brandkit.BrandKitResponse;
+import com.genmark.ai.web.dto.brandkit.BrandKitCreateRequest;
+import com.genmark.ai.web.dto.brandkit.BusinessCardInfoRequest;
 import com.genmark.ai.web.exception.ApiException;
 import com.genmark.ai.web.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -15,25 +21,40 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
- * 브랜드킷 (F14). CI는 명함, BI는 제품 썸네일 이미지를 만든다.
+ * 브랜드킷 (F14). 사용자가 명함 또는 제품 썸네일 이미지를 선택해 만든다.
  *
- * <p>킷 종류를 사용자가 고르지 않는다. 프로젝트가 CI인지 BI인지에 따라 자동으로 정해진다.
+ * <p>킷 종류가 없을 때만 기존 호환 규칙(CI는 명함, BI는 제품 썸네일)을 적용한다.
  *
- * <p><b>AI 서버에 브랜드킷 엔드포인트가 아직 없다.</b> 이 코드는 준비만 되어 있고,
- * 실제로 호출하면 AI_UNAVAILABLE로 실패 처리된다. AI 담당자 작업이 끝나야 동작한다.
+ * <p>AI 서버가 돌려준 임시 결과 여부와 경고도 함께 저장해 화면이 품질 상태를 구분할 수 있게 한다.
  */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class BrandKitService {
+    private static final ObjectMapper CANONICAL_JSON = new ObjectMapper()
+            .configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true)
+            .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
 
     private final ProjectLookupService projectLookup;
     private final LogoCandidateRepository candidateRepository;
     private final BrandKitRepository brandKitRepository;
     private final BrandKitWorker worker;
+    private final LogoFileStorage storage;
 
     /**
      * 브랜드킷 생성을 요청한다. 즉시 QUEUED 상태로 돌려주고 실제 생성은 백그라운드에서 진행된다.
@@ -42,7 +63,8 @@ public class BrandKitService {
      * 결과도 같을 것이므로 다시 만들 이유가 없다.
      */
     @Transactional
-    public BrandKitResponse create(String projectId, String candidateId, Long memberId) {
+    public BrandKitResponse create(String projectId, String candidateId, Long memberId,
+                                   BrandKitCreateRequest request) {
         ProjectLike project = projectLookup.requireOwned(projectId, memberId);
         boolean isCi = project instanceof CiProject;
 
@@ -53,28 +75,79 @@ public class BrandKitService {
                         candidateId, project.getId(), memberId))
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
 
-        // CI면 명함, BI면 제품 썸네일. 사용자가 선택하는 값이 아니다.
-        BrandKit.KitType kitType = isCi ? BrandKit.KitType.BUSINESS_CARD : BrandKit.KitType.THUMBNAIL;
+        BrandKit.KitType kitType = resolveKitType(request, isCi);
+        BusinessCardInfo requestedCardInfo = kitType == BrandKit.KitType.BUSINESS_CARD
+                ? toBusinessCardInfo(requireCardInfo(request)) : null;
+        String renderSpecJson = renderSpecJson(kitType, requestedCardInfo, project.toSurvey());
+        String renderSpecHash = sha256(renderSpecJson);
 
         BrandKit done = brandKitRepository
-                .findFirstByCandidateIdAndKitTypeAndStatusOrderByCompletedAtDesc(
-                        candidate.getId(), kitType, BrandKit.Status.SUCCEEDED)
+                .findFirstByCandidateIdAndKitTypeAndRenderSpecHashAndStatusOrderByCompletedAtDesc(
+                        candidate.getId(), kitType, renderSpecHash, BrandKit.Status.SUCCEEDED)
                 .orElse(null);
-        if (done != null) return toResponse(done);
+        if (done != null && isReusable(done, candidate)) return toResponse(done);
 
-        BrandKit kit = brandKitRepository.save(BrandKit.builder()
+        BrandKit kit = BrandKit.builder()
                 .candidate(candidate)
                 .kitType(kitType)
                 .status(BrandKit.Status.QUEUED)
-                .build());
+                .renderSpecJson(renderSpecJson)
+                .renderSpecHash(renderSpecHash)
+                .build();
+        if (requestedCardInfo != null) kit.setBusinessCardInfo(requestedCardInfo);
+        BrandKit savedKit = brandKitRepository.save(kit);
 
-        runAfterCommit(() -> worker.execute(kit.getId()));
+        runAfterCommit(() -> worker.execute(savedKit.getId()));
+        return toResponse(savedKit);
+    }
+
+    public BrandKitResponse get(String projectId, String candidateId, String brandKitId, Long memberId) {
+        projectLookup.requireOwned(projectId, memberId);
+        BrandKit kit = requireOwned(brandKitId, memberId);
+        ProjectLike project = kit.getCandidate().getGeneration().getProject();
+        if (!project.getPublicId().equals(projectId) || !kit.getCandidate().getPublicId().equals(candidateId)) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
         return toResponse(kit);
     }
 
-    public BrandKitResponse get(String projectId, String brandKitId, Long memberId) {
+    public BrandKitArchive downloadArchive(String projectId, String candidateId, String brandKitId,
+                                           Long memberId) {
         projectLookup.requireOwned(projectId, memberId);
-        return toResponse(requireOwned(brandKitId, memberId));
+        BrandKit kit = requireOwned(brandKitId, memberId);
+        ProjectLike project = kit.getCandidate().getGeneration().getProject();
+        if (!project.getPublicId().equals(projectId)
+                || !kit.getCandidate().getPublicId().equals(candidateId)) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        if (kit.getStatus() != BrandKit.Status.SUCCEEDED) {
+            throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "완성된 브랜드 키트만 다운로드할 수 있습니다.");
+        }
+
+        List<String> storageKeys = storage.brandKitStorageKeys(kit.getPublicId(), kit.getStorageKey());
+        int expectedCount = kit.getKitType() == BrandKit.KitType.BUSINESS_CARD ? 2 : 1;
+        if (storageKeys.size() < expectedCount) {
+            throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "브랜드 키트 이미지가 모두 준비되지 않았습니다.");
+        }
+
+        try (ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+             ZipOutputStream zip = new ZipOutputStream(bytes)) {
+            for (int index = 0; index < expectedCount; index += 1) {
+                String entryName = kit.getKitType() == BrandKit.KitType.BUSINESS_CARD
+                        ? (index == 0 ? "front.png" : "back.png")
+                        : "thumbnail.png";
+                zip.putNextEntry(new ZipEntry(entryName));
+                zip.write(storage.read(storageKeys.get(index)));
+                zip.closeEntry();
+            }
+            zip.finish();
+            String filename = kit.getKitType() == BrandKit.KitType.BUSINESS_CARD
+                    ? "genmark-business-card.zip"
+                    : "genmark-thumbnail.zip";
+            return new BrandKitArchive(filename, bytes.toByteArray());
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
     }
 
     public List<BrandKitResponse> list(String projectId, String candidateId, Long memberId) {
@@ -88,6 +161,15 @@ public class BrandKitService {
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
         return brandKitRepository.findByCandidateIdOrderByCreatedAtDesc(candidate.getId())
                 .stream().map(this::toResponse).toList();
+    }
+
+    public List<BrandKitResponse> listForMember(Long memberId) {
+        return Stream.concat(
+                        brandKitRepository.findByCandidateGenerationCiProjectMemberIdOrderByCreatedAtDesc(memberId).stream(),
+                        brandKitRepository.findByCandidateGenerationBiProjectMemberIdOrderByCreatedAtDesc(memberId).stream())
+                .sorted(Comparator.comparing(BrandKit::getCreatedAt).reversed())
+                .map(this::toResponse)
+                .toList();
     }
 
     private BrandKit requireOwned(String brandKitId, Long memberId) {
@@ -110,17 +192,110 @@ public class BrandKitService {
         }
     }
 
+    private boolean isReusable(BrandKit kit, LogoCandidate candidate) {
+        int expectedImageCount = kit.getKitType() == BrandKit.KitType.BUSINESS_CARD ? 2 : 1;
+        return storage.brandKitSourceKeyMatches(kit.getPublicId(), candidate.getStorageKey())
+                && storage.brandKitHasExpectedImageCount(kit.getPublicId(), expectedImageCount);
+    }
+
+    private BusinessCardInfoRequest requireCardInfo(BrandKitCreateRequest request) {
+        if (request == null || request.cardInfo() == null
+                || request.cardInfo().name() == null || request.cardInfo().name().isBlank()) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "명함에 표시할 이름을 입력해 주세요.");
+        }
+        return request.cardInfo();
+    }
+
+    private BrandKit.KitType resolveKitType(BrandKitCreateRequest request, boolean isCi) {
+        if (request == null || request.kitType() == null || request.kitType().isBlank()) {
+            return isCi ? BrandKit.KitType.BUSINESS_CARD : BrandKit.KitType.THUMBNAIL;
+        }
+        try {
+            return BrandKit.KitType.valueOf(request.kitType().trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "지원하지 않는 브랜드 키트 종류입니다.");
+        }
+    }
+
+    private BusinessCardInfo toBusinessCardInfo(BusinessCardInfoRequest request) {
+        return BusinessCardInfo.builder()
+                .name(request.name().trim())
+                .title(trimToNull(request.title()))
+                .company(trimToNull(request.company()))
+                .phone(trimToNull(request.phone()))
+                .email(trimToNull(request.email()))
+                .address(trimToNull(request.address()))
+                .build();
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String renderSpecJson(BrandKit.KitType kitType, BusinessCardInfo info,
+                                  Map<String, Object> survey) {
+        Map<String, Object> spec = new TreeMap<>();
+        spec.put("kit_type", kitType.name());
+        spec.put("survey", snakeCase(survey));
+        if (info != null) {
+            Map<String, Object> cardInfo = new TreeMap<>();
+            cardInfo.put("address", info.getAddress()); cardInfo.put("company", info.getCompany());
+            cardInfo.put("email", info.getEmail()); cardInfo.put("name", info.getName());
+            cardInfo.put("phone", info.getPhone()); cardInfo.put("title", info.getTitle());
+            spec.put("card_info", cardInfo);
+        }
+        try {
+            return CANONICAL_JSON.writeValueAsString(spec);
+        } catch (Exception ex) {
+            throw new ApiException(ErrorCode.INTERNAL_ERROR, "브랜드 키트 렌더 설정을 저장할 수 없습니다.");
+        }
+    }
+
+    private String sha256(String value) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder out = new StringBuilder(64);
+            for (byte b : hash) out.append(String.format("%02x", b));
+            return out.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            throw new ApiException(ErrorCode.INTERNAL_ERROR);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object snakeCase(Object value) {
+        if (value instanceof Map<?, ?> raw) {
+            Map<String, Object> result = new TreeMap<>();
+            raw.forEach((key, child) -> result.put(toSnake(String.valueOf(key)), snakeCase(child)));
+            return result;
+        }
+        if (value instanceof List<?> values) return values.stream().map(this::snakeCase).toList();
+        return value;
+    }
+
+    private String toSnake(String value) {
+        return value.replaceAll("([a-z0-9])([A-Z])", "$1_$2").toLowerCase();
+    }
+
     private BrandKitResponse toResponse(BrandKit kit) {
         return new BrandKitResponse(
                 kit.getPublicId(),
                 kit.getCandidate().getPublicId(),
+                kit.getCandidate().getGeneration().getProject().getPublicId(),
                 kit.getKitType().name(),
                 kit.getStatus().name(),
                 kit.getStorageKey(),
+                storage.brandKitStorageKeys(kit.getPublicId(), kit.getStorageKey()),
+                kit.isPreliminary(),
+                kit.getWarnings(),
                 kit.getErrorCode(),
                 kit.getErrorMessage(),
                 kit.getStartedAt(),
                 kit.getCompletedAt(),
                 kit.getCreatedAt());
     }
+
+    public record BrandKitArchive(String filename, byte[] bytes) {}
 }

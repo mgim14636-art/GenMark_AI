@@ -11,5 +11,9 @@ public interface TrademarkAiClient {
                   List<Match> matches, String disclaimer) {}
 
     record Match(String applicationNumber, String name, String category,
-                 int similarity, String imagePath) {}
+                 int similarity, String imagePath, String note) {
+        public Match(String applicationNumber, String name, String category, int similarity, String imagePath) {
+            this(applicationNumber, name, category, similarity, imagePath, null);
+        }
+    }
 }

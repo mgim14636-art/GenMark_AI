@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -49,6 +50,25 @@ public class BrandKit {
     @Column(name = "storage_key", length = 500)
     private String storageKey;
 
+    /** Exact, canonical rendering input used to make this kit. */
+    @Column(name = "render_spec_json", columnDefinition = "TEXT")
+    private String renderSpecJson;
+
+    @Column(name = "render_spec_hash", length = 64, columnDefinition = "CHAR(64)")
+    private String renderSpecHash;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean preliminary = false;
+
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(name = "warnings_json", columnDefinition = "TEXT")
+    @Builder.Default
+    private List<String> warnings = List.of();
+
+    @OneToOne(mappedBy = "brandKit", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private BusinessCardInfo businessCardInfo;
+
     /** 실패했을 때만 채워진다. 비동기라 화면에 실패 이유를 보여주려면 이 값이 필요하다. */
     @Column(name = "error_code", length = 50)
     private String errorCode;
@@ -77,4 +97,9 @@ public class BrandKit {
 
     @PreUpdate
     void onUpdate() { updatedAt = LocalDateTime.now(); }
+
+    public void setBusinessCardInfo(BusinessCardInfo businessCardInfo) {
+        this.businessCardInfo = businessCardInfo;
+        if (businessCardInfo != null) businessCardInfo.setBrandKit(this);
+    }
 }

@@ -11,17 +11,63 @@ from pydantic import BaseModel, Field
 # BOTTLE은 백엔드 요청서의 최초 표기. 기획서 (7) 수행방법의 산출물 정의는
 # "스마트스토어 규격(1000x1000) 제품 썸네일"이므로 PRODUCT_THUMBNAIL을 정식
 # 명칭으로 두고, BOTTLE은 같은 산출물의 별칭으로 계속 허용한다(백엔드 무중단 전환용).
-KitType = Literal["BUSINESS_CARD", "PRODUCT_THUMBNAIL", "BOTTLE"]
+#
+# THUMBNAIL은 DB와 백엔드가 실제로 쓰는 값이다. 이 별칭이 없던 동안에는
+# BrandKitProcessor가 보내는 값을 여기서 422로 거절해, BI 브랜드킷(제품 썸네일)
+# 생성이 전부 실패했다.
+#
+#   chk_kit_type CHECK (kit_type IN ('BUSINESS_CARD','THUMBNAIL'))     -- V22
+#   BrandKitProcessor: request.put("kit_type", kit.getKitType().name())
+#
+# DB CHECK가 계약의 출처이므로 그 두 값은 반드시 받아야 한다.
+# CHECK를 바꾸면 이 표와 tests/test_brand_kit_type_contract.py도 같이 바꿀 것.
+KitType = Literal["BUSINESS_CARD", "PRODUCT_THUMBNAIL", "THUMBNAIL", "BOTTLE"]
+
+# 제품 유형 — 썸네일 상단 라벨과 향후 연출 프리셋 선택에 쓴다.
+ProductCategory = Literal[
+    "CREAM", "SERUM", "TONER", "CLEANSER", "MASK", "SUNCARE", "LIP", "ETC",
+]
+CATEGORY_LABEL = {
+    "CREAM": "크림", "SERUM": "세럼·에센스", "TONER": "토너",
+    "CLEANSER": "클렌저", "MASK": "마스크팩", "SUNCARE": "선케어",
+    "LIP": "립", "ETC": "기타",
+}
+
+# 배경 연출. 제품 사진 없이 로고만으로 만들 수 있는 범위로 한정한다.
+# 제형 텍스처·원료 그래픽 연출은 제품 누끼컷 업로드가 선행되어야 해서 제외했다.
+BackgroundStyle = Literal["SOLID_LIGHT", "TONE_GRADIENT", "SOFT_SHADOW"]
+
+# 판매 채널 가이드라인 대응.
+# 텍스트가 차지하는 면적 비율이 이 값을 넘으면 경고한다. 텍스트를 코드로
+# 렌더링하므로 면적을 정확히 셀 수 있다 — 모델이 그린 글자였다면 못 잰다.
+# 수치는 채널 정책에 따라 달라지므로 상수로 빼둔다.
+TEXT_AREA_LIMIT = 0.20
+HEADLINE_MAX_CHARS = 15
 
 CANONICAL_KIT_TYPE = {
     "BUSINESS_CARD": "BUSINESS_CARD",
     "PRODUCT_THUMBNAIL": "PRODUCT_THUMBNAIL",
-    "BOTTLE": "PRODUCT_THUMBNAIL",
+    "THUMBNAIL": "PRODUCT_THUMBNAIL",  # DB·백엔드 표기 (chk_kit_type)
+    "BOTTLE": "PRODUCT_THUMBNAIL",     # 백엔드 요청서 최초 표기
 }
 
-# 산출물 규격 — 명함은 국내 표준 90x50mm를 300dpi로, 썸네일은 기획서 명시값.
+# 산출물 규격.
+#
+# 명함 규격은 렌더러(business_card.CardLayout)를 단일 기준으로 삼는다. 여기에
+# 숫자를 따로 적어두면 레이아웃을 조정할 때 두 곳이 조용히 어긋난다.
+#
+# 참고: 국내 표준 명함은 90x50mm이고 300dpi로 환산하면 1063x591이다. 현재
+# 레이아웃(1050x600)은 그보다 조금 다르므로, 인쇄 입고를 전제한다면 규격을
+# 맞추는 편이 안전하다 — 담당자와 확인이 필요한 항목.
+def _card_size() -> tuple:
+    from app.services.business_card import CardLayout
+
+    layout = CardLayout()
+    return (layout.width, layout.height)
+
+
 KIT_SIZE = {
-    "BUSINESS_CARD": (1063, 591),
+    "BUSINESS_CARD": _card_size(),
     "PRODUCT_THUMBNAIL": (1000, 1000),
 }
 
@@ -56,6 +102,22 @@ class BrandKitRequest(BaseModel):
     # 두고, 없으면 회사명만 넣은 브랜드 카드로 합성한 뒤 preliminary=True로 표시한다.
     card_info: Optional[CardInfo] = Field(None, description="명함에 인쇄할 사용자 정보")
     product_name: Optional[str] = Field(None, max_length=60, description="썸네일 하단 문구(생략 가능)")
+
+    # --- 제품 썸네일 옵션 (전부 선택. 없으면 기존 동작 그대로) ---
+    category: Optional[ProductCategory] = Field(
+        None, description="제품 유형. 썸네일 상단 라벨로 표기한다"
+    )
+    background_style: BackgroundStyle = Field(
+        "TONE_GRADIENT", description="썸네일 배경 연출"
+    )
+    headline: Optional[str] = Field(
+        None,
+        max_length=HEADLINE_MAX_CHARS,
+        description=(
+            "핵심 카피. 판매 채널 가이드라인상 텍스트 비중 제한이 있어 짧게 제한한다. "
+            f"{HEADLINE_MAX_CHARS}자 이내"
+        ),
+    )
 
     @property
     def canonical_kit_type(self) -> str:

@@ -6,6 +6,14 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 from app.services.prompt_service import _normalize_survey, _normalize_tone
 
+_TONE_TEXT_COLOR_MAP = {
+    "친근하고 다정한": "#F39BBD",
+    "전문적이고 신뢰감 있는": "#17185B",
+    "감성적이고 따뜻한": "#D29474",
+    "유니크하고 트렌디한": "#171713",
+    "미니얼하고 직관적인": "#396FC8",
+}
+
 # LOGO_FONT_PATH 환경변수가 없을 때 순서대로 시도할 폰트 후보(굵기별).
 # 배포 컨테이너(Linux)와 로컬 개발(Windows) 양쪽을 커버하기 위해 여러 경로를 둔다.
 # 한글 브랜드명을 지원하려면 이 중 하나가 실제로 존재해야 한다 — 배포 환경에는
@@ -271,6 +279,26 @@ def _adjust_for_contrast(rgb: tuple, bg_rgb: tuple) -> tuple:
     return tuple(round(c * (1 - t)) for c in rgb)
 
 
+def _composite_on_white(image: Image.Image) -> Image.Image:
+    """투명 배경을 흰색 위에 합성해 RGB로 만든다.
+
+    logo_gen_service.strip_background()가 SVG 배경 path를 제거해 투명 배경을
+    돌려준다(다운로드·색 치환 편집용). 그 이미지를 그대로 convert("RGB")하면
+    투명 픽셀이 (0,0,0)이 되고, 아래 _flatten_background는 모서리 색으로 배경을
+    추정하므로 캔버스 전체를 검정으로 칠해버린다(실측 확인됨 — 선 스타일 결과의
+    86%가 검정). 알파가 있으면 흰색과 먼저 합성한다.
+    """
+    has_alpha = image.mode in ("RGBA", "LA") or (
+        image.mode == "P" and "transparency" in image.info
+    )
+    if not has_alpha:
+        return image.convert("RGB")
+    rgba = image.convert("RGBA")
+    canvas = Image.new("RGB", rgba.size, (255, 255, 255))
+    canvas.paste(rgba, mask=rgba.getchannel("A"))
+    return canvas
+
+
 def _flatten_background(logo: Image.Image, thresh: int = 40):
     """네 모서리에 닿아있는 배경 영역을 찾아, 그 배경의 실제 평균색으로 균일하게
     정리한다. 반환값은 (정리된 이미지, 배경색 RGB 튜플).
@@ -283,7 +311,7 @@ def _flatten_background(logo: Image.Image, thresh: int = 40):
     블러링한 사본을 쓰고(노이즈로 인한 연결 끊김 방지), 실제 색 교체는 원본
     선명한 이미지 위에 그 영역(마스크)만큼만 적용해 심볼 디테일은 그대로 둔다.
     """
-    rgb = logo.convert("RGB")
+    rgb = _composite_on_white(logo)
     w, h = rgb.size
     corners = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
     corner_colors = [rgb.getpixel(c) for c in corners]
@@ -309,6 +337,76 @@ def _foreground_bbox(rgb: Image.Image, bg_rgb: tuple, thresh: int = 24):
     diff = ImageChops.difference(rgb, bg).convert("L")
     mask = diff.point(lambda p: 255 if p > thresh else 0)
     return mask.getbbox()
+
+
+# 락업(lockup) 규격 — 심볼 크기와 여백을 캔버스 기준으로 고정한다.
+#
+# 생성 모델은 마크를 매번 다른 크기로 그려 준다. 어떤 시안은 캔버스를 꽉 채우고
+# 어떤 시안은 가운데 조그맣게 나오는데, 그 상태로 브랜드명을 붙이면 시안마다
+# 심볼:글자 비율이 제각각이라 "대충 얹은" 인상이 된다. 잘 만든 로고가 정돈돼
+# 보이는 이유의 상당 부분은 이 비율과 여백이 고정돼 있기 때문이다.
+#
+# 그래서 심볼을 잘라내 캔버스 대비 고정 비율로 다시 앉힌다. 값은 상용 뷰티 브랜드
+# 락업의 통상 비율에서 가져왔다 — 심볼 높이 38%, 상단 여백 13%, 심볼 최대 폭 68%.
+LOCKUP_CANVAS_PX = 1024
+LOCKUP_SYMBOL_HEIGHT_RATIO = 0.38
+LOCKUP_SYMBOL_MAX_WIDTH_RATIO = 0.68
+LOCKUP_TOP_MARGIN_RATIO = 0.13
+
+# 기본값 on. 끄면 정규화 없이 예전 배치를 그대로 쓴다(A/B 비교용).
+LOCKUP_ENABLED = os.environ.get("LOGO_LOCKUP", "on").strip().lower() not in (
+    "off", "0", "false", "no",
+)
+
+
+def normalize_lockup(flattened: Image.Image, bg_rgb: tuple):
+    """심볼을 고정 비율로 리스케일해 정사각 캔버스 상단에 앉힌다.
+
+    반환: (캔버스, 심볼 바운딩 박스). 전경을 못 찾으면 원본을 그대로 돌려준다.
+    """
+    bbox = _foreground_bbox(flattened, bg_rgb)
+    if not bbox:
+        return flattened, (0, 0, flattened.width, flattened.height)
+
+    symbol = flattened.crop(bbox)
+    if symbol.width < 2 or symbol.height < 2:
+        return flattened, bbox
+
+    canvas_px = LOCKUP_CANVAS_PX
+    scale = (canvas_px * LOCKUP_SYMBOL_HEIGHT_RATIO) / symbol.height
+    max_w = canvas_px * LOCKUP_SYMBOL_MAX_WIDTH_RATIO
+    if symbol.width * scale > max_w:
+        scale = max_w / symbol.width
+
+    new_w = max(1, round(symbol.width * scale))
+    new_h = max(1, round(symbol.height * scale))
+    resized = symbol.resize((new_w, new_h), Image.LANCZOS)
+
+    canvas = Image.new("RGB", (canvas_px, canvas_px), bg_rgb)
+    x = (canvas_px - new_w) // 2
+    y = round(canvas_px * LOCKUP_TOP_MARGIN_RATIO)
+    canvas.paste(resized, (x, y))
+    return canvas, (x, y, x + new_w, y + new_h)
+
+
+def recenter_lockup(canvas: Image.Image, bg_rgb: tuple) -> Image.Image:
+    """심볼+워드마크를 한 덩어리로 보고 캔버스 정중앙에 다시 앉힌다.
+
+    심볼을 상단 고정 여백에 놓고 그 아래 글자를 붙이면, 글자 길이에 따라 아래
+    여백만 남아 무게중심이 위로 쏠린다. 위아래 여백이 같아야 액자에 넣은 것처럼
+    보인다 — 레퍼런스 로고들이 정돈돼 보이는 이유 중 하나다.
+    """
+    bbox = _foreground_bbox(canvas, bg_rgb)
+    if not bbox:
+        return canvas
+    _, top, _, bottom = bbox
+    content_h = bottom - top
+    if content_h <= 0 or content_h >= canvas.height:
+        return canvas
+    out = Image.new("RGB", canvas.size, bg_rgb)
+    strip = canvas.crop((0, top, canvas.width, bottom))
+    out.paste(strip, (0, (canvas.height - content_h) // 2))
+    return out
 
 
 def _dominant_color(rgb: Image.Image, bg_rgb: tuple) -> str:
@@ -389,9 +487,12 @@ def compose_logo_with_text(
         return logo.convert("RGBA")
 
     flattened, bg_rgb = _flatten_background(logo)
+    if LOCKUP_ENABLED:
+        flattened, bbox = normalize_lockup(flattened, bg_rgb)
+    else:
+        bbox = _foreground_bbox(flattened, bg_rgb) or (0, 0, *flattened.size)
     width, height = flattened.size
 
-    bbox = _foreground_bbox(flattened, bg_rgb) or (0, 0, width, height)
     left, top, right, bottom = bbox
     symbol_h = max(bottom - top, round(height * 0.3))
     symbol_center_x = (left + right) / 2
@@ -464,6 +565,8 @@ def compose_logo_with_text(
             draw.text((cursor_x, text_y), ch, font=font, fill=resolved_color)
             cursor_x += probe.textlength(ch, font=font) + letter_spacing
 
+    if LOCKUP_ENABLED:
+        canvas = recenter_lockup(canvas, bg_rgb)
     return canvas.convert("RGBA")
 
 
@@ -542,6 +645,13 @@ def _wants_text_overlay(survey: dict, style_key: str, brand_name: str) -> bool:
     if style_key == "심볼" or not brand_name:
         return False
 
+    # 모델이 워드마크까지 그린 경우엔 우리가 또 얹으면 브랜드명이 두 번 나온다
+    # (실측 확인됨 - brief 프롬프트로 바꾼 뒤 "Tree"가 두 번 찍혔다).
+    from app.services.prompt_service import model_draws_wordmark
+
+    if model_draws_wordmark(survey):
+        return False
+
     explicit = survey.get("include_brand_name_in_logo")
     if explicit is None:
         explicit = survey.get("show_text_in_logo")
@@ -551,8 +661,25 @@ def _wants_text_overlay(survey: dict, style_key: str, brand_name: str) -> bool:
     return style_key in ("워드마크", "레터마크", "혼합형")
 
 
+def _resolve_text_color(survey: dict, tone: str) -> str:
+    """Choose text color from explicit, manual, then tone-derived palette values."""
+    explicit = survey.get("text_color")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+
+    manual = survey.get("color_manual") or survey.get("colors")
+    if isinstance(manual, str):
+        manual = [manual]
+    if manual:
+        first = str(manual[0]).strip()
+        if first:
+            return first
+
+    return _TONE_TEXT_COLOR_MAP.get(tone, "#1a1a1a")
+
+
 def compose_final_logo(
-    symbol: Image.Image, survey: dict, variant_index: Optional[int] = None
+    symbol: Optional[Image.Image], survey: dict, variant_index: Optional[int] = None
 ) -> Image.Image:
     """생성 모델이 만든 심볼과 설문 응답을 받아 최종 로고 1장을 만든다.
 
@@ -569,12 +696,27 @@ def compose_final_logo(
     style_key = survey.get("style", "심볼")
     brand_name = " ".join((survey.get("brand_name") or "").strip().split())
 
+    # 워드마크·레터마크는 원격 심볼 없이 로컬 타이포그래피로 완성한다.
+    # _wants_text_overlay()는 모델이 워드마크를 직접 그리는지 여부를 판단하는
+    # 함수라서 이 경로를 먼저 처리하지 않으면 symbol=None을 배경 평탄화기에
+    # 넘기게 된다(실제 생성 라우트도 이 함수를 None으로 호출한다).
+    if style_key in ("워드마크", "레터마크"):
+        tone = survey.get("tone", "")
+        return compose_logo(
+            None,
+            brand_name,
+            style=style_key,
+            text_color=_resolve_text_color(survey, tone),
+            tone=tone,
+            variant_index=variant_index,
+        )
+
     if not _wants_text_overlay(survey, style_key, brand_name):
         flattened, _ = _flatten_background(symbol)
         return flattened.convert("RGBA")
 
-    text_color = survey.get("text_color")
     tone = survey.get("tone", "")
+    text_color = _resolve_text_color(survey, tone)
     return compose_logo(
         symbol, brand_name, style=style_key, text_color=text_color, tone=tone,
         variant_index=variant_index,

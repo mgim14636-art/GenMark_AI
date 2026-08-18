@@ -1,4 +1,4 @@
--- Disposable local-db schema only. Production changes must use Flyway V1-V19.
+-- Disposable local-db schema only. Production changes must use Flyway V1-V25.
 CREATE DATABASE IF NOT EXISTS `genmark_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `genmark_db`;
 
@@ -36,14 +36,23 @@ CREATE TABLE IF NOT EXISTS ci_project (
     company_name VARCHAR(150) NULL,
     core_values VARCHAR(300) NULL,
     tone VARCHAR(100) NOT NULL DEFAULT 'friendly',
+    color_mode VARCHAR(20) NOT NULL DEFAULT 'TONE',
     color_1 VARCHAR(7) NULL,
     color_2 VARCHAR(7) NULL,
     color_3 VARCHAR(7) NULL,
     color_4 VARCHAR(7) NULL,
     logo_style VARCHAR(50) NOT NULL DEFAULT 'combination',
+    logo_shape VARCHAR(100) NULL,
     additional_requirements VARCHAR(300) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT chk_ci_project_status CHECK (status IN ('DRAFT', 'BRIEF_READY', 'GENERATING', 'RESULT_READY', 'ANALYZING', 'COMPLETED')),
+    CONSTRAINT chk_ci_current_step CHECK (current_step BETWEEN 1 AND 5),
+    CONSTRAINT chk_ci_color_mode CHECK (color_mode IN ('TONE', 'MANUAL')),
+    CONSTRAINT chk_ci_color_1 CHECK (color_1 IS NULL OR color_1 REGEXP '^#[0-9A-Fa-f]{6}$'),
+    CONSTRAINT chk_ci_color_2 CHECK (color_2 IS NULL OR color_2 REGEXP '^#[0-9A-Fa-f]{6}$'),
+    CONSTRAINT chk_ci_color_3 CHECK (color_3 IS NULL OR color_3 REGEXP '^#[0-9A-Fa-f]{6}$'),
+    CONSTRAINT chk_ci_color_4 CHECK (color_4 IS NULL OR color_4 REGEXP '^#[0-9A-Fa-f]{6}$'),
     CONSTRAINT fk_ci_project_member FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE RESTRICT,
     INDEX idx_ci_project_member (member_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -62,14 +71,24 @@ CREATE TABLE IF NOT EXISTS bi_project (
     brand_description VARCHAR(300) NULL,
     target_age VARCHAR(20) NOT NULL DEFAULT '전 연령층',
     tone VARCHAR(100) NOT NULL DEFAULT 'friendly',
+    color_mode VARCHAR(20) NOT NULL DEFAULT 'TONE',
     color_1 VARCHAR(7) NULL,
     color_2 VARCHAR(7) NULL,
     color_3 VARCHAR(7) NULL,
     color_4 VARCHAR(7) NULL,
     logo_style VARCHAR(50) NOT NULL DEFAULT 'combination',
+    logo_shape VARCHAR(100) NULL,
     additional_requirements VARCHAR(300) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT chk_bi_project_status CHECK (status IN ('DRAFT', 'BRIEF_READY', 'GENERATING', 'RESULT_READY', 'ANALYZING', 'COMPLETED')),
+    CONSTRAINT chk_bi_current_step CHECK (current_step BETWEEN 1 AND 6),
+    CONSTRAINT chk_bi_target_age CHECK (target_age IN ('10~20', '30~40', '50~60', '전 연령층')),
+    CONSTRAINT chk_bi_color_mode CHECK (color_mode IN ('TONE', 'MANUAL')),
+    CONSTRAINT chk_bi_color_1 CHECK (color_1 IS NULL OR color_1 REGEXP '^#[0-9A-Fa-f]{6}$'),
+    CONSTRAINT chk_bi_color_2 CHECK (color_2 IS NULL OR color_2 REGEXP '^#[0-9A-Fa-f]{6}$'),
+    CONSTRAINT chk_bi_color_3 CHECK (color_3 IS NULL OR color_3 REGEXP '^#[0-9A-Fa-f]{6}$'),
+    CONSTRAINT chk_bi_color_4 CHECK (color_4 IS NULL OR color_4 REGEXP '^#[0-9A-Fa-f]{6}$'),
     CONSTRAINT fk_bi_project_member FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE RESTRICT,
     INDEX idx_bi_project_member (member_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -90,6 +109,11 @@ CREATE TABLE IF NOT EXISTS member_surveys (
     member_id BIGINT PRIMARY KEY,
     completed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     credited BOOLEAN NOT NULL DEFAULT FALSE,
+    rating TINYINT NULL,
+    improvements_json TEXT NULL,
+    comment VARCHAR(500) NULL,
+    survey_version SMALLINT NOT NULL DEFAULT 1,
+    CONSTRAINT chk_survey_rating CHECK (rating IS NULL OR rating IN (1, 5)),
     CONSTRAINT fk_survey_member FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -127,6 +151,7 @@ CREATE TABLE IF NOT EXISTS logo_generations (
         (ci_project_id IS NOT NULL AND bi_project_id IS NULL) OR
         (ci_project_id IS NULL AND bi_project_id IS NOT NULL)
     ),
+    CONSTRAINT chk_generation_status CHECK (status IN ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED')),
     CONSTRAINT uq_ci_generation_idempotency UNIQUE (ci_project_id, idempotency_key),
     CONSTRAINT uq_bi_generation_idempotency UNIQUE (bi_project_id, idempotency_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -146,6 +171,7 @@ CREATE TABLE IF NOT EXISTS logo_candidates (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_candidate_generation FOREIGN KEY (generation_id) REFERENCES logo_generations(id) ON DELETE CASCADE,
     CONSTRAINT uq_candidate_order UNIQUE (generation_id, candidate_order),
+    CONSTRAINT chk_candidate_order CHECK (candidate_order BETWEEN 1 AND 4),
     INDEX idx_candidate_pinned (pinned_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -170,6 +196,10 @@ CREATE TABLE IF NOT EXISTS brand_kits (
     kit_type VARCHAR(20) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'QUEUED',
     storage_key VARCHAR(500) NULL,
+    render_spec_json TEXT NULL,
+    render_spec_hash CHAR(64) NULL,
+    preliminary BOOLEAN NOT NULL DEFAULT FALSE,
+    warnings_json TEXT NULL,
     error_code VARCHAR(50) NULL,
     error_message TEXT NULL,
     started_at DATETIME NULL,
@@ -178,7 +208,20 @@ CREATE TABLE IF NOT EXISTS brand_kits (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_kit_candidate FOREIGN KEY (candidate_id) REFERENCES logo_candidates(id) ON DELETE CASCADE,
     CONSTRAINT chk_kit_type CHECK (kit_type IN ('BUSINESS_CARD', 'THUMBNAIL')),
+    INDEX idx_kit_render_spec (candidate_id, kit_type, render_spec_hash, status),
     INDEX idx_kit_candidate (candidate_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS business_card_infos (
+    brand_kit_id BIGINT PRIMARY KEY,
+    name VARCHAR(40) NOT NULL,
+    title VARCHAR(40) NULL,
+    company VARCHAR(60) NULL,
+    phone VARCHAR(40) NULL,
+    email VARCHAR(80) NULL,
+    address VARCHAR(120) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_business_card_info_kit FOREIGN KEY (brand_kit_id) REFERENCES brand_kits(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS trademark_analyses (
@@ -195,7 +238,10 @@ CREATE TABLE IF NOT EXISTS trademark_analyses (
     completed_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_analysis_candidate FOREIGN KEY (candidate_id) REFERENCES logo_candidates(id) ON DELETE CASCADE
+    CONSTRAINT fk_analysis_candidate FOREIGN KEY (candidate_id) REFERENCES logo_candidates(id) ON DELETE CASCADE,
+    CONSTRAINT chk_analysis_status CHECK (status IN ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED')),
+    CONSTRAINT chk_analysis_similarity CHECK (max_similarity IS NULL OR max_similarity BETWEEN 0 AND 100),
+    CONSTRAINT chk_analysis_risk CHECK (risk_level IS NULL OR risk_level IN ('SAFE', 'MODERATE', 'CAUTION'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS trademark_matches (
@@ -207,6 +253,8 @@ CREATE TABLE IF NOT EXISTS trademark_matches (
     category VARCHAR(100) NULL,
     similarity INT NOT NULL,
     image_path VARCHAR(500) NULL,
+    note TEXT NULL,
     CONSTRAINT fk_match_analysis FOREIGN KEY (analysis_id) REFERENCES trademark_analyses(id) ON DELETE CASCADE,
-    CONSTRAINT uq_match_rank UNIQUE (analysis_id, match_rank)
+    CONSTRAINT uq_match_rank UNIQUE (analysis_id, match_rank),
+    CONSTRAINT chk_match_similarity CHECK (similarity BETWEEN 0 AND 100)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

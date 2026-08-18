@@ -1,4 +1,4 @@
-import { AuthError, apiRequest, apiRequestWithToken, downloadAuthenticatedFileWithToken } from '../auth'
+import { AuthError, apiRequest, apiRequestWithToken, apiTextRequest, downloadAuthenticatedFile, downloadAuthenticatedFileWithToken } from '../auth'
 
 export type OnboardingResponse = {
   completed: boolean
@@ -24,8 +24,9 @@ export type ProjectInput = {
   tone?: string
   colorMode?: string
   colors?: string[]
+  paletteReplace?: boolean
   logoStyle?: string
-  includeBrandName?: boolean
+  logoShape?: string
   additionalRequirements?: string
 }
 
@@ -55,6 +56,8 @@ export type LogoCandidate = {
   id: string
   order: number
   storageKey: string
+  svgUrl: string | null
+  svgEdited: boolean
   mimeType: string
   width: number | null
   height: number | null
@@ -93,13 +96,46 @@ export type SurveyStatus = {
   creditBalance: number
 }
 
+export type SurveyImprovement =
+  | '로고 생성·재생성'
+  | '브랜드 맞춤 로고'
+  | '로고 수정'
+  | '유사 상표 확인'
+  | '로고 저장·활용'
+  | '기타'
+
+export type SurveySubmitInput = {
+  rating: 1 | 5
+  improvements?: SurveyImprovement[]
+  comment?: string
+}
+
 export type BrandKit = {
   id: string
+  candidateId: string
+  projectId: string
   kitType: 'BUSINESS_CARD' | 'THUMBNAIL'
   status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
   storageKey: string | null
+  storageKeys?: string[]
   errorCode: string | null
   errorMessage?: string | null
+  preliminary?: boolean
+  warnings?: string[]
+}
+
+export type BusinessCardInfoInput = {
+  name: string
+  title?: string
+  company?: string
+  phone?: string
+  email?: string
+  address?: string
+}
+
+export type BrandKitCreateInput = {
+  kitType: BrandKit['kitType']
+  cardInfo?: BusinessCardInfoInput
 }
 
 export type AdminLoginResult = {
@@ -153,6 +189,8 @@ export type TrademarkMatch = {
   category: string
   similarity: number
   imagePath: string | null
+  imageUrl?: string
+  note?: string | null
 }
 
 export const getLogoCandidateImageUrl = (storageKey: string) => {
@@ -190,27 +228,49 @@ type BackendProjectResponse = {
   brandDescription?: string | null
   targetAge?: string | null
   tone: string | null
+  colorMode: string | null
   colors: string[] | null
   logoStyle: string | null
+  logoShape: string | null
   additionalRequirements: string | null
   createdAt: string
   updatedAt: string
 }
 
-const colorFields = (colors: string[] | undefined) => ({
-  color1: colors?.[0],
-  color2: colors?.[1],
-  color3: colors?.[2],
-  color4: colors?.[3],
-})
+const normalizeHexColor = (color: string | null | undefined) => {
+  if (color == null) return color
+  const normalized = color.trim().toUpperCase()
+  return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : color
+}
+
+const colorFields = (colors: string[] | undefined, replace = false) => {
+  if (replace) {
+    return {
+      color1: normalizeHexColor(colors?.[0] ?? null),
+      color2: normalizeHexColor(colors?.[1] ?? null),
+      color3: normalizeHexColor(colors?.[2] ?? null),
+      color4: normalizeHexColor(colors?.[3] ?? null),
+    }
+  }
+
+  return {
+    ...(colors?.[0] !== undefined ? { color1: normalizeHexColor(colors[0]) } : {}),
+    ...(colors?.[1] !== undefined ? { color2: normalizeHexColor(colors[1]) } : {}),
+    ...(colors?.[2] !== undefined ? { color3: normalizeHexColor(colors[2]) } : {}),
+    ...(colors?.[3] !== undefined ? { color4: normalizeHexColor(colors[3]) } : {}),
+  }
+}
 
 const toCiProjectRequest = (input: ProjectInput) => ({
   industry: input.industry,
   companyName: input.companyName,
   coreValues: input.brandValuesText ?? input.companyMotto ?? input.brandValues?.join(', '),
   tone: input.tone,
-  ...colorFields(input.colors),
+  colorMode: input.colorMode,
+  paletteReplace: input.paletteReplace,
+  ...colorFields(input.colors, input.paletteReplace === true),
   logoStyle: input.logoStyle,
+  logoShape: input.logoShape,
   additionalRequirements: input.additionalRequirements,
 })
 
@@ -223,8 +283,11 @@ const toBiProjectRequest = (input: ProjectInput) => ({
   brandDescription: input.brandValuesText ?? input.companyMotto,
   targetAge: input.targetAge,
   tone: input.tone,
-  ...colorFields(input.colors),
+  colorMode: input.colorMode,
+  paletteReplace: input.paletteReplace,
+  ...colorFields(input.colors, input.paletteReplace === true),
   logoStyle: input.logoStyle,
+  logoShape: input.logoShape,
   additionalRequirements: input.additionalRequirements,
 })
 
@@ -238,8 +301,10 @@ const normalizeCiProject = (project: BackendProjectResponse): ProjectResponse =>
   companyMotto: project.coreValues ?? undefined,
   brandValuesText: project.coreValues ?? undefined,
   tone: project.tone ?? undefined,
+  colorMode: project.colorMode ?? undefined,
   colors: project.colors ?? undefined,
   logoStyle: project.logoStyle ?? undefined,
+  logoShape: project.logoShape ?? undefined,
   additionalRequirements: project.additionalRequirements ?? undefined,
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
@@ -257,8 +322,10 @@ const normalizeBiProject = (project: BackendProjectResponse): ProjectResponse =>
   companyMotto: project.brandDescription ?? undefined,
   targetAge: project.targetAge ?? undefined,
   tone: project.tone ?? undefined,
+  colorMode: project.colorMode ?? undefined,
   colors: project.colors ?? undefined,
   logoStyle: project.logoStyle ?? undefined,
+  logoShape: project.logoShape ?? undefined,
   additionalRequirements: project.additionalRequirements ?? undefined,
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
@@ -312,7 +379,13 @@ export const projectsApi = {
     headers: { 'Idempotency-Key': idempotencyKey },
   }),
   getGeneration: (projectId: string, generationId: string) => apiRequest<LogoGeneration>(`/projects/${projectId}/logo-generations/${generationId}`),
+  getLatestCandidates: (projectId: string) => apiRequest<LogoCandidate[]>(`/projects/${projectId}/logo-candidates`),
   getCandidates: (projectId: string, generationId: string) => apiRequest<LogoCandidate[]>(`/projects/${projectId}/logo-generations/${generationId}/logo-candidates`),
+  getCandidateSvg: (svgUrl: string) => apiTextRequest(svgUrl),
+  saveCandidateSvg: (svgUrl: string, svg: string) => apiTextRequest(svgUrl, {
+    method: 'PUT',
+    body: JSON.stringify({ svg }),
+  }),
   selectCandidate: (projectId: string, candidateId: string) => apiRequest<LogoCandidate>(`/projects/${projectId}/logo-candidates/${candidateId}/select`, {
     method: 'POST',
   }),
@@ -325,10 +398,20 @@ export const projectsApi = {
   downloadCandidate: (projectId: string, candidateId: string) => apiRequest<DownloadRecord>(`/projects/${projectId}/logo-candidates/${candidateId}/download`, {
     method: 'POST',
   }),
-  requestBrandKit: (projectId: string, candidateId: string) => apiRequest<BrandKit>(`/projects/${projectId}/logo-candidates/${candidateId}/brand-kits`, {
+  requestBrandKit: (projectId: string, candidateId: string, input?: BrandKitCreateInput) => apiRequest<BrandKit>(`/projects/${projectId}/logo-candidates/${candidateId}/brand-kits`, {
     method: 'POST',
+    body: input ? JSON.stringify(input) : undefined,
   }),
-  getBrandKit: (projectId: string, candidateId: string) => apiRequest<BrandKit>(`/projects/${projectId}/logo-candidates/${candidateId}/brand-kits`),
+  getLatestBrandKit: async (projectId: string, candidateId: string) => {
+    const kits = await apiRequest<BrandKit[]>(`/projects/${projectId}/logo-candidates/${candidateId}/brand-kits`)
+    return kits[0] ?? null
+  },
+  getBrandKit: (projectId: string, candidateId: string, brandKitId: string) => apiRequest<BrandKit>(
+    `/projects/${projectId}/logo-candidates/${candidateId}/brand-kits/${brandKitId}`,
+  ),
+  downloadBrandKit: (projectId: string, candidateId: string, brandKitId: string) => downloadAuthenticatedFile(
+    `/projects/${projectId}/logo-candidates/${candidateId}/brand-kits/${brandKitId}/download`,
+  ),
   createAnalysis: (projectId: string) => apiRequest<TrademarkAnalysis>(`/projects/${projectId}/trademark-analyses`, {
     method: 'POST',
   }),
@@ -339,10 +422,12 @@ export const projectsApi = {
 export const meApi = {
   getCredits: () => apiRequest<{ balance: number }>('/me/credits'),
   getSurvey: () => apiRequest<SurveyStatus>('/me/survey'),
-  submitSurvey: () => apiRequest<SurveyStatus>('/me/survey', {
+  submitSurvey: (input: SurveySubmitInput) => apiRequest<SurveyStatus>('/me/survey', {
     method: 'POST',
+    body: JSON.stringify(input),
   }),
   getPins: () => apiRequest<PinnedLogo[]>('/me/pins'),
+  getBrandKits: () => apiRequest<BrandKit[]>('/me/brand-kits'),
   getDownloads: (type?: 'CI' | 'BI') => apiRequest<DownloadRecord[]>(`/me/downloads${type ? `?type=${type}` : ''}`),
 }
 

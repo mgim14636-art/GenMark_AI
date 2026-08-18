@@ -4,34 +4,84 @@ type AnimatedGalleryProps = {
   children?: ReactNode
 }
 
-const IMAGES_1 = [
-  'https://images.unsplash.com/photo-1529218402470-5dec8fea0761?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1604928141064-207cea6f571f?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1573455494060-c5595004fb6c?w=900&auto=format&fit=crop&q=80',
+const BRAND_CARDS_IMAGE = '/beauty-brand-cards.png'
+const SKINCARE_PRODUCTS_IMAGE = '/beauty-skincare-products.png'
+
+// Each source image is a 4 × 3 contact sheet. Matching cells share the same
+// palette and brand, so a gallery tile can transition between the card and its
+// corresponding product shot without changing the existing gallery movement.
+const IMAGE_COLUMNS = [
+  [0, 5, 10, 3],
+  [1, 6, 9, 4],
+  [2, 7, 8, 11],
 ]
 
-const IMAGES_2 = [
-  'https://images.unsplash.com/photo-1542052125323-e69ad37a47c2?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1564284369929-026ba231f89b?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1532236204992-f5e85c024202?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1493515322954-4fa727e97985?w=900&auto=format&fit=crop&q=80',
-]
-
-const IMAGES_3 = [
-  'https://images.unsplash.com/photo-1528361237150-8a9a7df33035?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1493515322954-4fa727e97985?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=900&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1608875004752-2fdb6a39ba4c?w=900&auto=format&fit=crop&q=80',
+const BRAND_NAMES = [
+  'VELORA', 'VERDALE', 'ROSÉMIA', 'AURION',
+  'MORVAN', 'ELORIS', 'NEVIA', 'YUNOA',
+  'SOLEN', 'VITARA', 'ZENITH', 'AQUELLE',
 ]
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-function GalleryColumn({ images, className, style }: { images: string[]; className: string; style?: CSSProperties }) {
+const frameStyle: CSSProperties = {
+  position: 'relative',
+  flex: '0 0 auto',
+  width: '100%',
+  aspectRatio: '1.72 / 1',
+  overflow: 'hidden',
+  borderRadius: 6,
+  background: '#e9e4df',
+  boxShadow: '0 6px 16px rgb(48 37 104 / .12)',
+}
+
+const getSliceStyle = (tileIndex: number): CSSProperties => {
+  const column = tileIndex % 4
+  const row = Math.floor(tileIndex / 4)
+
+  return {
+    position: 'absolute',
+    left: `${column * -100}%`,
+    top: `${-(26.4 + row * 152.9)}%`,
+    display: 'block',
+    width: '400%',
+    maxWidth: 'none',
+    height: 'auto',
+    aspectRatio: 'auto',
+    borderRadius: 0,
+    objectFit: 'fill',
+    boxShadow: 'none',
+    filter: 'none',
+  }
+}
+
+function MatchedGalleryImage({ tileIndex, sequence }: { tileIndex: number; sequence: number }) {
+  const sliceStyle = getSliceStyle(tileIndex)
+
   return (
-    <div className={`animated-gallery-column ${className}`} style={style}>
-      {images.map((image, index) => (
-        <img key={`${image}-${index}`} src={image} alt="도쿄의 브랜드 영감 이미지" loading={index > 1 ? 'lazy' : 'eager'} />
+    <div
+      className="animated-gallery-matched-image"
+      style={frameStyle}
+      role="img"
+      aria-label={`${BRAND_NAMES[tileIndex]} 브랜드 명함과 스킨케어 제품 이미지`}
+    >
+      <img src={BRAND_CARDS_IMAGE} alt="" aria-hidden="true" style={sliceStyle} />
+      <img
+        src={SKINCARE_PRODUCTS_IMAGE}
+        alt=""
+        aria-hidden="true"
+        className="animated-gallery-product-layer"
+        style={{ ...sliceStyle, animationDelay: `${sequence * -1.35}s` }}
+      />
+    </div>
+  )
+}
+
+function GalleryColumn({ tileIndexes, className, sequenceOffset }: { tileIndexes: number[]; className: string; sequenceOffset: number }) {
+  return (
+    <div className={`animated-gallery-column ${className}`}>
+      {tileIndexes.map((tileIndex, index) => (
+        <MatchedGalleryImage key={tileIndex} tileIndex={tileIndex} sequence={sequenceOffset + index} />
       ))}
     </div>
   )
@@ -76,13 +126,30 @@ export default function AnimatedGallery({ children }: AnimatedGalleryProps) {
 
   return (
     <section ref={scrollRef} className="animated-gallery-hero" style={style}>
+      <style>{`
+        @keyframes matched-gallery-crossfade {
+          0%, 36% { opacity: 0; }
+          48%, 88% { opacity: 1; }
+          100% { opacity: 0; }
+        }
+
+        .animated-gallery-product-layer {
+          opacity: 0;
+          animation: matched-gallery-crossfade 16.2s ease-in-out infinite;
+          will-change: opacity;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .animated-gallery-product-layer { animation: none; opacity: .52; }
+        }
+      `}</style>
       {children}
       <div className="animated-gallery-glow" aria-hidden="true" />
       <div className="animated-gallery-sticky">
         <div className="animated-gallery-stage">
-          <GalleryColumn images={IMAGES_1} className="animated-gallery-column-left" />
-          <GalleryColumn images={IMAGES_2} className="animated-gallery-column-center" />
-          <GalleryColumn images={IMAGES_3} className="animated-gallery-column-right" />
+          <GalleryColumn tileIndexes={IMAGE_COLUMNS[0]} className="animated-gallery-column-left" sequenceOffset={0} />
+          <GalleryColumn tileIndexes={IMAGE_COLUMNS[1]} className="animated-gallery-column-center" sequenceOffset={4} />
+          <GalleryColumn tileIndexes={IMAGE_COLUMNS[2]} className="animated-gallery-column-right" sequenceOffset={8} />
         </div>
       </div>
     </section>

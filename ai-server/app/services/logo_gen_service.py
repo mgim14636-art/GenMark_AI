@@ -236,6 +236,172 @@ def strip_background(svg: str) -> str:
 
     return re.sub(r'<path[^>]*\sd="([^"]+)"[^>]*/>', _sub, svg, count=3)
 
+# 흰색 계열은 배경·하이라이트로 쓰이므로 색 통일 대상에서 뺀다. 이걸 칠해버리면
+# 속을 비워 둔 선 로고의 안쪽이 메워지고, 도형에 뚫어 둔 구멍도 막힌다.
+_NEAR_WHITE = re.compile(r"^#(?:fff(?:fff)?|f[ef]f[ef]f[ef])$", re.I)
+
+
+def _is_paintable(value: str) -> bool:
+    v = value.strip().lower()
+    if v in ("none", "transparent", "currentcolor", ""):
+        return False
+    if v.startswith("url("):
+        return False
+    return not _NEAR_WHITE.match(v)
+
+
+_RGB_FUNC = re.compile(r"^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)", re.I)
+
+_CSS_KEYWORDS = {"white": 255.0, "black": 0.0}
+
+
+def _luma(value: str):
+    """색 문자열 -> 밝기(0~255). 파싱 못 하면 None.
+
+    Recraft 벡터 응답은 rgb(255,255,255) 표기를 쓴다 - HEX만 보던 초기 구현이
+    흰 안쪽 면을 흰색으로 인식하지 못해 전부 잉크색으로 칠해버렸다(실측 확인됨,
+    선 로고 4장이 모두 굵은 면 덩어리가 됨). 두 표기를 모두 처리한다.
+    """
+    v = (value or "").strip().lower()
+    if v in _CSS_KEYWORDS:
+        return _CSS_KEYWORDS[v]
+
+    mo = _RGB_FUNC.match(v)
+    if mo:
+        r, g, b = (float(mo.group(i)) for i in (1, 2, 3))
+        return 0.299 * r + 0.587 * g + 0.114 * b
+
+    h = v.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    if len(h) != 6:
+        return None
+    try:
+        r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return None
+    return 0.299 * r + 0.587 * g + 0.114 * b
+
+
+# 이 밝기 이상이면 "안쪽을 비우는 면"으로 보고 흰색으로 만든다.
+# Recraft 벡터는 stroke를 쓰지 않고 선까지 채운 도형으로 그린다. 선 스타일 결과는
+# [바깥 윤곽 도형(잉크) + 안쪽 면(흰색)] 쌍으로 오는데, 안쪽 면까지 지정색으로
+# 칠하면 속이 메워져 면 로고가 된다.
+LIGHT_FILL_LUMA = 205.0
+
+
+def force_single_color(svg: str, hex_color: str) -> str:
+    """SVG의 색을 지정색 + 흰색 두 가지로만 정리한다.
+
+    밝은 색(LIGHT_FILL_LUMA 이상)은 흰색으로, 나머지 잉크는 전부 지정색으로 바꾼다.
+    밝고 어두운 구조는 남기되 색은 하나로 통일하는 게 목적이다.
+
+    단색 지시는 프롬프트로 보장되지 않는다("single stroke color"를 명시해도 모델이
+    보조색을 얹는다). 벡터는 색이 속성값이라 생성 후 확정적으로 바꿀 수 있다.
+    """
+    if not svg or not hex_color:
+        return svg
+    color = hex_color.strip()
+    if not color.startswith("#") or _luma(color) is None:
+        return svg
+
+    def _mapped(value: str):
+        v = value.strip().lower()
+        if v in ("none", "transparent", "currentcolor", ""):
+            return None
+        if v.startswith("url("):
+            # 그라데이션·패턴 참조. 단색으로 통일하는 게 목적이므로 지정색으로
+            # 갈아끼운다. 남겨두면 단색 지정인데 결과에 그라데이션이 남는다.
+            return color
+        lum = _luma(v)
+        if lum is None:
+            return None
+        return "#ffffff" if lum >= LIGHT_FILL_LUMA else color
+
+    def _attr(mo):
+        target = _mapped(mo.group(2))
+        return mo.group(1) + target + mo.group(3) if target else mo.group(0)
+
+    svg = re.sub(r'(\b(?:fill|stroke)=")([^"]*)(")', _attr, svg)
+
+    def _style(mo):
+        target = _mapped(mo.group(2))
+        return mo.group(1) + target if target else mo.group(0)
+
+    return re.sub(r'((?:fill|stroke)\s*:\s*)([^;"}]+)', _style, svg)
+
+
+def force_palette_colors(svg: str, colors: list[str]) -> str:
+    """Map visible SVG inks onto an approved multi-color palette.
+
+    White/transparent holes remain intact. Gradient references are replaced by
+    a solid palette color so downloaded SVGs cannot retain an unapproved fill.
+    """
+    palette = [c.strip() for c in colors if re.fullmatch(r"#[0-9A-Fa-f]{6}", c.strip())]
+    if not svg or len(palette) < 2:
+        return svg
+    index = 0
+
+    def mapped(value: str):
+        nonlocal index
+        value = value.strip().lower()
+        if value in ("", "none", "transparent", "currentcolor"):
+            return None
+        if value.startswith("url("):
+            chosen = palette[index % len(palette)]; index += 1
+            return chosen
+        lum = _luma(value)
+        if lum is None:
+            return None
+        # Recraft often uses a very pale fill for a hole/highlight. Keep that
+        # visual role, but normalize it to white so an arbitrary model color
+        # cannot leak outside the user's approved palette.
+        if lum >= LIGHT_FILL_LUMA:
+            return "#ffffff"
+        chosen = palette[index % len(palette)]; index += 1
+        return chosen
+
+    def attr(match):
+        target = mapped(match.group(2))
+        return match.group(1) + target + match.group(3) if target else match.group(0)
+
+    svg = re.sub(r'(\b(?:fill|stroke)=")([^"]*)(")', attr, svg)
+
+    def style(match):
+        target = mapped(match.group(2))
+        return match.group(1) + target if target else match.group(0)
+
+    return re.sub(r'((?:fill|stroke)\s*:\s*)([^;"}]+)', style, svg)
+
+
+def _colors_of(survey: dict) -> list:
+    """설문에 실제로 담겨 온 색 목록. 로그와 판정이 같은 값을 보게 한다."""
+    colors = survey.get("color_manual") or survey.get("colors")
+    if isinstance(colors, str):
+        colors = [colors]
+    result = []
+    seen = set()
+    for value in (colors or []):
+        color = str(value).strip()
+        if color and color.casefold() not in seen:
+            result.append(color); seen.add(color.casefold())
+    return result
+
+
+def _single_manual_color(survey: dict):
+    """확정된 색이 정확히 하나일 때 그 HEX. 아니면 None.
+
+    color_mode(TONE/MANUAL)는 보지 않는다 - prompt_service._manual_color_names와
+    같은 규칙이어야 한다. 추천 팔레트를 고른 사용자도 색을 하나로 줄일 수 있고,
+    그 경우에도 단색으로 나와야 한다. 두 곳의 판정이 갈리면 프롬프트는 단색이라
+    말하는데 결과는 아닌 상태가 된다.
+    """
+    colors = survey.get("color_manual") or survey.get("colors")
+    if isinstance(colors, str):
+        colors = [colors]
+    colors = _colors_of({"color_manual": colors})
+    return colors[0] if len(colors) == 1 else None
+
 
 def _call_image_api(prompt: str, seed: int | None = None):
     """반환: (PIL 이미지, SVG 문자열 또는 None)"""
@@ -297,7 +463,7 @@ def _call_image_api(prompt: str, seed: int | None = None):
 
 def generate_logo_variants(
     survey: dict,
-    num_variants: int = 4,
+    num_variants: int = 1,
     steps: int = 4,
     variant_offset: int = 0,
 ):
@@ -350,6 +516,28 @@ def generate_logo_variants(
             except Exception as e:
                 errors.append(str(e))
 
+    # 사용자가 색을 딱 하나 골랐다면 모델 결과와 무관하게 그 색으로 통일한다.
+    forced = _single_manual_color(survey)
+    if os.environ.get("LOGO_FORCE_COLOR", "on").strip().lower() in ("off", "0", "false"):
+        forced = None  # A/B 비교용 - 모델 원본 색을 그대로 둔다
+    print(
+        "[logo_gen_service] 색 통일 %s (지정색 %s)"
+        % ("적용" if forced else "미적용", _colors_of(survey)),
+        flush=True,
+    )
+    if forced:
+        for _i, _r in enumerate(results):
+            if _r is None or not _r[1]:
+                continue
+            _fixed = force_single_color(_r[1], forced)
+            results[_i] = (rasterize_svg(_fixed), _fixed)
+    elif len(_colors_of(survey)) >= 2:
+        for _i, _r in enumerate(results):
+            if _r is None or not _r[1]:
+                continue
+            _fixed = force_palette_colors(_r[1], _colors_of(survey))
+            results[_i] = (rasterize_svg(_fixed), _fixed)
+
     variants = [
         {
             "image": r[0],
@@ -372,7 +560,7 @@ def generate_logo_variants(
 
 def generate_logo_from_survey(
     survey: dict,
-    num_variants: int = 4,
+    num_variants: int = 1,
     steps: int = 4,
     variant_offset: int = 0,
 ):

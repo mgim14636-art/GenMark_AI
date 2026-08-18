@@ -33,7 +33,7 @@ public class FastApiTrademarkAiClient implements TrademarkAiClient {
             if (!(raw instanceof List<?> list)) throw new ApiException(ErrorCode.AI_INVALID_RESPONSE);
             List<Match> matches = list.stream().map(item -> toMatch((Map<String, Object>) item)).toList();
             validateScore(max);
-            if (disclaimer == null || disclaimer.isBlank() || matches.size() != topK) {
+            if (disclaimer == null || disclaimer.isBlank() || matches.isEmpty() || matches.size() > topK) {
                 throw new ApiException(ErrorCode.AI_INVALID_RESPONSE);
             }
             return new Result(max, risk, matches, disclaimer);
@@ -48,7 +48,7 @@ public class FastApiTrademarkAiClient implements TrademarkAiClient {
         int similarity = number(value.get("similarity"));
         validateScore(similarity);
         return new Match(string(value.get("applicationNumber")), string(value.get("name")),
-                string(value.get("category")), similarity, string(value.get("imagePath")));
+                string(value.get("category")), similarity, string(value.get("imagePath")), string(value.get("note")));
     }
 
     private int number(Object value) {
