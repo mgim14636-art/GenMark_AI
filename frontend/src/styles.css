@@ -530,8 +530,8 @@
     #fff;
 }
 .logo-result-header { display: flex; align-items: center; justify-content: space-between; min-height: 136px; padding: 0 48px; border-bottom: 1px solid #ece8f7; background: rgb(255 255 255 / .8); }
-.logo-result-brand { display: flex; align-items: center; gap: 13px; color: #7a49e8; font-size: clamp(27px, 3.2vw, 40px); letter-spacing: -.07em; }
-.logo-result-brand span { color: #9b50eb; font-size: 1.25em; line-height: 1; }
+.logo-result-brand { display: flex; align-items: center; gap: 13px; font-size: clamp(27px, 3.2vw, 40px); letter-spacing: -.07em; }
+.logo-result-brand span { font-size: 1.25em; line-height: 1; }
 .logo-result-brand strong { font-weight: 700; }
 .logo-result-help { display: grid; width: 55px; height: 55px; place-items: center; border: 1.5px solid #e3ddf8; border-radius: 50%; color: #4f5871; background: #fff; box-shadow: 0 4px 16px rgb(106 80 179 / .08); font-family: Georgia, serif; font-size: 28px; font-weight: 700; }
 .logo-result-content { width: min(calc(100% - 96px), 804px); margin: 0 auto; padding: 26px 0 46px; text-align: center; }
@@ -1623,6 +1623,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .light-shell { color: #f7f7fb; }
 .main-header { display: flex; align-items: center; justify-content: space-between; width: min(100% - 72px, 1180px); height: 88px; margin: 0 auto; }
 .main-brand { display: inline-flex; align-items: center; gap: 12px; color: #30323d; text-decoration: none; font-size: 22px; font-weight: 600; letter-spacing: -.06em; }
+.brand-mark-accent { color: #0A0A0F; }
 .genmark-logo { display: block; flex: 0 0 auto; object-fit: contain; }
 .brand-emblem { display: block; width: 43px; height: 50px; transform: translateY(1px); }
 .leaf { position: absolute; display: block; width: 17px; height: 27px; border: 2px solid currentColor; border-radius: 100% 0 100% 0; transform-origin: bottom center; }
@@ -1753,8 +1754,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .featured-tag { border: 1px solid rgb(255 255 255 / .62); border-radius: 999px; padding: 6px 12px; font-size: 11px; background: rgb(64 40 156 / .25); }
 .featured-dots, .gallery-dots { display: flex; gap: 14px; align-items: center; }
 .featured-dots { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); }
-.featured-dots span, .gallery-dots span { width: 9px; height: 9px; border-radius: 50%; background: rgb(255 255 255 / .7); }
-.featured-dots span.active, .gallery-dots span.active { background: #ff58c2; box-shadow: 0 0 12px rgb(255 88 194 / .7); }
+.featured-dots span, .featured-dots button, .gallery-dots span { width: 9px; height: 9px; border-radius: 50%; background: rgb(255 255 255 / .7); }
+.featured-dots span.active, .featured-dots button.active, .gallery-dots span.active { background: #ff58c2; box-shadow: 0 0 12px rgb(255 88 194 / .7); }
+.featured-dots button { border: 0; padding: 0; cursor: pointer; transition: transform 140ms ease, background 140ms ease; }
+.featured-dots button:hover { transform: scale(1.2); }
+.featured-dots button:focus-visible { outline: 2px solid #ff58c2; outline-offset: 3px; }
 .hero-create-bar { position: absolute; right: 16px; bottom: 14px; left: 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid rgb(255 255 255 / .65); border-radius: 18px; padding: 14px 20px 14px 24px; background: linear-gradient(100deg, rgb(255 255 255 / .9), rgb(255 255 255 / .72)); box-shadow: 0 12px 36px rgb(39 13 99 / .16), inset 0 1px 0 #fff; backdrop-filter: blur(18px); }
 .hero-create-bar strong, .hero-create-bar span { display: block; }
 .hero-create-bar strong { margin-bottom: 2px; color: #1f2028; font-size: 16px; font-weight: 500; letter-spacing: -.06em; }
@@ -2029,7 +2033,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .featured-korean { margin-bottom: 9px; font-size: 12px; }
   .featured-tag { padding: 5px 9px; font-size: 9px; }
   .featured-dots { bottom: 28px; gap: 7px; }
-  .featured-dots span { width: 7px; height: 7px; }
+  .featured-dots span, .featured-dots button { width: 7px; height: 7px; }
   .hero-create-bar { right: 8px; bottom: 8px; left: 8px; display: block; max-width: calc(100% - 16px); border-radius: 15px; padding: 11px; }
   .hero-create-bar strong { font-size: 14px; }
   .hero-create-bar span { font-size: 17px; }
@@ -8484,7 +8488,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   font-size: 17px;
   font-weight: 750;
   transform: translateY(-8vh);
-  animation: logo-intro-continue-in 520ms 260ms cubic-bezier(.16, 1, .3, 1) both;
+  animation: logo-intro-continue-in 520ms cubic-bezier(.16, 1, .3, 1) both;
   transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
 }
 
@@ -9110,9 +9114,15 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 }
 
 /* Home and login use the same soft, staggered entrance as the choice screen. */
+@property --hero-reveal {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: -18%;
+}
+
 @keyframes home-featured-art-in {
-  from { opacity: 0; transform: scale(1.045); filter: saturate(1.12) brightness(1.04) blur(2px); }
-  to { opacity: 1; transform: scale(1); filter: saturate(1.12) brightness(1.04) blur(0); }
+  from { --hero-reveal: -18%; }
+  to { --hero-reveal: 118%; }
 }
 
 @keyframes home-featured-copy-in {
@@ -9130,7 +9140,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 }
 
 .main-home .featured-art {
-  animation: home-featured-art-in 900ms cubic-bezier(.22, .7, .18, 1) both;
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 calc(var(--hero-reveal) - 18%), transparent var(--hero-reveal), transparent 100%);
+  mask-image: linear-gradient(90deg, #000 0%, #000 calc(var(--hero-reveal) - 18%), transparent var(--hero-reveal), transparent 100%);
+  animation: home-featured-art-in 950ms cubic-bezier(.22, .7, .18, 1) both;
 }
 
 .main-home .featured-lockup {
@@ -9300,7 +9312,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
    Functional loading motion (the orb, dots, and trademark spinner) remains
    active; only the initial slide/fade treatment is disabled here. */
 .main-home,
-.main-home .featured-art,
 .main-home .featured-lockup,
 .main-home .featured-dots,
 .main-home .hero-create-bar,
@@ -9644,6 +9655,17 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   background: transparent;
 }
 
+.main-home .featured-dots span,
+.main-home .featured-dots button {
+  background: rgb(20 20 30 / .18);
+}
+
+.main-home .featured-dots span.active,
+.main-home .featured-dots button.active {
+  background: #ff58c2;
+  box-shadow: 0 0 10px rgb(255 88 194 / .45);
+}
+
 .main-home .featured-lockup {
   top: 34px;
 }
@@ -9852,7 +9874,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
     gap: 6px;
   }
 
-  .main-home .featured-dots span {
+  .main-home .featured-dots span,
+  .main-home .featured-dots button {
     width: 6px;
     height: 6px;
   }
