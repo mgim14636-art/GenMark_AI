@@ -2748,29 +2748,43 @@ function CustomerApp() {
     return (
       <main className="brand-choice-screen">
         <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => choiceBackMode === 'onboarding' ? (setOnboardingStep(2), setMode('onboarding')) : choiceBackMode === 'industry' ? setMode('industry') : setMode('home')} />
-        <section className="brand-choice-content" aria-label="CI와 BI 로고 선택">
+        <section className="brand-choice-content" aria-labelledby="brand-choice-title">
+          <header className="brand-choice-intro">
+            <h1 id="brand-choice-title">어떤 용도의<br /><strong>로고가 필요하신가요?</strong></h1>
+            <p>선택한 종류에 맞춰 다음 질문이 달라져요.</p>
+          </header>
           <div className="brand-choice-list">
-            <article className="brand-choice-card ci-card">
+            {/* 카드 전체가 하나의 버튼이다. 안에 ⓘ 버튼이 들어 있어서
+                <button>으로 감싸면 버튼 중첩이 되므로 role/tabIndex로 만든다. */}
+            <article
+              className="brand-choice-card ci-card"
+              role="button"
+              tabIndex={0}
+              aria-label="기업 · 회사 로고(CI) 만들기"
+              onClick={() => chooseBrandKind('ci')}
+              onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); chooseBrandKind('ci') } }}
+            >
+              <button className="brand-choice-info" type="button" aria-label="CI 설명 보기" onClick={(event) => { event.stopPropagation(); setChoiceInfoModal('ci') }}><Info aria-hidden="true" size={19} strokeWidth={2} /></button>
               <div className="brand-choice-copy">
-                <div className="brand-choice-heading">
-                  <span className="brand-choice-label">회사 · 기업 로고</span>
-                  <button className="brand-choice-info" type="button" aria-label="CI 설명 보기" onClick={() => setChoiceInfoModal('ci')}><Info aria-hidden="true" size={19} strokeWidth={2} /></button>
-                </div>
-                <h2>CI 만들기</h2>
-                <p>회사나 매장 전체를<br />대표하는 로고예요.</p>
-                <button className="brand-choice-cta ci-cta" type="button" onClick={() => chooseBrandKind('ci')}>회사 로고 만들기 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <h2>기업 · 회사 로고<br /><span className="brand-choice-kind">(CI)</span></h2>
+                <p>기업의 신뢰와 정체성을 담은 대표 로고예요.</p>
               </div>
+              <span className="brand-choice-start">이 스타일로 시작하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={2.2} /></span>
             </article>
-            <article className="brand-choice-card bi-card">
+            <article
+              className="brand-choice-card bi-card"
+              role="button"
+              tabIndex={0}
+              aria-label="제품 · 브랜드 로고(BI) 만들기"
+              onClick={() => chooseBrandKind('bi')}
+              onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); chooseBrandKind('bi') } }}
+            >
+              <button className="brand-choice-info" type="button" aria-label="BI 설명 보기" onClick={(event) => { event.stopPropagation(); setChoiceInfoModal('bi') }}><Info aria-hidden="true" size={19} strokeWidth={2} /></button>
               <div className="brand-choice-copy">
-                <div className="brand-choice-heading">
-                  <span className="brand-choice-label">제품 · 브랜드 로고</span>
-                  <button className="brand-choice-info" type="button" aria-label="BI 설명 보기" onClick={() => setChoiceInfoModal('bi')}><Info aria-hidden="true" size={19} strokeWidth={2} /></button>
-                </div>
-                <h2>BI 만들기</h2>
-                <p>특정 화장품 브랜드나 제품 라인을<br />대표하는 로고예요.</p>
-                <button className="brand-choice-cta bi-cta" type="button" onClick={() => chooseBrandKind('bi')}>제품 · 브랜드 로고 만들기 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
+                <h2>제품 · 브랜드 로고<br /><span className="brand-choice-kind">(BI)</span></h2>
+                <p>특정 제품이나 서비스의 매력을 보여주는 로고예요.</p>
               </div>
+              <span className="brand-choice-start">이 스타일로 시작하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={2.2} /></span>
             </article>
           </div>
         </section>

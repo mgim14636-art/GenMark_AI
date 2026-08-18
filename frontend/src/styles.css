@@ -7930,14 +7930,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   padding: 28px 42px 28px 24px;
 }
 
-.brand-choice-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  gap: 14px;
-}
-
 .brand-choice-label {
   padding: 6px 12px;
   border-color: #e9d8ff;
@@ -8357,9 +8349,178 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   padding: 28px 42px 28px 34px;
 }
 
+/* 카드 두 장만 덩그러니 있어서 무슨 화면인지 바로 안 읽혔다 —
+   다른 단계 화면(업종 선택 등)과 같은 형태의 안내 제목을 맨 위에 둔다. */
+/* 업종 선택 화면(.industry-selection-heading)과 같은 형태로 맞춘다 —
+   왼쪽 정렬, 1줄 단색 + 2줄 보라 그라데이션, 아래 회색 한 줄. */
+.brand-choice-intro {
+  margin: 0 0 26px;
+  text-align: start;
+}
+
+.brand-choice-intro h1 {
+  margin: 0;
+  color: #202438;
+  font-size: clamp(32px, 4.2vw, 46px);
+  font-weight: 800;
+  line-height: 1.16;
+  letter-spacing: -.095em;
+}
+
+/* padding-right가 없으면 그라데이션을 글자 모양대로 오려낼 때 마지막 글자
+   (물음표)가 오려내는 범위 밖으로 삐져나가 잘린다. 업종 선택 화면과 동일한 처리. */
+.brand-choice-intro h1 strong {
+  display: inline-block;
+  padding-right: .12em;
+  font-weight: 800;
+  white-space: nowrap;
+  background: linear-gradient(100deg, #7b4be7 0%, #b557e7 48%, #ed67bd 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.brand-choice-intro p {
+  margin: 16px 0 0;
+  color: #726b80;
+  font-size: clamp(16px, 2vw, 19px);
+  letter-spacing: -.08em;
+}
+
+/* 카드가 큰데 글씨가 작아 허전해 보여서, 카드 크기에 맞게 키우고
+   줄 간격·안쪽 여백도 함께 넓힌다. */
+.brand-choice-copy {
+  padding: 32px 34px;
+}
+
 .brand-choice-copy h2 {
-  margin-top: 15px;
-  letter-spacing: -.03em;
+  margin-top: 0;
+  margin-bottom: 14px;
+  font-size: clamp(26px, 2.8vw, 34px);
+  line-height: 1.32;
+  letter-spacing: -.045em;
+  word-spacing: normal;
+}
+
+/* 줄바꿈 위치를 <br>로 박아두면 글자 크기나 폭이 바뀔 때마다 어색해진다.
+   keep-all로 단어 중간이 안 끊기게만 하고, balance로 두 줄 길이를 비슷하게 맞춘다. */
+.brand-choice-copy > p {
+  max-width: 21em;
+  margin: 0;
+  color: #5d6070;
+  font-size: clamp(16px, 1.7vw, 19px);
+  line-height: 1.62;
+  letter-spacing: -.045em;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+
+/* CI는 보라, BI는 분홍 — 두 카드를 구분하는 유일한 색 포인트. */
+.brand-choice-kind {
+  color: #7038db;
+  font-weight: 700;
+}
+
+.bi-card .brand-choice-kind {
+  color: #d2489b;
+}
+
+/* 하단바가 화면에 겹쳐 뜨던 시절의 겹침 방지 여백(104px)이 그대로 남아 있었다.
+   지금은 하단바가 자기 자리를 차지하는 구조라 이 여백은 빈 공간으로만 보인다. */
+.app-shell:has(> .bottom-nav) > main.brand-choice-screen {
+  padding-bottom: 28px !important;
+}
+
+/* 카드 아래 여백이 많이 남아서, 두 카드가 남은 높이를 똑같이 나눠 채우게 한다. */
+.brand-choice-content {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+.brand-choice-list {
+  flex: 1;
+  grid-auto-rows: 1fr;
+}
+
+/* 카드 = 위쪽 글, 아래쪽 꽉 찬 시작 버튼 바. 카드 어디를 눌러도 넘어간다. */
+.brand-choice-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+/* ⓘ는 제목 옆이 아니라 카드 오른쪽 위 모서리에 고정한다. */
+.brand-choice-card .brand-choice-info {
+  position: absolute;
+  z-index: 2;
+  top: 18px;
+  right: 18px;
+}
+
+/* 카드가 화면 높이에 맞춰 늘어나므로, 글이 위에 몰리지 않게 가운데에 둔다. */
+.brand-choice-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.brand-choice-card:hover {
+  border-color: #d9cbf5;
+  box-shadow: 0 18px 40px rgb(44 35 79 / .14);
+  transform: translateY(-2px);
+}
+
+.brand-choice-card:active {
+  transform: translateY(0);
+}
+
+.brand-choice-card:focus-visible {
+  outline: 2px solid #7038db;
+  outline-offset: 3px;
+}
+
+.brand-choice-card.bi-card:hover {
+  border-color: #f2cfe4;
+}
+
+/* 카드 아래를 꽉 채우는 시작 버튼 바. 카드 자체가 버튼이라 이건 <span>으로 두고
+   (버튼 안에 버튼이 들어가는 구조를 피한다) 눌리는 부분을 눈에 보이게만 한다. */
+.brand-choice-start {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 20px;
+  color: #fff;
+  background: linear-gradient(105deg, #7b4be7, #b557e7 55%, #c766d8);
+  font-size: clamp(16px, 1.7vw, 19px);
+  font-weight: 600;
+  letter-spacing: -.05em;
+  transition: filter 180ms ease;
+}
+
+.bi-card .brand-choice-start {
+  background: linear-gradient(105deg, #8a4fe4, #d55bbc 55%, #ed67ad);
+}
+
+.brand-choice-card:hover .brand-choice-start {
+  filter: brightness(1.06);
+}
+
+.brand-choice-start svg {
+  flex: 0 0 auto;
+  transition: transform 180ms ease;
+}
+
+.brand-choice-card:hover .brand-choice-start svg {
+  transform: translateX(3px);
 }
 
 .brand-choice-copy > p {
