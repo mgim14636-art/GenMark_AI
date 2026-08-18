@@ -271,7 +271,7 @@
 .project-card-copy strong { color: #26304a; font-size: 18px; letter-spacing: -.07em; }
 .project-card-copy span { color: #8a91a3; font-size: 14px; letter-spacing: -.05em; }
 .gradient-button { display: inline-flex; align-items: center; justify-content: center; gap: 16px; min-height: 50px; border: 0; border-radius: 14px; padding: 0 22px; color: #fff; background: linear-gradient(100deg, #8752ed, #e660bd); box-shadow: 0 9px 22px rgb(170 78 215 / .2); font-size: 15px; font-weight: 700; letter-spacing: -.06em; }
-.completed-project-card { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 24px; border: 1px solid #eee9f6; border-radius: 22px; padding: 18px; background: #fff; }
+.completed-project-card { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 24px; border-radius: 22px; padding: 18px; background: #fff; box-shadow: 0 3px 12px rgb(82 55 133 / .05); }
 .completed-project-preview { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 178px; overflow: hidden; border-radius: 17px; color: #5f3b90; background: radial-gradient(circle at 50% 30%, #faeaf9, transparent 44%), linear-gradient(145deg, #f0e9ff, #fff); }
 .completed-project-preview img { display: block; width: 100%; height: 178px; object-fit: contain; }
 .completed-project-preview span { color: #bf71ca; }
@@ -298,14 +298,14 @@
 .mypage-empty-state p { margin: 0 0 20px; color: #7d8496; font-size: 14px; }
 .survey-entry-card { display: grid; grid-template-columns: 50px minmax(0, 1fr) 24px; align-items: center; gap: 14px; width: 100%; margin-top: 20px; border: 1px solid #ebe3f7; border-radius: 19px; padding: 17px 21px; color: #8154dd; background: #fff; text-align: left; }
 .pinned-logo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 18px; }
-.pinned-logo-card { overflow: hidden; border: 1px solid #ebe4f6; border-radius: 16px; background: #fff; box-shadow: 0 8px 22px rgb(82 55 133 / .06); }
+.pinned-logo-card { overflow: hidden; border-radius: 16px; background: #fff; box-shadow: 0 3px 12px rgb(82 55 133 / .05); }
 .pinned-logo-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: #faf8ff; }
 .pinned-logo-card div { display: grid; gap: 4px; padding: 11px 13px 13px; }
 .pinned-logo-card strong { color: #283149; font-size: 14px; }
 .pinned-logo-card span { color: #7452bc; font-size: 12px; font-weight: 700; }
 .pinned-logo-card small, .download-history-count, .logo-pin-expiry { color: #858c9e; font-size: 11px; }
 .download-logo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
-.download-logo-card { overflow: hidden; border: 1px solid #ebe4f6; border-radius: 16px; background: #fff; box-shadow: 0 8px 22px rgb(82 55 133 / .06); }
+.download-logo-card { overflow: hidden; border-radius: 16px; background: #fff; box-shadow: 0 3px 12px rgb(82 55 133 / .05); }
 .download-logo-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: #faf8ff; }
 .download-logo-card > div { display: grid; gap: 5px; padding: 11px 13px 13px; }
 .download-logo-card strong { color: #293149; font-size: 14px; }
@@ -1601,6 +1601,17 @@ button, input, select { font: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid rgb(206 77 242 / .35); outline-offset: 3px; }
 
+/* Wide (desktop) browsers render the app inside a fixed-width "app frame",
+   centered on a neutral canvas — matching a mobile-app-in-browser look
+   (e.g. iam-iam.com). Real narrow viewports (phones) are left untouched. */
+@media (min-width: 640px) {
+  body { background: #efecf4; }
+  /* transform gives .app-shell a containing block, so position:fixed children
+     (bottom nav, modals, overlays) stay confined to the frame instead of
+     centering on the real (wide) browser viewport. */
+  .app-shell { max-width: 520px; margin: 0 auto; box-shadow: 0 0 46px rgb(31 16 71 / .07); transform: translateZ(0); }
+}
+
 .app-shell { min-height: 100dvh; overflow-x: hidden; background: #fffdf8; }
 .app-shell:has(> .bottom-nav) {
   min-height: 100dvh;
@@ -1781,7 +1792,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .gallery-track { display: flex; gap: 18px; overflow-x: auto; padding: 2px 2px 12px; scroll-snap-type: x mandatory; scroll-behavior: smooth; cursor: grab; touch-action: pan-y; scrollbar-width: none; }
 .gallery-track.is-dragging { cursor: grabbing; scroll-snap-type: none; scroll-behavior: auto; }
 .gallery-track.is-dragging .gallery-card { user-select: none; }
-.gallery-card { flex: 0 0 calc((100% - 54px) / 4); min-width: 220px; overflow: hidden; border-radius: 20px; background: #fff; box-shadow: 0 10px 26px rgb(25 28 49 / .1); scroll-snap-align: start; }
+.gallery-card { flex: 0 0 calc((100% - 54px) / 4); min-width: 220px; overflow: hidden; border-radius: 20px; background: #fff; box-shadow: 0 3px 12px rgb(25 28 49 / .05); scroll-snap-align: start; }
 .gallery-visual { position: relative; aspect-ratio: 1.12 / 1; overflow: hidden; background-image: linear-gradient(135deg, rgb(38 17 105 / .45), rgb(38 18 92 / .05)), url('/aurora-bubbles.png'); background-size: cover; }
 .gallery-visual::after { display: none; }
   .gallery-visual.beau { background-image: linear-gradient(145deg, rgb(255 163 185 / .38), rgb(90 18 137 / .12)), url('/aurora-bubbles.png'); }
