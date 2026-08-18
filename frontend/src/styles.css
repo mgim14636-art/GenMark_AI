@@ -1644,6 +1644,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   /* 헤더 바로 아래에 배너가 붙어 있어 답답해 보여서 위아래 여백을 준다. */
   .app-shell .main-home { padding-top: 14px; }
   .app-shell .main-home .featured-hero + .curation-section { margin-top: 10px; }
+
+  /* 로그인 제목이 5.2vw로 잡혀 있는데 vw는 앱 프레임(520px)이 아니라 브라우저
+     창 전체(1280px) 기준이라, 좁은 프레임 안에서도 최대값 66px이 그대로 걸려
+     글자가 칸을 꽉 채웠다(양옆 여백 1px). 프레임 폭에 맞춰 다시 잡는다. */
+  .app-shell .login-content h1 { font-size: 44px; letter-spacing: -.05em; }
 }
 
 .app-shell { min-height: 100dvh; overflow-x: hidden; background: #fffdf8; }
@@ -8711,10 +8716,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   letter-spacing: -.08em;
 }
 
+/* 2열로 두면 좁은 폭에서 업종 이름·설명이 잘려서(…) 1열 리스트로 통일한다. */
 .industry-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 13px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
   animation: industry-options-rise 720ms 190ms cubic-bezier(.16, 1, .3, 1) both;
 }
 
@@ -8723,10 +8729,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   grid-template-columns: 46px minmax(0, 1fr) 28px;
   align-items: center;
   gap: 12px;
-  min-height: 116px;
+  min-height: 78px;
   border: 1px solid #e9e0f5;
   border-radius: 18px;
-  padding: 16px 15px;
+  padding: 14px 16px;
   color: #3f4353;
   background: linear-gradient(135deg, rgb(255 255 255 / .96), rgb(253 248 255 / .92));
   box-shadow: 0 9px 24px rgb(108 74 159 / .06), inset 0 1px 0 rgb(255 255 255 / .92);
@@ -8775,23 +8781,18 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   gap: 6px;
 }
 
+/* 1열이라 가로 공간이 넉넉하다 — 잘라내지(…) 않고 그대로 보여준다. */
 .industry-option-copy strong {
-  overflow: hidden;
   color: #343849;
   font-size: 20px;
   font-weight: 750;
   letter-spacing: -.09em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .industry-option-copy small {
-  overflow: hidden;
   color: #8c91a0;
   font-size: 13px;
   letter-spacing: -.07em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .industry-option.selected .industry-option-copy strong { color: #5b36a6; }
@@ -8880,7 +8881,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .industry-selection-heading h1 { font-size: clamp(31px, 8.6vw, 42px); }
   .industry-selection-heading p { margin-top: 13px; font-size: 15px; line-height: 1.45; }
   .industry-options { gap: 10px; }
-  .industry-option { grid-template-columns: 34px minmax(0, 1fr) 24px; min-height: 93px; gap: 9px; border-radius: 16px; padding: 12px 10px; }
+  .industry-option { grid-template-columns: 34px minmax(0, 1fr) 24px; min-height: 72px; gap: 10px; border-radius: 16px; padding: 12px 13px; }
   .industry-option-icon { width: 34px; height: 34px; border-radius: 11px; }
   .industry-option-icon svg { width: 18px; height: 18px; }
   .industry-option-copy { gap: 4px; }
@@ -10292,19 +10293,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
     left: 220px;
   }
 
-  .industry-options {
-    grid-template-columns: 1fr;
-  }
-
-  .industry-option {
-    min-height: 78px;
-  }
-
-  .industry-option-copy small {
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-  }
 
   .final-summary-row {
     grid-template-columns: 27px minmax(72px, auto) minmax(0, 1fr) auto;

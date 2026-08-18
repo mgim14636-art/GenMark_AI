@@ -1,5 +1,5 @@
 import { CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent, lazy, MouseEvent as ReactMouseEvent, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, GraduationCap, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageSquare, Palette, PawPrint, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
+import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageSquare, Palette, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
@@ -21,7 +21,7 @@ type LoginDestination = 'home' | 'industry' | 'choice' | 'mypage'
 type LoginReturnMode = 'hero' | 'home'
 type OnboardingOption = 'online' | 'social' | 'offline'
 type AudienceOption = 'company' | 'owner' | 'hobby' | 'sidejob'
-type IndustryOption = 'beauty' | 'fashion' | 'food' | 'health' | 'tech' | 'education' | 'pet' | 'other'
+type IndustryOption = 'beauty' | 'fashion' | 'food' | 'health' | 'tech' | 'other'
 type CoreValue = 'vegan' | 'lowIrritation' | 'derma' | 'cleanBeauty' | 'natural' | 'premium' | 'sustainable' | 'scientific' | 'reasonable'
 type ToneOption = 'friendly' | 'professional' | 'warm' | 'trendy' | 'minimal'
 type RgbColor = { r: number; g: number; b: number }
@@ -120,8 +120,6 @@ const industryOptions: Array<{ id: IndustryOption; title: string; description: s
   { id: 'food', title: '푸드 · 카페', description: '카페 · 베이커리 · 식품', apiValue: 'FOOD', icon: Utensils },
   { id: 'health', title: '헬스 · 웰니스', description: '피트니스 · 건강 · 요가', apiValue: 'HEALTH_WELLNESS', icon: Heart },
   { id: 'tech', title: '테크', description: 'IT · 앱 · 소프트웨어', apiValue: 'TECH', icon: Laptop },
-  { id: 'education', title: '교육', description: '학원 · 강의 · 교육', apiValue: 'EDUCATION', icon: GraduationCap },
-  { id: 'pet', title: '펫', description: '반려동물 용품 · 서비스', apiValue: 'PET', icon: PawPrint },
   { id: 'other', title: '기타', description: '그 외 업종', apiValue: 'OTHER', icon: Shapes },
 ]
 
