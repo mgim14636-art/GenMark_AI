@@ -54,4 +54,5 @@ ai-server/data/faiss/*.json
 ai-server/data/trademarks/
 ai-server/data/faiss/
 ai-server/data/outputs/
+ai-server/outputs/
 !**/.gitkeep
