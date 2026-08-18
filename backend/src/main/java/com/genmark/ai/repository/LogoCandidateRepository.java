@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface LogoCandidateRepository extends JpaRepository<LogoCandidate, Long> {
+    Optional<LogoCandidate> findByPublicId(String publicId);
+
     List<LogoCandidate> findByGenerationIdOrderByCandidateOrder(Long generationId);
 
     Optional<LogoCandidate> findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(

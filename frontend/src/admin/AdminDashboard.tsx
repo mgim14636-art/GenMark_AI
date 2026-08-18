@@ -1,6 +1,5 @@
 import { Fragment, FormEvent, useEffect, useRef, useState } from 'react'
 import {
-  ArrowRight,
   ArrowUpRight,
   BarChart3,
   CalendarDays,
@@ -26,7 +25,15 @@ import {
 } from 'lucide-react'
 import GenMarkLogo from '../components/ui/GenMarkLogo'
 import { AuthError } from '../auth'
-import { adminApi, type AdminDashboardStats, type AdminMember } from '../lib/genmarkApi'
+import {
+  adminApi,
+  type AdminAccount,
+  type AdminAnalyticsResponse,
+  type AdminDashboardStats,
+  type AdminMember,
+  type AdminLogoMemberRecord,
+  type AdminSurveyResponse,
+} from '../lib/genmarkApi'
 import './admin-dashboard.css'
 
 type DashboardSection = 'overview' | 'generation' | 'download' | 'signup' | 'requests' | 'members' | 'admins' | 'credits' | 'ci-generations' | 'bi-generations'
@@ -245,9 +252,41 @@ type LogoGenerationListProps = {
   members: LogoMemberRecord[]
   openPanel: LogoPanelState
   setOpenPanel: (panel: LogoPanelState) => void
+  adminToken: string
 }
 
-function AdminLogoGenerationList({ track, members, openPanel, setOpenPanel }: LogoGenerationListProps) {
+function AdminLogoThumb({ logo, memberName, track, adminToken }: { logo: LogoAsset; memberName: string; track: LogoGenerationTrack; adminToken: string }) {
+  const [imageSrc, setImageSrc] = useState(adminToken ? '' : logo.imageUrl)
+
+  useEffect(() => {
+    if (!adminToken) {
+      setImageSrc(logo.imageUrl)
+      return
+    }
+
+    let active = true
+    let objectUrl = ''
+    void adminApi.candidateImage(adminToken, logo.id)
+      .then((blob) => {
+        if (!active) return
+        objectUrl = URL.createObjectURL(blob)
+        setImageSrc(objectUrl)
+      })
+      .catch(() => {
+        if (active) setImageSrc('')
+      })
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [adminToken, logo.id, logo.imageUrl])
+
+  return imageSrc
+    ? <img src={imageSrc} alt={`${memberName} ${track} ${logo.name} 로고`} loading="lazy" />
+    : <div className="admin-logo-thumb-placeholder" aria-label="로고 이미지 불러오는 중" />
+}
+
+function AdminLogoGenerationList({ track, members, openPanel, setOpenPanel, adminToken }: LogoGenerationListProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const getLogos = (member: LogoMemberRecord, type: 'generated' | 'downloaded') => type === 'generated' ? member.generatedLogos : member.downloadedLogos
   const filteredMembers = members.filter((member) => matchesAdminMemberSearch(searchQuery, member.memberId))
@@ -301,7 +340,7 @@ function AdminLogoGenerationList({ track, members, openPanel, setOpenPanel }: Lo
                         <div className="admin-logo-accordion-inner" role="region" aria-label={`${member.memberName} ${activeType === 'downloaded' ? '다운로드' : '생성'} 로고 상세`}>
                           <div className="admin-logo-accordion-heading"><strong>{activeType === 'downloaded' ? '다운로드한 로고' : '생성한 로고'}</strong><span>{activeLogos.length}개</span></div>
                           <div className="admin-logo-thumb-grid">
-                            {activeLogos.map((logo) => <article className="admin-logo-thumb-card" key={logo.id}><img src={logo.imageUrl} alt={`${member.memberName} ${track} ${logo.name} 로고`} loading="lazy" /><div><strong>{logo.name}</strong><span>프로젝트 {logo.projectId}</span><small>{logo.date}</small></div></article>)}
+                            {activeLogos.map((logo) => <article className="admin-logo-thumb-card" key={logo.id}><AdminLogoThumb logo={logo} memberName={member.memberName} track={track} adminToken={adminToken} /><div><strong>{logo.name}</strong><span>프로젝트 {logo.projectId}</span><small>{logo.date}</small></div></article>)}
                           </div>
                         </div>
                       </div>
@@ -317,28 +356,18 @@ function AdminLogoGenerationList({ track, members, openPanel, setOpenPanel }: Lo
   )
 }
 
-type SurveyResponse = { id: number; memberId: string; projectId: string; category: string; otherText?: string }
-
-const adminSurveyResponses: SurveyResponse[] = [
-  { id: 1, memberId: 'tkss1217', projectId: 'PRJ-240814-01', category: '로고 생성·재생성' },
-  { id: 2, memberId: 'beauty_lab', projectId: 'PRJ-240813-04', category: '브랜드 맞춤 로고' },
-  { id: 3, memberId: 'studio_m', projectId: 'PRJ-240812-02', category: '유사 상표 확인' },
-  { id: 4, memberId: 'brand_note', projectId: 'PRJ-240811-07', category: '기타', otherText: '완성한 로고를 명함과 제품 이미지에도 바로 적용하고 싶어요.' },
-  { id: 5, memberId: 'minseo94', projectId: 'PRJ-240810-09', category: '로고 저장·활용' },
-]
-
-function AdminSurveyResponseTable() {
+function AdminSurveyResponseTable({ responses }: { responses: AdminSurveyResponse[] }) {
   const [searchQuery, setSearchQuery] = useState('')
-  const filteredResponses = adminSurveyResponses.filter((response) => matchesAdminMemberSearch(searchQuery, response.memberId))
+  const filteredResponses = responses.filter((response) => matchesAdminMemberSearch(searchQuery, response.memberEmail ?? '', response.memberName ?? '', String(response.memberId)))
 
   return (
     <section className="admin-record-page" aria-labelledby="survey-response-title">
-      <div className="admin-section-heading"><div><p className="admin-eyebrow">USER FEEDBACK</p><h2 id="survey-response-title">개선 요청</h2><p>사용자가 선택한 개선 항목을 프로젝트 단위로 확인해요.</p></div><AdminMemberIdSearch id="survey-member-search" value={searchQuery} onChange={setSearchQuery} /></div>
+      <div className="admin-section-heading"><div><p className="admin-eyebrow">USER FEEDBACK</p><h2 id="survey-response-title">개선 요청</h2><p>실제 설문 응답에서 선택한 개선 항목과 추가 의견을 확인해요.</p></div><AdminMemberIdSearch id="survey-member-search" value={searchQuery} onChange={setSearchQuery} /></div>
       <div className="admin-table-shell">
         <table className="admin-survey-response-table">
           <caption className="admin-sr-only">개선 요청 설문 응답 목록</caption>
-          <thead><tr><th scope="col">No.</th><th scope="col">아이디</th><th scope="col">프로젝트 ID</th><th scope="col">불만 내용</th></tr></thead>
-          <tbody>{filteredResponses.length === 0 ? <tr><td colSpan={4} className="admin-empty-table-state">입력한 회원 아이디와 일치하는 개선 요청이 없습니다.</td></tr> : filteredResponses.map((response) => <tr key={response.id}><td data-label="No.">{response.id}</td><td data-label="아이디"><code>{response.memberId}</code></td><td data-label="프로젝트 ID"><code>{response.projectId}</code></td><td data-label="불만 내용"><span className={`admin-request-tag ${response.category === '기타' ? 'other' : ''}`}>{response.category}</span>{response.otherText && <span className="admin-request-other-text">{response.otherText}</span>}</td></tr>)}</tbody>
+          <thead><tr><th scope="col">No.</th><th scope="col">회원</th><th scope="col">만족도</th><th scope="col">개선 항목</th><th scope="col">추가 의견</th><th scope="col">응답일</th></tr></thead>
+          <tbody>{filteredResponses.length === 0 ? <tr><td colSpan={6} className="admin-empty-table-state">저장된 설문 응답이 없습니다.</td></tr> : filteredResponses.map((response, index) => <tr key={response.memberId}><td data-label="No.">{index + 1}</td><td data-label="회원"><code>{response.memberEmail ?? `회원 ${response.memberId}`}</code>{response.memberName && <small className="admin-survey-member-name">{response.memberName}</small>}</td><td data-label="만족도"><span className={`admin-request-tag ${response.rating === 5 ? '' : 'other'}`}>{response.rating === 5 ? '좋아요' : response.rating === 1 ? '싫어요' : '미응답'}</span></td><td data-label="개선 항목"><span className="admin-request-other-text">{response.improvements.length ? response.improvements.join(' · ') : '선택 없음'}</span></td><td data-label="추가 의견"><span className="admin-request-other-text">{response.comment || '없음'}</span></td><td data-label="응답일">{response.completedAt ? formatAdminDate(response.completedAt) : '—'}</td></tr>)}</tbody>
         </table>
       </div>
     </section>
@@ -381,8 +410,13 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
   const [adminLoginError, setAdminLoginError] = useState('')
   const [adminLoginLoading, setAdminLoginLoading] = useState(false)
   const [adminStats, setAdminStats] = useState<AdminDashboardStats | null>(null)
+  const [adminAnalytics, setAdminAnalytics] = useState<AdminAnalyticsResponse | null>(null)
   const [adminMemberData, setAdminMemberData] = useState<AdminMember[]>([])
   const [adminMemberDownloadCounts, setAdminMemberDownloadCounts] = useState<Record<number, { ci: number; bi: number }>>({})
+  const [adminAccounts, setAdminAccounts] = useState<AdminAccount[]>([])
+  const [adminCiGenerationMembers, setAdminCiGenerationMembers] = useState<AdminLogoMemberRecord[]>([])
+  const [adminBiGenerationMembers, setAdminBiGenerationMembers] = useState<AdminLogoMemberRecord[]>([])
+  const [adminSurveyResponses, setAdminSurveyResponses] = useState<AdminSurveyResponse[]>([])
   const adminInitial = Array.from(adminId.trim())[0]?.toLocaleUpperCase() || 'A'
 
   const saveAdminId = () => {
@@ -464,33 +498,13 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
   }, [isAdminMenuOpen])
 
   useEffect(() => {
-    const logoGenerationTrendByPeriod: Record<string, { labels: string[]; ci: number[]; bi: number[] }> = {
-      daily: { labels: ['00시', '04시', '08시', '12시', '16시', '20시'], ci: [14, 18, 22, 27, 31, 36], bi: [24, 31, 38, 44, 53, 62] },
-      weekly: { labels: ['8/1', '8/2', '8/3', '8/4', '8/5', '8/6', '8/7'], ci: [92, 106, 98, 120, 126, 110, 90], bi: [168, 186, 176, 204, 218, 190, 162] },
-      monthly: { labels: ['9월', '10월', '11월', '12월', '1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월'], ci: [95, 116, 136, 153, 160, 190, 228, 265, 296, 326, 401, 449], bi: [185, 224, 264, 297, 310, 370, 442, 515, 574, 634, 779, 871] },
-      custom: { labels: ['1일', '3일', '5일', '7일', '9일', '11일', '13일', '15일'], ci: [38, 42, 47, 52, 58, 62, 66, 72], bi: [74, 83, 92, 104, 116, 127, 139, 150] },
-    }
-    const trend = logoGenerationTrendByPeriod[dashboardPeriod]
-    document.querySelectorAll<HTMLElement>('.admin-mini-dual-bars .admin-mini-dual-group').forEach((group, index) => {
-      const label = trend.labels[index]
-      if (!label) return
-      ;(['ci', 'bi'] as const).forEach((type) => {
-        const bar = group.querySelector<HTMLElement>(`.${type}`)
-        const value = trend[type][index]
-        if (!bar || value === undefined) return
-        const text = `${label} ${type.toUpperCase()} ${value}건`
-        bar.setAttribute('title', text)
-        bar.setAttribute('aria-label', text)
-        bar.setAttribute('tabindex', '0')
-      })
-    })
-  }, [dashboardPeriod, dashboardSection])
-
-  useEffect(() => {
     if (standalone || !adminToken) return
+
+    let cancelled = false
 
     const loadMembers = async () => {
       const members = await adminApi.members(adminToken)
+      if (cancelled) return
       setAdminMemberData(members)
 
       const entries = await Promise.all(members.map(async (member) => {
@@ -500,12 +514,16 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
         ])
         return [member.id, { ci: ciDownloads.length, bi: biDownloads.length }] as const
       }))
-      setAdminMemberDownloadCounts(Object.fromEntries(entries))
+       if (!cancelled) setAdminMemberDownloadCounts(Object.fromEntries(entries))
     }
 
     void Promise.allSettled([
       adminApi.dashboard(adminToken).then(setAdminStats),
       loadMembers(),
+      adminApi.admins(adminToken).then((accounts) => { if (!cancelled) setAdminAccounts(accounts) }),
+      adminApi.generationRecords(adminToken, 'CI').then((records) => { if (!cancelled) setAdminCiGenerationMembers(records) }),
+      adminApi.generationRecords(adminToken, 'BI').then((records) => { if (!cancelled) setAdminBiGenerationMembers(records) }),
+      adminApi.surveyResponses(adminToken).then((responses) => { if (!cancelled) setAdminSurveyResponses(responses) }),
     ]).then((results) => {
       if (results.some((result) => result.status === 'rejected' && result.reason instanceof AuthError && result.reason.status === 401)) {
         setAdminToken('')
@@ -513,7 +531,27 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
         setAdminLoginError('관리자 세션이 만료되었습니다. 다시 로그인해주세요.')
       }
     })
+    return () => { cancelled = true }
   }, [adminToken, standalone])
+
+  useEffect(() => {
+    if (standalone || !adminToken) return
+    if (dashboardPeriod === 'custom' && (!dashboardCustomStart || !dashboardCustomEnd)) return
+
+    let cancelled = false
+    void adminApi.analytics(adminToken, dashboardPeriod, dashboardCustomStart || undefined, dashboardCustomEnd || undefined)
+      .then((analytics) => {
+        if (!cancelled) setAdminAnalytics(analytics)
+      })
+      .catch((error) => {
+        if (error instanceof AuthError && error.status === 401) {
+          setAdminToken('')
+          storeAdminToken('')
+          setAdminLoginError('관리자 세션이 만료되었습니다. 다시 로그인해주세요.')
+        }
+      })
+    return () => { cancelled = true }
+  }, [adminToken, dashboardCustomEnd, dashboardCustomStart, dashboardPeriod, standalone])
 
   const submitAdminLogin = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -559,7 +597,9 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
       monthly: ['9월', '10월', '11월', '12월', '1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월'],
       custom: Array.from({ length: 12 }, (_, index) => `${index + 1}구간`),
     } as const
-    const generationXAxisLabels = generationXAxisLabelsByPeriod[dashboardPeriod]
+    const generationXAxisLabels = adminAnalytics
+      ? adminAnalytics.signup.trend.map((point) => point.label)
+      : generationXAxisLabelsByPeriod[dashboardPeriod]
     const dashboardSectionLabels: Record<DashboardSection, string> = { overview: '대시보드', generation: '', download: '', signup: '', requests: '개선 요청', members: '회원 목록', admins: '관리자 목록', credits: '', 'ci-generations': 'CI 생성 목록', 'bi-generations': 'BI 생성 목록' }
     const calendarDays = getCalendarDays(dashboardCalendarMonth)
     const calendarMonthLabel = `${dashboardCalendarMonth.getFullYear()}년 ${dashboardCalendarMonth.getMonth() + 1}월`
@@ -615,20 +655,58 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
       monthly: { total: '9,187', completion: '97.4', avg: '2:18', active: '1,248', totalDelta: '+12.8%', completionDelta: '+3.2%', avgDelta: '-18초', activeDelta: '+8.6%', ci: '3,124', bi: '6,063', userTrend: [280, 340, 400, 450, 470, 560, 670, 780, 870, 960, 1_180, 1_320] },
       custom: { total: '1,764', completion: '96.5', avg: '2:06', active: '312', totalDelta: '+7.1%', completionDelta: '+1.4%', avgDelta: '-12초', activeDelta: '+5.9%', ci: '598', bi: '1,166', userTrend: [112, 125, 148, 171, 184, 205, 219, 244, 268, 289, 303, 312] },
     } as const
-    const selectedPeriodData = periodData[dashboardPeriod]
+    const emptyPeriodData = {
+      total: '0', completion: '0', avg: '—', active: '0', totalDelta: '실데이터', completionDelta: '', avgDelta: '', activeDelta: '', ci: '0', bi: '0', userTrend: [] as number[],
+    }
+    const selectedPeriodData = adminAnalytics
+      ? {
+          total: adminAnalytics.generation.total.toLocaleString(),
+          completion: adminAnalytics.generation.succeeded + adminAnalytics.generation.failed > 0
+            ? (adminAnalytics.generation.succeeded / (adminAnalytics.generation.succeeded + adminAnalytics.generation.failed) * 100).toFixed(1)
+            : '0',
+          avg: '—',
+          active: adminAnalytics.signup.startedGenerationMembers.toLocaleString(),
+          totalDelta: '실데이터', completionDelta: '', avgDelta: '', activeDelta: '',
+          ci: adminAnalytics.generation.ci.toLocaleString(), bi: adminAnalytics.generation.bi.toLocaleString(),
+          userTrend: adminAnalytics.signup.trend.map((point) => point.value),
+        }
+      : standalone ? periodData[dashboardPeriod] : emptyPeriodData
     const generationPeriodExtras = {
       daily: { purpose: [42, 24, 18, 11, 5], satisfaction: 84, likes: 1248, dislikes: 236, ciInputs: [38, 27, 21, 14], biInputs: [46, 28, 16, 10], ciCompletion: '98.1', biCompletion: '96.8' },
       weekly: { purpose: [39, 27, 19, 10, 5], satisfaction: 86, likes: 1810, dislikes: 295, ciInputs: [41, 25, 20, 14], biInputs: [43, 30, 17, 10], ciCompletion: '98.4', biCompletion: '97.1' },
       monthly: { purpose: [36, 29, 20, 10, 5], satisfaction: 89, likes: 7720, dislikes: 960, ciInputs: [43, 24, 19, 14], biInputs: [41, 31, 18, 10], ciCompletion: '98.8', biCompletion: '97.6' },
       custom: { purpose: [44, 23, 17, 10, 6], satisfaction: 83, likes: 1470, dislikes: 300, ciInputs: [36, 30, 20, 14], biInputs: [48, 26, 16, 10], ciCompletion: '97.9', biCompletion: '96.4' },
     } as const
-    const selectedGenerationExtras = generationPeriodExtras[dashboardPeriod]
+    const livePurposeStats = adminAnalytics?.generation.purpose ?? []
+    const liveCiInputs = adminAnalytics?.generation.ciInputs ?? []
+    const liveBiInputs = adminAnalytics?.generation.biInputs ?? []
+    const toPercentageStats = (items: Array<{ label: string; value: number }>, colors: string[]) => {
+      const total = items.reduce((sum, item) => sum + item.value, 0)
+      return items.map((item, index) => ({ label: item.label, value: total ? Math.round(item.value * 100 / total) : 0, color: colors[index] ?? '#d8dbe2' }))
+    }
+    const selectedGenerationExtras = adminAnalytics
+      ? {
+          purpose: toPercentageStats(livePurposeStats, ['#8d70ed', '#ed70ac', '#f6b56d', '#8fc8f4', '#d8dbe2']).map((item) => item.value),
+          satisfaction: adminAnalytics.generation.satisfactionPercent,
+          likes: adminAnalytics.generation.likes,
+          dislikes: adminAnalytics.generation.dislikes,
+          ciInputs: toPercentageStats(liveCiInputs, ['#8d70ed', '#ed70ac', '#f6b56d', '#8fc8f4']).map((item) => item.value),
+          biInputs: toPercentageStats(liveBiInputs, ['#8d70ed', '#ed70ac', '#f6b56d', '#8fc8f4']).map((item) => item.value),
+          ciCompletion: '—', biCompletion: '—',
+        }
+      : standalone ? generationPeriodExtras[dashboardPeriod] : { purpose: [], satisfaction: 0, likes: 0, dislikes: 0, ciInputs: [], biInputs: [], ciCompletion: '—', biCompletion: '—' }
     const generationAnalysisByPeriod = { daily: 62, weekly: 65, monthly: 68, custom: 64 } as const
-    const selectedGenerationAnalysis = generationAnalysisByPeriod[dashboardPeriod]
+    const selectedGenerationAnalysis = adminAnalytics?.generation.trademarkUsagePercent ?? (standalone ? generationAnalysisByPeriod[dashboardPeriod] : 0)
     const formatGenerationAnalysisCount = (percentage: number) => Math.round(Number(selectedPeriodData.total.replace(/,/g, '')) * percentage / 100).toLocaleString()
-    const selectedPurposeStats = purposeStats.map((item, index) => ({ ...item, value: selectedGenerationExtras.purpose[index] }))
-    const selectedCiInputs = ciInputs.map((item, index) => ({ ...item, value: selectedGenerationExtras.ciInputs[index] }))
-    const selectedBiInputs = biInputs.map((item, index) => ({ ...item, value: selectedGenerationExtras.biInputs[index] }))
+    const selectedPurposeStats = adminAnalytics
+      ? toPercentageStats(livePurposeStats, ['#8d70ed', '#ed70ac', '#f6b56d', '#8fc8f4', '#d8dbe2'])
+      : purposeStats.map((item, index) => ({ ...item, value: selectedGenerationExtras.purpose[index] ?? 0 }))
+    const selectedCiInputs = adminAnalytics
+      ? toPercentageStats(liveCiInputs, ['#8d70ed', '#ed70ac', '#f6b56d', '#8fc8f4'])
+      : ciInputs.map((item, index) => ({ ...item, value: selectedGenerationExtras.ciInputs[index] ?? 0 }))
+    const selectedBiInputs = adminAnalytics
+      ? toPercentageStats(liveBiInputs, ['#8d70ed', '#ed70ac', '#f6b56d', '#8fc8f4'])
+      : biInputs.map((item, index) => ({ ...item, value: selectedGenerationExtras.biInputs[index] ?? 0 }))
     const surveyRequests = [
       { id: 1, category: '로고 디자인', message: '생성된 로고 후보를 한 화면에서 비교하기 쉽도록 개선해주세요.', user: '김민지', time: '오늘 10:24' },
       { id: 2, category: '생성 속도', message: '로고 생성 중 현재 진행 단계를 더 자세히 보여주면 좋겠어요.', user: '이준호', time: '어제 16:08' },
@@ -648,16 +726,40 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
       monthly: { total: '42,680', newUsers: '9,187', completion: '87.3', started: '75.8', totalDelta: '+14.6%', newDelta: '+12.8%', completionDelta: '+6.9%', startedDelta: '+9.4%', monthly: [280, 340, 400, 450, 470, 560, 670, 780, 870, 960, 1180, 1320], sources: [39, 41, 12, 8], funnel: [9187, 7720, 6860, 5984], dropoff: '11.2' },
       custom: { total: '6,742', newUsers: '1,764', completion: '83.6', started: '70.2', totalDelta: '+9.8%', newDelta: '+5.6%', completionDelta: '+4.7%', startedDelta: '+6.8%', monthly: [112, 125, 148, 171, 184, 205, 219, 244, 268, 289, 303, 312], sources: [48, 29, 15, 8], funnel: [1764, 1470, 1210, 920], dropoff: '16.7' },
     } as const
-    const selectedSignupData = signupPeriodData[dashboardPeriod]
+    const providerCount = (label: string) => adminAnalytics?.signup.providerCounts.find((item) => item.label === label)?.value ?? 0
+    const signupSourceTotal = adminAnalytics?.signup.providerCounts.reduce((sum, item) => sum + item.value, 0) ?? 0
+    const selectedSignupData = adminAnalytics
+      ? {
+          total: adminAnalytics.signup.totalMembers.toLocaleString(),
+          newUsers: adminAnalytics.signup.newMembers.toLocaleString(),
+          completion: '—',
+          started: adminAnalytics.signup.newMembers ? (adminAnalytics.signup.startedGenerationMembers / adminAnalytics.signup.newMembers * 100).toFixed(1) : '0',
+          totalDelta: '실데이터', newDelta: '실데이터', completionDelta: '', startedDelta: '',
+          monthly: adminAnalytics.signup.trend.map((point) => point.value),
+          sources: [
+            signupSourceTotal ? Math.round(providerCount('카카오 로그인') * 100 / signupSourceTotal) : 0,
+            signupSourceTotal ? Math.round(providerCount('Google 로그인') * 100 / signupSourceTotal) : 0,
+            0,
+            signupSourceTotal ? Math.round(providerCount('기타') * 100 / signupSourceTotal) : 0,
+          ],
+          funnel: adminAnalytics.signup.funnel.map((item) => item.value),
+          dropoff: adminAnalytics.signup.newMembers ? ((1 - adminAnalytics.signup.startedGenerationMembers / adminAnalytics.signup.newMembers) * 100).toFixed(1) : '0',
+        }
+      : standalone ? signupPeriodData[dashboardPeriod] : { total: '0', newUsers: '0', completion: '—', started: '0', totalDelta: '실데이터', newDelta: '실데이터', completionDelta: '', startedDelta: '', monthly: [], sources: [0, 0, 0, 0], funnel: [0, 0, 0, 0], dropoff: '0' }
+    const signupSourceStats = adminAnalytics
+      ? adminAnalytics.signup.providerCounts.map((item) => ({ label: item.label, value: signupSourceTotal ? Math.round(item.value * 100 / signupSourceTotal) : 0 }))
+      : [{ label: '카카오 로그인', value: selectedSignupData.sources[0] }, { label: 'Google 로그인', value: selectedSignupData.sources[1] }, { label: '기타', value: selectedSignupData.sources[3] }]
     const signupMonthlyValues = selectedSignupData.monthly
-    const signupMonthlyMax = Math.max(...signupMonthlyValues)
+    const signupMonthlyMax = Math.max(1, ...signupMonthlyValues)
     const signupAxisLabelsByPeriod = {
       daily: Array.from({ length: 12 }, (_, index) => `${index + 1}일`),
       weekly: Array.from({ length: 12 }, (_, index) => `${index + 1}주`),
       monthly: ['9월', '10월', '11월', '12월', '1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월'],
       custom: Array.from({ length: 12 }, (_, index) => `${index + 1}구간`),
     } as const
-    const signupXAxisLabels = dashboardPeriod === 'custom' && dashboardCustomStart && dashboardCustomEnd
+    const signupXAxisLabels = adminAnalytics
+      ? adminAnalytics.signup.trend.map((point) => point.label)
+      : dashboardPeriod === 'custom' && dashboardCustomStart && dashboardCustomEnd
       ? Array.from({ length: 12 }, (_, index) => {
         const start = new Date(`${dashboardCustomStart}T00:00:00`)
         const end = new Date(`${dashboardCustomEnd}T00:00:00`)
@@ -672,25 +774,32 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
       monthly: { total: '38,960', conversion: '78.4', ci: '12,122', bi: '26,838', ciShare: '31.1', biShare: '68.9', ciStyles: [33, 32, 21, 14], biStyles: [28, 30, 24, 18], fileOnly: 52, fileWithInput: 48, analysis: 68, insightRates: ['84.6', '82.7', '79.4'] },
       custom: { total: '8,120', conversion: '75.8', ci: '2,487', bi: '5,633', ciShare: '30.6', biShare: '69.4', ciStyles: [37, 28, 21, 14], biStyles: [34, 26, 22, 18], fileOnly: 57, fileWithInput: 43, analysis: 64, insightRates: ['80.8', '77.6', '73.5'] },
     } as const
-    const selectedDownloadData = downloadPeriodData[dashboardPeriod]
+    const stylePercent = (items: Array<{ label: string; value: number }>, label: string) => items.find((item) => item.label === label)?.value ?? 0
+    const liveCiStyles = adminAnalytics?.downloads.ciStyles ?? []
+    const liveBiStyles = adminAnalytics?.downloads.biStyles ?? []
+    const selectedDownloadData = adminAnalytics
+      ? {
+          total: adminAnalytics.downloads.total.toLocaleString(), conversion: '실데이터',
+          ci: adminAnalytics.downloads.ci.toLocaleString(), bi: adminAnalytics.downloads.bi.toLocaleString(),
+          ciShare: adminAnalytics.downloads.total ? (adminAnalytics.downloads.ci / adminAnalytics.downloads.total * 100).toFixed(1) : '0',
+          biShare: adminAnalytics.downloads.total ? (adminAnalytics.downloads.bi / adminAnalytics.downloads.total * 100).toFixed(1) : '0',
+          ciStyles: ['콤비네이션', '심볼마크', '워드마크', '레터마크'].map((label) => stylePercent(liveCiStyles, label)),
+          biStyles: ['콤비네이션', '심볼마크', '워드마크', '레터마크'].map((label) => stylePercent(liveBiStyles, label)),
+          fileOnly: 0, fileWithInput: 0, analysis: 0, insightRates: ['—', '—', '—'],
+        }
+      : standalone ? downloadPeriodData[dashboardPeriod] : { total: '0', conversion: '실데이터', ci: '0', bi: '0', ciShare: '0', biShare: '0', ciStyles: [0, 0, 0, 0], biStyles: [0, 0, 0, 0], fileOnly: 0, fileWithInput: 0, analysis: 0, insightRates: ['—', '—', '—'] }
     const formatDownloadCount = (value: string | number) => Number(String(value).replace(/,/g, '')).toLocaleString()
     const downloadStyleCount = (total: string, percentage: number) => formatDownloadCount(Math.round(Number(total.replace(/,/g, '')) * percentage / 100))
-    const creditPeriodData = {
-      daily: { dailyUse: '184', totalUse: '3,842', dailyPayment: '420', totalPayment: '7,860', paymentAmount: '₩1,386,000', cumulativePaymentAmount: '₩12,680,000', refunds: '18', averageOrder: '12', useDelta: '+8.4%', totalUseDelta: '+12.6%', paymentDelta: '+5.1%', totalPaymentDelta: '+9.8%', paymentAmountDelta: '+6.8%', cumulativePaymentAmountDelta: '+11.4%', refundDelta: '-2.4%' },
-      weekly: { dailyUse: '268', totalUse: '8,940', dailyPayment: '680', totalPayment: '14,860', paymentAmount: '₩3,960,000', cumulativePaymentAmount: '₩28,420,000', refunds: '31', averageOrder: '18', useDelta: '+10.1%', totalUseDelta: '+15.4%', paymentDelta: '+7.2%', totalPaymentDelta: '+11.6%', paymentAmountDelta: '+8.9%', cumulativePaymentAmountDelta: '+13.2%', refundDelta: '-3.1%' },
-      monthly: { dailyUse: '412', totalUse: '18,420', dailyPayment: '1,260', totalPayment: '32,680', paymentAmount: '₩8,920,000', cumulativePaymentAmount: '₩72,800,000', refunds: '64', averageOrder: '26', useDelta: '+14.8%', totalUseDelta: '+19.2%', paymentDelta: '+10.4%', totalPaymentDelta: '+16.7%', paymentAmountDelta: '+14.1%', cumulativePaymentAmountDelta: '+18.6%', refundDelta: '-4.6%' },
-      custom: { dailyUse: '236', totalUse: '6,480', dailyPayment: '540', totalPayment: '11,240', paymentAmount: '₩2,480,000', cumulativePaymentAmount: '₩18,960,000', refunds: '24', averageOrder: '16', useDelta: '+9.4%', totalUseDelta: '+13.1%', paymentDelta: '+6.6%', totalPaymentDelta: '+10.2%', paymentAmountDelta: '+7.5%', cumulativePaymentAmountDelta: '+12.1%', refundDelta: '-2.9%' },
-    } as const
-    const selectedCreditData = creditPeriodData[dashboardPeriod]
-
     const overviewSignupTrendByPeriod = {
       daily: { labels: ['00시', '02시', '04시', '06시', '08시', '10시', '12시', '14시', '16시', '18시', '20시', '22시'], values: [34, 42, 51, 64, 78, 92, 106, 118, 132, 146, 157, 168] },
       weekly: { labels: ['8/1', '8/2', '8/3', '8/4', '8/5', '8/6', '8/7'], values: [268, 294, 310, 356, 342, 304, 312] },
       monthly: { labels: ['9월', '10월', '11월', '12월', '1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월'], values: [520, 610, 700, 780, 744, 900, 1010, 1100, 1248, 1240, 1236, 1248] },
       custom: { labels: ['1일', '3일', '5일', '7일', '9일', '11일', '13일', '15일'], values: [112, 125, 148, 171, 184, 205, 219, 244] },
     } as const
-    const overviewSignupTrend = overviewSignupTrendByPeriod[dashboardPeriod]
-    const overviewSignupTrendMax = Math.max(...overviewSignupTrend.values)
+    const overviewSignupTrend = adminAnalytics
+      ? { labels: adminAnalytics.signup.trend.map((point) => point.label), values: adminAnalytics.signup.trend.map((point) => point.value) }
+      : standalone ? overviewSignupTrendByPeriod[dashboardPeriod] : { labels: [], values: [] }
+    const overviewSignupTrendMax = Math.max(1, ...overviewSignupTrend.values)
     const overviewSignupChartPoints = overviewSignupTrend.values.map((value, index, values) => {
       const x = 12 + (576 / Math.max(values.length - 1, 1)) * index
       const y = 174 - (value / overviewSignupTrendMax) * 142
@@ -704,8 +813,10 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
       monthly: { labels: ['9월', '10월', '11월', '12월', '1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월'], ci: [280, 340, 400, 450, 470, 560, 670, 780, 870, 960, 1180, 1320].map((value) => Math.round(value * .34)), bi: [280, 340, 400, 450, 470, 560, 670, 780, 870, 960, 1180, 1320].map((value) => Math.round(value * .66)) },
       custom: { labels: ['1일', '3일', '5일', '7일', '9일', '11일', '13일', '15일'], ci: [38, 42, 47, 52, 58, 62, 66, 72], bi: [74, 83, 92, 104, 116, 127, 139, 150] },
     } as const
-    const logoGenerationTrend = logoGenerationTrendByPeriod[dashboardPeriod]
-    const logoGenerationTrendMax = Math.max(...logoGenerationTrend.ci, ...logoGenerationTrend.bi)
+    const logoGenerationTrend = adminAnalytics
+      ? { labels: adminAnalytics.generation.trend.map((point) => point.label), ci: adminAnalytics.generation.trend.map((point) => point.ci), bi: adminAnalytics.generation.trend.map((point) => point.bi) }
+      : standalone ? logoGenerationTrendByPeriod[dashboardPeriod] : { labels: [], ci: [], bi: [] }
+    const logoGenerationTrendMax = Math.max(1, ...logoGenerationTrend.ci, ...logoGenerationTrend.bi)
 
     const surveyImprovementCategories = [
       '로고 생성·재생성',
@@ -721,14 +832,16 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
       monthly: [4920, 4310, 3460, 2360, 1640, 380],
       custom: [612, 528, 421, 286, 198, 46],
     } as const
-    const selectedSurveyImprovementStats = surveyImprovementCategories.map((label, index) => ({
-      label,
-      value: surveyImprovementStatsByPeriod[dashboardPeriod][index],
-    }))
-    const surveyImprovementMax = Math.max(...selectedSurveyImprovementStats.map(({ value }) => value))
+    const selectedSurveyImprovementStats = adminAnalytics
+      ? adminAnalytics.survey.improvements.map(({ label, value }) => ({ label, value }))
+      : (standalone ? surveyImprovementCategories.map((label, index) => ({ label, value: surveyImprovementStatsByPeriod[dashboardPeriod][index] })) : [])
+    const surveyImprovementMax = Math.max(1, ...selectedSurveyImprovementStats.map(({ value }) => value))
     const surveyImprovementTotal = selectedSurveyImprovementStats.reduce((total, { value }) => total + value, 0)
-    const allAdminMembers: AdminMemberTableRow[] = adminMemberData.length > 0 ? adminMemberData : previewAdminMembers
+    const allAdminMembers: AdminMemberTableRow[] = standalone ? previewAdminMembers : adminMemberData
     const displayedAdminMembers = allAdminMembers.filter((member) => matchesAdminMemberSearch(memberSearchQuery, member.email))
+    const displayedAdminAccounts = standalone
+      ? previewAdminAccounts
+      : adminAccounts.map((account) => ({ id: account.loginId, name: account.name, createdAt: account.createdAt, lastAccessAt: account.lastAccessAt ? account.lastAccessAt.replace('T', ' ') : '기록 없음' }))
 
     return (
       <main className="admin-dashboard-screen">
@@ -785,18 +898,6 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
             </div>
           </section>}
 
-          {dashboardSection === 'credits' && <section className="admin-credit-amount-section" aria-label="결제 금액 지표">
-            <div className="admin-kpi-grid admin-credit-amount-grid">
-              <article className="admin-kpi-card"><span className="admin-kpi-icon green"><b aria-hidden="true">₩</b></span><div><p>{periodLabels[dashboardPeriod]} 결제 금액</p><strong>{selectedCreditData.paymentAmount}</strong><span className="admin-positive">{selectedCreditData.paymentAmountDelta} <ArrowUpRight size={14} /></span></div></article>
-              <article className="admin-kpi-card"><span className="admin-kpi-icon purple"><b aria-hidden="true">₩</b></span><div><p>{periodLabels[dashboardPeriod]} 누적 결제 금액</p><strong>{selectedCreditData.cumulativePaymentAmount}</strong><span className="admin-positive">{selectedCreditData.cumulativePaymentAmountDelta} <ArrowUpRight size={14} /></span></div></article>
-              <article className="admin-kpi-card"><span className="admin-kpi-icon purple"><Sparkles size={19} /></span><div><p>{periodLabels[dashboardPeriod]} 사용량</p><strong>{selectedCreditData.dailyUse}<small>개</small></strong><span className="admin-positive">{selectedCreditData.useDelta} <ArrowUpRight size={14} /></span></div></article>
-              <article className="admin-kpi-card"><span className="admin-kpi-icon blue"><CalendarDays size={19} /></span><div><p>{periodLabels[dashboardPeriod]} 누적 사용량</p><strong>{selectedCreditData.totalUse}<small>개</small></strong><span className="admin-positive">{selectedCreditData.totalUseDelta} <ArrowUpRight size={14} /></span></div></article>
-              <article className="admin-kpi-card"><span className="admin-kpi-icon pink"><ClipboardCheck size={19} /></span><div><p>{periodLabels[dashboardPeriod]} 결제량</p><strong>{selectedCreditData.dailyPayment}<small>개</small></strong><span className="admin-positive">{selectedCreditData.paymentDelta} <ArrowUpRight size={14} /></span></div></article>
-              <article className="admin-kpi-card"><span className="admin-kpi-icon orange"><Sparkles size={19} /></span><div><p>{periodLabels[dashboardPeriod]} 누적 결제량</p><strong>{selectedCreditData.totalPayment}<small>개</small></strong><span className="admin-positive">{selectedCreditData.totalPaymentDelta} <ArrowUpRight size={14} /></span></div></article>
-              <article className="admin-kpi-card"><span className="admin-kpi-icon pink"><RefreshCw size={19} /></span><div><p>환불 건수</p><strong>{selectedCreditData.refunds}<small>건</small></strong><span className="admin-positive">{selectedCreditData.refundDelta} <ArrowUpRight size={14} /></span></div></article>
-            </div>
-          </section>}
-
           {dashboardSection === 'overview' ? <>
             <section className="admin-overview-chart-grid" aria-label="대시보드 핵심 지표">
               <article className="admin-card admin-overview-chart-card">
@@ -820,13 +921,13 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
                   <div><p>로고 생성 건수</p><strong>{selectedPeriodData.total}<small>건</small></strong><span className="admin-positive">{selectedPeriodData.totalDelta} <ArrowUpRight size={14} /></span></div>
                   <span className="admin-kpi-icon pink"><Sparkles size={19} /></span>
                 </div>
-                <div className="admin-mini-dual-bars" aria-label={periodLabels[dashboardPeriod] + ' CI BI 로고 생성량'}>{logoGenerationTrend.labels.map((label, index) => <div className="admin-mini-dual-group" key={label}><div><i className="ci" style={{ height: Math.max(12, logoGenerationTrend.ci[index] / logoGenerationTrendMax * 100) + '%' }} /><i className="bi" style={{ height: Math.max(12, logoGenerationTrend.bi[index] / logoGenerationTrendMax * 100) + '%' }} /></div><span>{label}</span></div>)}</div>
+                <div className="admin-mini-dual-bars" aria-label={periodLabels[dashboardPeriod] + ' CI BI 로고 생성량'}>{logoGenerationTrend.labels.map((label, index) => <div className="admin-mini-dual-group" key={label}><div><i className="ci" style={{ height: Math.max(12, logoGenerationTrend.ci[index] / logoGenerationTrendMax * 100) + '%' }} title={`${label} CI ${logoGenerationTrend.ci[index]}건`} aria-label={`${label} CI ${logoGenerationTrend.ci[index]}건`} tabIndex={0} /><i className="bi" style={{ height: Math.max(12, logoGenerationTrend.bi[index] / logoGenerationTrendMax * 100) + '%' }} title={`${label} BI ${logoGenerationTrend.bi[index]}건`} aria-label={`${label} BI ${logoGenerationTrend.bi[index]}건`} tabIndex={0} /></div><span>{label}</span></div>)}</div>
                 <div className="admin-mini-dual-legend"><span><i className="ci" />CI</span><span><i className="bi" />BI</span></div>
               </article>
 
               <article className="admin-card admin-overview-chart-card">
                 <div className="admin-overview-chart-heading">
-                  <div><p>전체 다운로드 건수</p><strong>{selectedDownloadData.total}<small>건</small></strong><span className="admin-positive">{selectedDownloadData.conversion}% 전환 <ArrowUpRight size={14} /></span></div>
+                  <div><p>전체 다운로드 건수</p><strong>{selectedDownloadData.total}<small>건</small></strong><span className="admin-positive">{selectedDownloadData.conversion === '실데이터' ? 'CI·BI 실데이터' : `${selectedDownloadData.conversion}% 전환`} <ArrowUpRight size={14} /></span></div>
                   <span className="admin-kpi-icon orange"><Download size={19} /></span>
                 </div>
                 <div className="admin-download-overview-graph"><div className="admin-overview-donut"><span>{selectedDownloadData.total}<small>전체</small></span></div><div className="admin-overview-legend"><span><i className="ci" />CI <strong>{selectedDownloadData.ciShare}%</strong></span><span><i className="bi" />BI <strong>{selectedDownloadData.biShare}%</strong></span></div></div>
@@ -847,16 +948,17 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
               <div className="admin-card-heading admin-member-list-heading"><div><h2 id="admin-member-list-title">회원 목록</h2><p>회원별 생성·다운로드 현황과 잔여 크레딧을 확인합니다.</p></div><AdminMemberIdSearch id="admin-member-search" value={memberSearchQuery} onChange={setMemberSearchQuery} placeholder="회원 아이디(이메일) 입력" /></div>
               <div className="admin-member-table-wrap" role="region" tabIndex={0} aria-label="회원 목록 표, 좌우로 스크롤할 수 있습니다">
                 <table className="admin-member-table admin-member-usage-table">
-                  <caption className="admin-sr-only">회원별 로고 생성, 다운로드 및 잔여 크레딧 목록</caption>
-                  <thead><tr><th scope="col">No.</th><th scope="col">아이디(이메일)</th><th scope="col">이름</th><th scope="col">가입일자</th><th scope="col">CI 생성 건수</th><th scope="col">BI 생성 건수</th><th scope="col">CI 다운로드 건수</th><th scope="col">BI 다운로드 건수</th><th scope="col">잔여 크레딧</th></tr></thead>
-                  <tbody>{displayedAdminMembers.length === 0 ? <tr><td colSpan={9} className="admin-empty-table-state">입력한 회원 아이디와 일치하는 회원이 없습니다.</td></tr> : displayedAdminMembers.map((member, index) => {
+                  <caption className="admin-sr-only">회원별 가입 경로, 로고 생성, 다운로드 및 잔여 크레딧 목록</caption>
+                  <thead><tr><th scope="col">No.</th><th scope="col">아이디(이메일)</th><th scope="col">가입 경로</th><th scope="col">이름</th><th scope="col">가입일자</th><th scope="col">CI 생성 건수</th><th scope="col">BI 생성 건수</th><th scope="col">CI 다운로드 건수</th><th scope="col">BI 다운로드 건수</th><th scope="col">잔여 크레딧</th></tr></thead>
+                  <tbody>{displayedAdminMembers.length === 0 ? <tr><td colSpan={10} className="admin-empty-table-state">입력한 회원 아이디와 일치하는 회원이 없습니다.</td></tr> : displayedAdminMembers.map((member, index) => {
                     const downloadCounts = adminMemberDownloadCounts[member.id]
                     const ciDownloads = downloadCounts?.ci ?? member.ciDownloads
                     const biDownloads = downloadCounts?.bi ?? member.biDownloads
                     return <tr key={member.id}>
-                      <td data-label="No." className="admin-index-cell">{index + 1}</td>
-                      <td data-label="아이디(이메일)" className="admin-member-email"><strong title={member.email}>{member.email}</strong></td>
-                      <td data-label="이름"><div className="admin-member-identity"><span className="admin-member-avatar"><UserRound size={17} /></span><strong>{member.name || '이름 미등록'}</strong></div></td>
+                       <td data-label="No." className="admin-index-cell">{index + 1}</td>
+                       <td data-label="아이디(이메일)" className="admin-member-email"><strong title={member.email}>{member.email}</strong></td>
+                       <td data-label="가입 경로">{member.provider?.toLowerCase() === 'kakao' ? '카카오' : member.provider?.toLowerCase() === 'google' ? 'Google' : member.provider || '기타'}</td>
+                       <td data-label="이름"><div className="admin-member-identity"><span className="admin-member-avatar"><UserRound size={17} /></span><strong>{member.name || '이름 미등록'}</strong></div></td>
                       <td data-label="가입일자">{formatAdminDate(member.createdAt)}</td>
                       <td data-label="CI 생성 건수" className="admin-count-cell"><strong>{member.ciGenerations.toLocaleString()}</strong><small>건</small></td>
                       <td data-label="BI 생성 건수" className="admin-count-cell"><strong>{member.biGenerations.toLocaleString()}</strong><small>건</small></td>
@@ -868,26 +970,26 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
                 </table>
               </div>
             </section>
-          </> : dashboardSection === 'admins' ? <>
-            <section className="admin-card admin-member-list-card" aria-labelledby="admin-account-list-title">
-              <div className="admin-card-heading"><div><h2 id="admin-account-list-title">관리자 목록</h2><p>관리자 계정의 생성일과 최근 접속 기록을 확인합니다.</p></div><span className="admin-status-label">총 {previewAdminAccounts.length.toLocaleString()}명</span></div>
+           </> : dashboardSection === 'admins' ? <>
+             <section className="admin-card admin-member-list-card" aria-labelledby="admin-account-list-title">
+              <div className="admin-card-heading"><div><h2 id="admin-account-list-title">관리자 목록</h2><p>관리자 계정의 생성일과 최근 접속 기록을 확인합니다.</p></div><span className="admin-status-label">총 {displayedAdminAccounts.length.toLocaleString()}명</span></div>
               <div className="admin-member-table-wrap" role="region" tabIndex={0} aria-label="관리자 목록 표">
                 <table className="admin-member-table admin-account-table">
                   <caption className="admin-sr-only">관리자 계정 생성일과 마지막 접속 기록 목록</caption>
                   <thead><tr><th scope="col">No.</th><th scope="col">관리자 아이디</th><th scope="col">이름</th><th scope="col">생성 날짜</th><th scope="col">마지막 접속 시간</th></tr></thead>
-                  <tbody>{previewAdminAccounts.map((account, index) => <tr key={account.id}>
+                  <tbody>{displayedAdminAccounts.map((account, index) => <tr key={account.id}>
                     <td data-label="No." className="admin-index-cell">{index + 1}</td>
                     <td data-label="관리자 아이디" className="admin-member-email"><strong title={account.id}>{account.id}</strong></td>
                     <td data-label="이름"><div className="admin-member-identity"><span className="admin-member-avatar admin-avatar-neutral"><ShieldCheck size={17} /></span><strong>{account.name}</strong></div></td>
-                    <td data-label="생성 날짜">{account.createdAt}</td>
+                    <td data-label="생성 날짜">{formatAdminDate(account.createdAt)}</td>
                     <td data-label="마지막 접속 시간"><span className="admin-last-access"><Clock3 size={15} />{account.lastAccessAt}</span></td>
                   </tr>)}</tbody>
                 </table>
               </div>
             </section>
-          </> : dashboardSection === 'ci-generations' ? <AdminLogoGenerationList track="CI" members={ciGenerationMembers} openPanel={openLogoPanel} setOpenPanel={setOpenLogoPanel} />
-          : dashboardSection === 'bi-generations' ? <AdminLogoGenerationList track="BI" members={biGenerationMembers} openPanel={openLogoPanel} setOpenPanel={setOpenLogoPanel} />
-          : dashboardSection === 'requests' ? <AdminSurveyResponseTable />
+           </> : dashboardSection === 'ci-generations' ? <AdminLogoGenerationList track="CI" members={standalone ? ciGenerationMembers : adminCiGenerationMembers} openPanel={openLogoPanel} setOpenPanel={setOpenLogoPanel} adminToken={standalone ? '' : adminToken} />
+           : dashboardSection === 'bi-generations' ? <AdminLogoGenerationList track="BI" members={standalone ? biGenerationMembers : adminBiGenerationMembers} openPanel={openLogoPanel} setOpenPanel={setOpenLogoPanel} adminToken={standalone ? '' : adminToken} />
+           : dashboardSection === 'requests' ? <AdminSurveyResponseTable responses={standalone ? [] : adminSurveyResponses} />
           : dashboardSection === 'generation' ? <>
           <section className="admin-kpi-grid admin-generation-kpi-grid admin-generation-single-kpi-grid" aria-label="생성 핵심 지표">
             <article className="admin-kpi-card"><span className="admin-kpi-icon purple"><Sparkles size={19} /></span><div><p>총 로고 생성</p><strong>{selectedPeriodData.total}<small>건</small></strong><span className="admin-positive">{selectedPeriodData.totalDelta} <ArrowUpRight size={14} /></span></div></article>
@@ -909,13 +1011,9 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
              <section className="admin-kpi-grid admin-download-kpi-grid"><article className="admin-kpi-card"><span className="admin-kpi-icon purple"><Download size={19} /></span><div><p>전체 다운로드</p><strong>{selectedDownloadData.total}<small>건</small></strong><span className="admin-positive">{periodLabels[dashboardPeriod]} 기준 <ArrowUpRight size={14} /></span></div></article><article className="admin-kpi-card"><span className="admin-kpi-icon orange"><FolderCheck size={19} /></span><div><p>CI 결과 다운로드</p><strong>{selectedDownloadData.ci}<small>건</small></strong><span className="admin-positive">{selectedDownloadData.ciShare}% <ArrowUpRight size={14} /></span></div></article><article className="admin-kpi-card"><span className="admin-kpi-icon blue"><Palette size={19} /></span><div><p>BI 결과 다운로드</p><strong>{selectedDownloadData.bi}<small>건</small></strong><span className="admin-positive">{selectedDownloadData.biShare}% <ArrowUpRight size={14} /></span></div></article></section>
             <section className="admin-card admin-style-download-card"><div className="admin-card-heading"><div><h2>CI · BI 로고 스타일별 다운로드 비율</h2><p>{periodLabels[dashboardPeriod]} 다운로드 로고 결과물을 비교해보세요.</p></div><span className="admin-status-label">총 {selectedDownloadData.total}건</span></div><div className="admin-style-download-panels"><div className="admin-style-download-panel"><div className="admin-style-download-panel-heading"><strong>CI 로고</strong><span>{selectedDownloadData.ci}건</span></div><div className="admin-style-download-chart" aria-label="CI 로고 스타일별 다운로드 비율"><div className="admin-style-download-row"><div><span>콤비네이션</span><strong>{selectedDownloadData.ciStyles[0]}%</strong></div><i><b className="purple" style={{ width: `${selectedDownloadData.ciStyles[0]}%` }} /></i><small>{downloadStyleCount(selectedDownloadData.ci, selectedDownloadData.ciStyles[0])}건</small></div><div className="admin-style-download-row"><div><span>심볼마크</span><strong>{selectedDownloadData.ciStyles[1]}%</strong></div><i><b className="violet" style={{ width: `${selectedDownloadData.ciStyles[1]}%` }} /></i><small>{downloadStyleCount(selectedDownloadData.ci, selectedDownloadData.ciStyles[1])}건</small></div><div className="admin-style-download-row"><div><span>워드마크</span><strong>{selectedDownloadData.ciStyles[2]}%</strong></div><i><b className="pink" style={{ width: `${selectedDownloadData.ciStyles[2]}%` }} /></i><small>{downloadStyleCount(selectedDownloadData.ci, selectedDownloadData.ciStyles[2])}건</small></div><div className="admin-style-download-row"><div><span>레터마크</span><strong>{selectedDownloadData.ciStyles[3]}%</strong></div><i><b className="orange" style={{ width: `${selectedDownloadData.ciStyles[3]}%` }} /></i><small>{downloadStyleCount(selectedDownloadData.ci, selectedDownloadData.ciStyles[3])}건</small></div></div></div><div className="admin-style-download-panel"><div className="admin-style-download-panel-heading"><strong>BI 로고</strong><span>{selectedDownloadData.bi}건</span></div><div className="admin-style-download-chart" aria-label="BI 로고 스타일별 다운로드 비율"><div className="admin-style-download-row"><div><span>콤비네이션</span><strong>{selectedDownloadData.biStyles[0]}%</strong></div><i><b className="purple" style={{ width: `${selectedDownloadData.biStyles[0]}%` }} /></i><small>{downloadStyleCount(selectedDownloadData.bi, selectedDownloadData.biStyles[0])}건</small></div><div className="admin-style-download-row"><div><span>심볼마크</span><strong>{selectedDownloadData.biStyles[1]}%</strong></div><i><b className="violet" style={{ width: `${selectedDownloadData.biStyles[1]}%` }} /></i><small>{downloadStyleCount(selectedDownloadData.bi, selectedDownloadData.biStyles[1])}건</small></div><div className="admin-style-download-row"><div><span>워드마크</span><strong>{selectedDownloadData.biStyles[2]}%</strong></div><i><b className="pink" style={{ width: `${selectedDownloadData.biStyles[2]}%` }} /></i><small>{downloadStyleCount(selectedDownloadData.bi, selectedDownloadData.biStyles[2])}건</small></div><div className="admin-style-download-row"><div><span>레터마크</span><strong>{selectedDownloadData.biStyles[3]}%</strong></div><i><b className="orange" style={{ width: `${selectedDownloadData.biStyles[3]}%` }} /></i><small>{downloadStyleCount(selectedDownloadData.bi, selectedDownloadData.biStyles[3])}건</small></div></div></div></div></section>
             <section className="admin-chart-grid"><article className="admin-card"><div className="admin-card-heading"><div><h2>다운로드 파일 구성</h2><p>{periodLabels[dashboardPeriod]} 로고 결과물 구성</p></div><CircleHelp size={18} /></div><div className="admin-download-breakdown"><div className="admin-donut download-donut"><span>{selectedDownloadData.total}<small>전체 다운로드</small></span></div><div className="admin-legend"><div><i style={{ background: '#8d70ed' }} /><span>로고만 다운로드</span><strong>{selectedDownloadData.fileOnly}%</strong></div><div><i style={{ background: '#ed70ac' }} /><span>로고 + 입력정보</span><strong>{selectedDownloadData.fileWithInput}%</strong></div><p>로고 파일과 함께 생성에 사용한 핵심 정보를 제공한 다운로드 비율입니다.</p></div></div></article><article className="admin-card"><div className="admin-card-heading"><div><h2>좋은 결과로 이어진 입력 정보</h2><p>{periodLabels[dashboardPeriod]} 다운로드 전환율이 높은 조합</p></div><CircleHelp size={18} /></div><div className="admin-result-insights"><div><span className="admin-type-badge">CI</span><div><strong>신뢰감 · 혁신 · 명확한 모토</strong><p>다운로드 전환율 {selectedDownloadData.insightRates[0]}%</p></div></div><div><span className="admin-type-badge bi">BI</span><div><strong>비건 · 클린뷰티 · 콤비네이션</strong><p>다운로드 전환율 {selectedDownloadData.insightRates[1]}%</p></div></div><div><span className="admin-type-badge neutral">BI</span><div><strong>저자극 · 미니멀 · 심볼마크</strong><p>다운로드 전환율 {selectedDownloadData.insightRates[2]}%</p></div></div></div></article></section>
-          </> : dashboardSection === 'credits' ? <>
-             <section className="admin-kpi-grid admin-credit-kpi-grid"><article className="admin-kpi-card"><span className="admin-kpi-icon purple"><Sparkles size={19} /></span><div><p>{periodLabels[dashboardPeriod]} 사용량</p><strong>{selectedCreditData.dailyUse}<small>개</small></strong><span className="admin-positive">{selectedCreditData.useDelta} <ArrowUpRight size={14} /></span></div></article><article className="admin-kpi-card"><span className="admin-kpi-icon blue"><CalendarDays size={19} /></span><div><p>{periodLabels[dashboardPeriod]} 누적 사용량</p><strong>{selectedCreditData.totalUse}<small>개</small></strong><span className="admin-positive">{selectedCreditData.totalUseDelta} <ArrowUpRight size={14} /></span></div></article><article className="admin-kpi-card"><span className="admin-kpi-icon pink"><ClipboardCheck size={19} /></span><div><p>{periodLabels[dashboardPeriod]} 결제량</p><strong>{selectedCreditData.dailyPayment}<small>개</small></strong><span className="admin-positive">{selectedCreditData.paymentDelta} <ArrowUpRight size={14} /></span></div></article><article className="admin-kpi-card"><span className="admin-kpi-icon orange"><Sparkles size={19} /></span><div><p>{periodLabels[dashboardPeriod]} 누적 결제량</p><strong>{selectedCreditData.totalPayment}<small>개</small></strong><span className="admin-positive">{selectedCreditData.totalPaymentDelta} <ArrowUpRight size={14} /></span></div></article><article className="admin-kpi-card"><span className="admin-kpi-icon pink"><RefreshCw size={19} /></span><div><p>환불 건수</p><strong>{selectedCreditData.refunds}<small>건</small></strong><span className="admin-positive">{selectedCreditData.refundDelta} <ArrowUpRight size={14} /></span></div></article><article className="admin-kpi-card"><span className="admin-kpi-icon blue"><UsersRound size={19} /></span><div><p>평균 주문량</p><strong>{selectedCreditData.averageOrder}<small>개</small></strong><span className="admin-positive">{periodLabels[dashboardPeriod]} 평균 <ArrowUpRight size={14} /></span></div></article></section>
-             <section className="admin-card admin-credit-summary-card"><div className="admin-card-heading"><div><h2>크레딧 흐름 요약</h2><p>{periodLabels[dashboardPeriod]} 집계 기준 사용량과 결제량을 비교해보세요.</p></div><span className="admin-status-label">기간별 집계</span></div><div className="admin-credit-flow"><div><span>{periodLabels[dashboardPeriod]} 누적 결제량</span><strong>{selectedCreditData.totalPayment}개</strong></div><div><span>{periodLabels[dashboardPeriod]} 누적 사용량</span><strong>{selectedCreditData.totalUse}개</strong></div><div><span>환불 건수</span><strong>{selectedCreditData.refunds}건</strong></div></div><p className="admin-credit-note">결제량과 사용량은 선택한 기간의 크레딧 거래 이력 기준으로 집계됩니다.</p></section>
-           <section className="admin-card admin-credit-flow-card"><div className="admin-card-heading"><div><h2>크레딧 통계 흐름</h2><p>{periodLabels[dashboardPeriod]} 결제부터 사용까지의 흐름을 확인해보세요.</p></div><span className="admin-status-label">기간별 집계</span></div><div className="admin-credit-flow-diagram"><div className="admin-credit-flow-step"><span>누적 결제 금액</span><strong>{selectedCreditData.cumulativePaymentAmount}</strong><small>결제된 금액</small></div><ArrowRight className="admin-credit-flow-arrow" size={18} /><div className="admin-credit-flow-step"><span>누적 결제 크레딧</span><strong>{selectedCreditData.totalPayment}개</strong><small>충전된 크레딧</small></div><ArrowRight className="admin-credit-flow-arrow" size={18} /><div className="admin-credit-flow-step"><span>누적 사용 크레딧</span><strong>{selectedCreditData.totalUse}개</strong><small>로고 생성에 사용</small></div><ArrowRight className="admin-credit-flow-arrow" size={18} /><div className="admin-credit-flow-step"><span>환불 건수</span><strong>{selectedCreditData.refunds}건</strong><small>환불 처리된 거래</small></div></div></section>
            </> : dashboardSection === 'signup' ? <>
              <section className="admin-kpi-grid admin-signup-kpi-grid"><article className="admin-kpi-card"><span className="admin-kpi-icon purple"><UsersRound size={19} /></span><div><p>전체 가입자</p><strong>{selectedSignupData.total}<small>명</small></strong><span className="admin-positive">{selectedSignupData.totalDelta} <ArrowUpRight size={14} /></span></div></article><article className="admin-kpi-card"><span className="admin-kpi-icon pink"><ClipboardCheck size={19} /></span><div><p>신규 가입자</p><strong>{selectedSignupData.newUsers}<small>명</small></strong><span className="admin-positive">{selectedSignupData.newDelta} <ArrowUpRight size={14} /></span></div></article><article className="admin-kpi-card"><span className="admin-kpi-icon blue"><ArrowUpRight size={19} /></span><div><p>가입 후 생성 시작</p><strong>{selectedSignupData.started}<small>%</small></strong><span className="admin-positive">{selectedSignupData.startedDelta} <ArrowUpRight size={14} /></span></div></article></section>
-             <section className="admin-chart-grid lower"><article className="admin-card admin-signup-trend"><div className="admin-card-heading"><div><h2>월별 가입자 수</h2><p>{periodLabels[dashboardPeriod]} 기준 신규 가입 추이</p></div><span className="admin-chart-key"><i /> 신규 가입자</span></div><div className="admin-signup-bars">{signupMonthlyValues.map((value, index) => <div key={index}><strong>{value.toLocaleString()}<small>명</small></strong><i style={{ height: `${Math.round((value / signupMonthlyMax) * 84)}%` }} /><span>{signupXAxisLabels[index]}</span></div>)}</div></article><article className="admin-card"><div className="admin-card-heading"><div><h2>가입 경로</h2><p>{periodLabels[dashboardPeriod]} 사용자 유입 비율</p></div><CircleHelp size={18} /></div><div className="admin-signup-sources"><div><span>카카오 로그인</span><i><b style={{ width: `${selectedSignupData.sources[0]}%` }} /></i><strong>{selectedSignupData.sources[0]}%</strong></div><div><span>Google 로그인</span><i><b style={{ width: `${selectedSignupData.sources[1]}%` }} /></i><strong>{selectedSignupData.sources[1]}%</strong></div><div><span>초대 링크</span><i><b style={{ width: `${selectedSignupData.sources[2]}%` }} /></i><strong>{selectedSignupData.sources[2]}%</strong></div><div><span>기타</span><i><b style={{ width: `${selectedSignupData.sources[3]}%` }} /></i><strong>{selectedSignupData.sources[3]}%</strong></div></div></article></section>
+             <section className="admin-chart-grid lower"><article className="admin-card admin-signup-trend"><div className="admin-card-heading"><div><h2>월별 가입자 수</h2><p>{periodLabels[dashboardPeriod]} 기준 신규 가입 추이</p></div><span className="admin-chart-key"><i /> 신규 가입자</span></div><div className="admin-signup-bars">{signupMonthlyValues.map((value, index) => <div key={index}><strong>{value.toLocaleString()}<small>명</small></strong><i style={{ height: `${Math.round((value / signupMonthlyMax) * 84)}%` }} /><span>{signupXAxisLabels[index]}</span></div>)}</div></article><article className="admin-card"><div className="admin-card-heading"><div><h2>가입 경로</h2><p>{periodLabels[dashboardPeriod]} 사용자 유입 비율</p></div><CircleHelp size={18} /></div><div className="admin-signup-sources">{signupSourceStats.map((source) => <div key={source.label}><span>{source.label}</span><i><b style={{ width: `${source.value}%` }} /></i><strong>{source.value}%</strong></div>)}</div></article></section>
              <section className="admin-card admin-funnel-card"><div className="admin-card-heading"><div><h2>가입 후 첫 생성까지의 흐름</h2><p>{periodLabels[dashboardPeriod]} 온보딩 단계별 이탈을 확인해보세요.</p></div></div><div className="admin-funnel"><div><strong>{selectedSignupData.funnel[0].toLocaleString()}</strong><span>가입 완료</span></div><div><strong>{selectedSignupData.funnel[1].toLocaleString()}</strong><span>온보딩 시작</span></div><div><strong>{selectedSignupData.funnel[2].toLocaleString()}</strong><span>온보딩 완료</span></div><div><strong>{selectedSignupData.funnel[3].toLocaleString()}</strong><span>첫 로고 생성 시작</span></div></div><div className="admin-funnel-dropoff"><div><span>온보딩 이탈률</span><strong>{selectedSignupData.dropoff}%</strong></div><p>선택한 기간에 온보딩을 시작한 {selectedSignupData.funnel[1].toLocaleString()}명 중 일부가 완료 전에 이탈했어요.</p></div></section>
           </> : <>
             <section className="admin-request-section"><div className="admin-section-heading"><div><h2>개선 요청 타임라인</h2></div><span className="admin-request-count">총 {surveyRequests.length}건</span></div><div className="admin-request-list">{surveyRequests.map((request) => <article className="admin-request-row" key={request.id}><span className="admin-request-number">{request.id}</span><div className="admin-request-copy"><div><strong>{request.category}</strong><span>{request.user} · {request.time}</span></div><p>{request.message}</p></div><button type="button" aria-label={`${request.category} 요청 보기`}><ChevronRight size={18} /></button></article>)}</div></section>

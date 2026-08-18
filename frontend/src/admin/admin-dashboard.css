@@ -271,10 +271,12 @@
 .admin-logo-accordion-heading span { color: #8b93a5; font-size: 11px; font-weight: 600; }
 .admin-logo-thumb-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .admin-logo-thumb-card { overflow: hidden; border: 1px solid #eeeaf8; border-radius: 12px; background: #fff; box-shadow: 0 5px 16px rgb(71 57 116 / .05); }
-.admin-logo-thumb-card img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; background: #f8f6ff; }
+.admin-logo-thumb-card img, .admin-logo-thumb-placeholder { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; background: #f8f6ff; }
+.admin-logo-thumb-placeholder { background: linear-gradient(135deg, #f5f1ff, #ece8fa); }
 .admin-logo-thumb-card > div { display: grid; gap: 3px; padding: 9px 10px 10px; }
 .admin-logo-thumb-card strong { overflow: hidden; color: var(--admin-ink); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .admin-logo-thumb-card span, .admin-logo-thumb-card small { color: #8b93a5; font-size: 10px; }
+.admin-survey-member-name { display: block; margin-top: 3px; color: #8991a2; font-size: 10px; }
 .admin-request-tag { display: inline-flex; min-height: 24px; align-items: center; padding: 0 9px; border-radius: 999px; color: #7550e2; background: #f0ebff; font-size: 11px; font-weight: 700; }
 .admin-request-tag.other { color: #d35a98; background: #fff0f8; }
 .admin-request-other-text { display: inline-block; margin-left: 9px; color: #657087; font-size: 12px; line-height: 1.5; }

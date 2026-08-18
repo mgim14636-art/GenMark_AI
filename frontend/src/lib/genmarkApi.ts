@@ -165,6 +165,112 @@ export type AdminMember = {
   createdAt: string
 }
 
+export type AdminMetricPoint = {
+  label: string
+  value: number
+}
+
+export type AdminTrendPoint = AdminMetricPoint & {
+  ci: number
+  bi: number
+}
+
+export type AdminAnalyticsResponse = {
+  period: 'daily' | 'weekly' | 'monthly' | 'custom'
+  from: string
+  to: string
+  overview: {
+    totalMembers: number
+    newMembers: number
+    totalGenerations: number
+    ciGenerations: number
+    biGenerations: number
+    totalDownloads: number
+    ciDownloads: number
+    biDownloads: number
+  }
+  signup: {
+    totalMembers: number
+    newMembers: number
+    startedGenerationMembers: number
+    providerCounts: AdminMetricPoint[]
+    onboardingUsage: AdminMetricPoint[]
+    trend: AdminTrendPoint[]
+    funnel: AdminMetricPoint[]
+  }
+  generation: {
+    total: number
+    ci: number
+    bi: number
+    succeeded: number
+    failed: number
+    likes: number
+    dislikes: number
+    satisfactionPercent: number
+    trademarkUsagePercent: number
+    purpose: AdminMetricPoint[]
+    ciInputs: AdminMetricPoint[]
+    biInputs: AdminMetricPoint[]
+    trend: AdminTrendPoint[]
+  }
+  downloads: {
+    total: number
+    ci: number
+    bi: number
+    ciStyles: AdminMetricPoint[]
+    biStyles: AdminMetricPoint[]
+    trend: AdminTrendPoint[]
+  }
+  credits: {
+    used: number
+    granted: number
+    generateUsed: number
+    downloadUsed: number
+    surveyGranted: number
+    signupGranted: number
+    totalBalance: number
+  }
+  survey: {
+    responses: number
+    likes: number
+    dislikes: number
+    improvements: AdminMetricPoint[]
+  }
+}
+
+export type AdminAccount = {
+  id: number
+  loginId: string
+  name: string
+  createdAt: string
+  lastAccessAt: string | null
+}
+
+export type AdminLogoAsset = {
+  id: string
+  projectId: string
+  imageUrl: string
+  name: string
+  date: string
+}
+
+export type AdminLogoMemberRecord = {
+  memberId: string
+  memberName: string
+  generatedLogos: AdminLogoAsset[]
+  downloadedLogos: AdminLogoAsset[]
+}
+
+export type AdminSurveyResponse = {
+  memberId: number
+  memberEmail: string | null
+  memberName: string | null
+  rating: number | null
+  improvements: string[]
+  comment: string | null
+  completedAt: string | null
+}
+
 export type TrademarkAnalysis = {
   id: string
   projectId: string
@@ -437,7 +543,17 @@ export const adminApi = {
     body: JSON.stringify({ loginId, password }),
   }),
   dashboard: (token: string) => apiRequestWithToken<AdminDashboardStats>(token, '/admin/dashboard'),
+  analytics: (token: string, period: 'daily' | 'weekly' | 'monthly' | 'custom', from?: string, to?: string) => {
+    const params = new URLSearchParams({ period })
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    return apiRequestWithToken<AdminAnalyticsResponse>(token, `/admin/analytics?${params.toString()}`)
+  },
   members: (token: string) => apiRequestWithToken<AdminMember[]>(token, '/admin/members'),
+  admins: (token: string) => apiRequestWithToken<AdminAccount[]>(token, '/admin/admins'),
+  generationRecords: (token: string, type: 'CI' | 'BI') => apiRequestWithToken<AdminLogoMemberRecord[]>(token, `/admin/generation-records?type=${type}`),
+  surveyResponses: (token: string) => apiRequestWithToken<AdminSurveyResponse[]>(token, '/admin/survey-responses'),
+  candidateImage: (token: string, candidateId: string) => downloadAuthenticatedFileWithToken(token, `/admin/candidates/${candidateId}/image`),
   memberDownloads: (token: string, memberId: number, type?: 'CI' | 'BI') => apiRequestWithToken<DownloadRecord[]>(token, `/admin/members/${memberId}/downloads${type ? `?type=${type}` : ''}`),
   downloadImage: (token: string, downloadId: number) => downloadAuthenticatedFileWithToken(token, `/admin/downloads/${downloadId}/image`),
 }
