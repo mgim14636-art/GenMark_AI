@@ -1014,36 +1014,12 @@ function CustomerApp() {
   const businessCardGalleryDragStartScrollLeft = useRef(0)
   const isDraggingBusinessCardGallery = useRef(false)
 
-  const [curationActiveDot, setCurationActiveDot] = useState(0)
-  const [productActiveDot, setProductActiveDot] = useState(0)
-  const [businessCardActiveDot, setBusinessCardActiveDot] = useState(0)
-
-  // 현재 화면에 보이는 카드 묶음을 한 페이지로 보고, 스크롤 위치 비율로 페이지를 계산한다.
-  const computeActiveDot = (track: HTMLDivElement, itemCount: number) => {
-    const dotCount = Math.max(1, Math.ceil(itemCount / 4))
-    const maxScroll = track.scrollWidth - track.clientWidth
-    if (maxScroll <= 0) return 0
-    const ratio = track.scrollLeft / maxScroll
-    return Math.min(dotCount - 1, Math.round(ratio * (dotCount - 1)))
-  }
-
   const filteredItems = activeCategory === '전체'
     ? galleryItems
     : galleryItems.filter((item) => item.category === activeCategory)
 
   const toggleLike = (id: string) => {
     setLikedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
-  }
-
-  const scrollTrackByPage = (track: HTMLDivElement | null, direction: number) => {
-    if (!track) return
-    const maxScroll = track.scrollWidth - track.clientWidth
-    const target = Math.min(maxScroll, Math.max(0, track.scrollLeft + direction * track.clientWidth))
-    track.scrollTo({ left: target, behavior: 'smooth' })
-  }
-
-  const scrollGallery = (direction: number) => {
-    scrollTrackByPage(galleryRef.current, direction)
   }
 
   const handleGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -1074,10 +1050,6 @@ function CustomerApp() {
     track.classList.remove('is-dragging')
   }
 
-  const scrollProductGallery = (direction: number) => {
-    scrollTrackByPage(productGalleryRef.current, direction)
-  }
-
   const handleProductGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     const track = productGalleryRef.current
     if (!track || event.button !== 0) return
@@ -1106,10 +1078,6 @@ function CustomerApp() {
     track.classList.remove('is-dragging')
   }
 
-  const scrollBusinessCardGallery = (direction: number) => {
-    scrollTrackByPage(businessCardGalleryRef.current, direction)
-  }
-
   const handleBusinessCardGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     const track = businessCardGalleryRef.current
     if (!track || event.button !== 0) return
@@ -1136,24 +1104,6 @@ function CustomerApp() {
     isDraggingBusinessCardGallery.current = false
     if (track.hasPointerCapture(event.pointerId)) track.releasePointerCapture(event.pointerId)
     track.classList.remove('is-dragging')
-  }
-
-  const handleGalleryScroll = () => {
-    const track = galleryRef.current
-    if (!track) return
-    setCurationActiveDot(computeActiveDot(track, filteredItems.length))
-  }
-
-  const handleProductGalleryScroll = () => {
-    const track = productGalleryRef.current
-    if (!track) return
-    setProductActiveDot(computeActiveDot(track, productGalleryItems.length))
-  }
-
-  const handleBusinessCardGalleryScroll = () => {
-    const track = businessCardGalleryRef.current
-    if (!track) return
-    setBusinessCardActiveDot(computeActiveDot(track, businessCardGalleryItems.length))
   }
 
   const toggleSurveyImprovement = (item: SurveyImprovement) => {
@@ -2684,18 +2634,22 @@ function CustomerApp() {
         alt={featuredHeroSlides[featuredHeroIndex].alt}
       />
       <div className="featured-scrim" />
-      <div className="featured-dots" aria-label="대표 큐레이션 진행 상태">
-        {featuredHeroSlides.map((slide, index) => (
-          <button
-            key={slide.id}
-            type="button"
-            className={index === featuredHeroIndex ? 'active' : undefined}
-            aria-label={`${slide.alt} 보기`}
-            aria-current={index === featuredHeroIndex}
-            onClick={() => setFeaturedHeroIndex(index)}
-          />
-        ))}
-      </div>
+      <button
+        type="button"
+        className="featured-hero-arrow prev"
+        aria-label="이전 로고 보기"
+        onClick={() => setFeaturedHeroIndex((index) => (index + featuredHeroSlides.length - 1) % featuredHeroSlides.length)}
+      >
+        <ChevronLeft aria-hidden="true" size={22} strokeWidth={2} />
+      </button>
+      <button
+        type="button"
+        className="featured-hero-arrow next"
+        aria-label="다음 로고 보기"
+        onClick={() => setFeaturedHeroIndex((index) => (index + 1) % featuredHeroSlides.length)}
+      >
+        <ChevronRight aria-hidden="true" size={22} strokeWidth={2} />
+      </button>
     </section>
   )
 
@@ -4267,7 +4221,7 @@ function CustomerApp() {
         <div className="login-hero-mark">
           <GenMarkLogo className="login-hero-logo" alt="GenMark AI" />
         </div>
-        <h1 id="login-title">만들던 브랜드를<br /><strong>안전하게 저장하세요</strong></h1>
+        <h1 id="login-title">상상하던 내 브랜드,<br /><strong>지금 시작해 보세요</strong></h1>
         <p className="login-description">로그인하면 작성 중인 내용과 생성한 로고,<br className="login-break" /> 상표 이미지 분석 결과를 나중에도 확인할 수 있어요.</p>
         {authError ? <p className="login-error" role="alert">{authError}</p> : null}
         <div className="login-providers">
@@ -4319,10 +4273,6 @@ function CustomerApp() {
           <section className="curation-section" aria-labelledby="curation-title">
             <div className="section-heading">
               <h2 id="curation-title">큐레이션 갤러리</h2>
-              <div className="gallery-controls">
-                <button type="button" aria-label="이전 로고 묶음 보기" onClick={() => scrollGallery(-1)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-                <button type="button" aria-label="다음 로고 묶음 보기" onClick={() => scrollGallery(1)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-              </div>
             </div>
             <div className="filter-row" role="tablist" aria-label="로고 스타일 필터">
               {categories.map((category) => (
@@ -4338,7 +4288,6 @@ function CustomerApp() {
               onPointerMove={handleGalleryPointerMove}
               onPointerUp={handleGalleryPointerUp}
               onPointerCancel={handleGalleryPointerUp}
-              onScroll={handleGalleryScroll}
             >
               {filteredItems.map((item) => {
                 const liked = likedIds.includes(item.id)
@@ -4353,52 +4302,11 @@ function CustomerApp() {
                 )
               })}
             </div>
-            <div className="gallery-dots" aria-hidden="true">
-              {Array.from({ length: Math.max(1, Math.ceil(filteredItems.length / 4)) }).map((_, index) => (
-                <span key={index} className={index === curationActiveDot ? 'active' : undefined} />
-              ))}
-            </div>
-          </section>
-
-          <section className="curation-section product-gallery-section" aria-labelledby="product-gallery-title">
-            <div className="section-heading">
-              <h2 id="product-gallery-title">제품 썸네일 갤러리</h2>
-              <div className="gallery-controls">
-                <button type="button" aria-label="이전 제품 묶음 보기" onClick={() => scrollProductGallery(-1)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-                <button type="button" aria-label="다음 제품 묶음 보기" onClick={() => scrollProductGallery(1)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-              </div>
-            </div>
-            <div
-              className="gallery-track"
-              ref={productGalleryRef}
-              onPointerDown={handleProductGalleryPointerDown}
-              onPointerMove={handleProductGalleryPointerMove}
-              onPointerUp={handleProductGalleryPointerUp}
-              onPointerCancel={handleProductGalleryPointerUp}
-              onScroll={handleProductGalleryScroll}
-            >
-              {productGalleryItems.map((item) => {
-                return (
-                  <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
-                  </article>
-                )
-              })}
-            </div>
-            <div className="gallery-dots" aria-hidden="true">
-              {Array.from({ length: Math.max(1, Math.ceil(productGalleryItems.length / 4)) }).map((_, index) => (
-                <span key={index} className={index === productActiveDot ? 'active' : undefined} />
-              ))}
-            </div>
           </section>
 
           <section className="curation-section business-card-gallery-section" aria-labelledby="business-card-gallery-title">
             <div className="section-heading">
               <h2 id="business-card-gallery-title">명함 갤러리</h2>
-              <div className="gallery-controls">
-                <button type="button" aria-label="이전 명함 묶음 보기" onClick={() => scrollBusinessCardGallery(-1)}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-                <button type="button" aria-label="다음 명함 묶음 보기" onClick={() => scrollBusinessCardGallery(1)}><ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-              </div>
             </div>
             <div
               className="gallery-track"
@@ -4407,7 +4315,6 @@ function CustomerApp() {
               onPointerMove={handleBusinessCardGalleryPointerMove}
               onPointerUp={handleBusinessCardGalleryPointerUp}
               onPointerCancel={handleBusinessCardGalleryPointerUp}
-              onScroll={handleBusinessCardGalleryScroll}
             >
               {businessCardGalleryItems.map((item) => {
                 return (
@@ -4417,10 +4324,27 @@ function CustomerApp() {
                 )
               })}
             </div>
-            <div className="gallery-dots" aria-hidden="true">
-              {Array.from({ length: Math.max(1, Math.ceil(businessCardGalleryItems.length / 4)) }).map((_, index) => (
-                <span key={index} className={index === businessCardActiveDot ? 'active' : undefined} />
-              ))}
+          </section>
+
+          <section className="curation-section product-gallery-section" aria-labelledby="product-gallery-title">
+            <div className="section-heading">
+              <h2 id="product-gallery-title">제품 썸네일 갤러리</h2>
+            </div>
+            <div
+              className="gallery-track"
+              ref={productGalleryRef}
+              onPointerDown={handleProductGalleryPointerDown}
+              onPointerMove={handleProductGalleryPointerMove}
+              onPointerUp={handleProductGalleryPointerUp}
+              onPointerCancel={handleProductGalleryPointerUp}
+            >
+              {productGalleryItems.map((item) => {
+                return (
+                  <article className="gallery-card" key={item.id}>
+                    <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
+                  </article>
+                )
+              })}
             </div>
           </section>
         </main>
