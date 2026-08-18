@@ -1,57 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="324" height="384" viewBox="0 0 324 384">
-  <defs>
-    <linearGradient id="navyGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#111B78"/>
-      <stop offset="100%" stop-color="#07145E"/>
-    </linearGradient>
-    <linearGradient id="cyanGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#2DD4D1"/>
-      <stop offset="100%" stop-color="#19C2C7"/>
-    </linearGradient>
-  </defs>
-
-  <!-- Navy upper shield / M frame -->
-  <path
-    d="M160 38
-       L30 107
-       L30 258
-       Q30 281 49 292
-       L70 304
-       L70 118
-       L160 175
-       L248 118
-       L248 187
-       L288 188
-       L288 107
-       Z"
-    fill="url(#navyGrad)"/>
-
-  <!-- Cyan lower M / shield body -->
-  <path
-    d="M99 191
-       L160 230
-       L219 191
-       L219 219
-       L288 219
-       L288 259
-       Q288 279 270 291
-       L160 362
-       L70 304
-       L70 260
-       L160 317
-       L248 260
-       L219 260
-       L160 297
-       L99 259
-       Z"
-    fill="url(#cyanGrad)"/>
-
-  <!-- White separating chevron -->
-  <path
-    d="M70 260 L160 317 L248 260"
-    fill="none"
-    stroke="#FFFFFF"
-    stroke-width="9"
-    stroke-linejoin="miter"
-    stroke-linecap="butt"/>
+<?xml version="1.0" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="225 305 330 330">
+<defs>
+<linearGradient id="genmarkPurple" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0%" stop-color="#A78BFA"/>
+<stop offset="100%" stop-color="#7C5CFC"/>
+</linearGradient>
+</defs>
+<g transform="translate(0.000000,973.000000) scale(0.100000,-0.100000)" stroke="none">
+<path fill="url(#genmarkPurple)" d="M3710 6299 c-1081 -601 -1146 -638 -1172 -666 l-23 -25 -3 -616 c-2
+-592 -1 -618 17 -648 14 -23 69 -59 212 -139 107 -59 415 -230 685 -381 398
+-222 498 -274 528 -274 29 0 82 25 236 110 171 96 200 115 209 142 7 20 11
+156 11 384 0 330 1 354 18 354 25 0 115 45 316 159 99 55 183 101 188 101 4 0
+8 -160 8 -355 0 -195 2 -355 4 -355 2 0 90 49 196 108 114 63 202 119 214 136
+21 27 21 38 24 627 1 329 0 599 -2 599 -3 0 -27 -13 -53 -28 -26 -16 -176
+-100 -333 -187 -157 -87 -351 -195 -431 -240 l-146 -82 -209 121 c-180 103
+-215 120 -254 120 -39 1 -72 -14 -251 -112 -211 -116 -229 -130 -229 -187 0
+-41 47 -79 215 -175 142 -81 164 -91 198 -87 21 3 47 13 58 23 10 9 19 15 20
+13 5 -24 5 -670 0 -673 -4 -3 -231 120 -504 271 l-497 276 0 372 0 373 253
+143 c138 78 363 205 500 282 l247 139 0 254 c0 140 -3 254 -7 254 -5 0 -114
+-59 -243 -131z"/>
+</g>
 </svg>

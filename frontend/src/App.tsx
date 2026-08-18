@@ -27,7 +27,7 @@ type ToneOption = 'friendly' | 'professional' | 'warm' | 'trendy' | 'minimal'
 type RgbColor = { r: number; g: number; b: number }
 type LogoStyle = 'symbol' | 'wordmark' | 'combination' | 'lettermark'
 type TrademarkMatchImage = { rank: number; src: string }
-type FinalEditKind = 'identity' | 'values' | 'tone' | 'color' | 'style'
+type FinalEditKind = 'identity' | 'values' | 'tone' | 'color' | 'style' | 'shape'
 type FinalToneMode = 'recommended' | 'direct'
 type EditorTarget = string
 type EditorDraft = {
@@ -145,6 +145,15 @@ const extractLogoShapeRequirement = (requirements: string | null | undefined) =>
   const match = requirements?.match(new RegExp(`(?:^|\\n)${logoShapeRequirementPrefix}\\s*([^\\n]*)`))
   return match?.[1]?.trim() ?? ''
 }
+
+const featuredHeroSlides = [
+  { id: 'deer', src: '/home/deer-green.svg', alt: '초록색 사슴 로고 이미지' },
+  { id: 'bone', src: '/home/bone-navy.svg', alt: '개뼈다귀 로고 이미지' },
+  { id: 'dokdo', src: '/home/dokdo.svg', alt: '독도 로고 이미지' },
+  { id: 'musclegym', src: '/home/musclegym.svg', alt: '머슬짐 로고 이미지' },
+  { id: 'soomin', src: '/home/soomin.svg', alt: '수민 로고 이미지' },
+  { id: 'petal', src: '/home/petal-a.svg', alt: '꽃잎 로고 이미지' },
+]
 
 const galleryItems = [
   { id: 'quendra', name: 'QUENDRA', category: '워드마크', meta: '뷰티 · 워드마크', likes: '2.8k', image: '/curation-gallery/quendra.png', position: '50% 50%', tone: 'quendra' },
@@ -424,6 +433,7 @@ function BrandLogo({ className = '' }: { className?: string }) {
 function CustomerApp() {
   const [mode, setModeState] = useState<ViewMode>(getModeFromUrl)
   const [logoIntroStage, setLogoIntroStage] = useState<'opening' | 'ready'>('opening')
+  const [featuredHeroIndex, setFeaturedHeroIndex] = useState(0)
   const [loggedIn, setLoggedIn] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
@@ -473,7 +483,6 @@ function CustomerApp() {
   const [logoShapePrompt, setLogoShapePrompt] = useState('')
   const [logoShapeAccordionOpen, setLogoShapeAccordionOpen] = useState(false)
   const [resultCandidate, setResultCandidate] = useState(0)
-  const [resultLiked, setResultLiked] = useState(false)
   const [trademarkAnalysisSkipped, setTrademarkAnalysisSkipped] = useState(false)
   const [trademarkAnalysisRequested, setTrademarkAnalysisRequested] = useState(false)
   const [editorTestMode, setEditorTestMode] = useState(() => getModeFromUrl() === 'edit')
@@ -509,7 +518,6 @@ function CustomerApp() {
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null)
   const [pinnedLogos, setPinnedLogos] = useState<PinnedLogo[]>([])
   const [downloadHistory, setDownloadHistory] = useState<DownloadRecord[]>([])
-  const [pinError, setPinError] = useState('')
   const [brandKit, setBrandKit] = useState<BrandKit | null>(null)
   const [brandKitError, setBrandKitError] = useState('')
   const [brandKitDownloading, setBrandKitDownloading] = useState(false)
@@ -799,8 +807,18 @@ function CustomerApp() {
     if (mode !== 'logo-intro') return undefined
 
     setLogoIntroStage('opening')
-    const timer = window.setTimeout(() => setLogoIntroStage('ready'), 3600)
+    // 문구 4줄이 260ms부터 600ms 간격(260/860/1460/2060ms)으로 나오므로,
+    // 버튼도 같은 리듬을 이어서 2660ms에 등장하도록 맞춘다.
+    const timer = window.setTimeout(() => setLogoIntroStage('ready'), 2660)
     return () => window.clearTimeout(timer)
+  }, [mode])
+
+  useEffect(() => {
+    if (mode !== 'home') return undefined
+    const timer = window.setInterval(() => {
+      setFeaturedHeroIndex((index) => (index + 1) % featuredHeroSlides.length)
+    }, 5000)
+    return () => window.clearInterval(timer)
   }, [mode])
 
   useEffect(() => {
@@ -1134,7 +1152,6 @@ function CustomerApp() {
     setLogoCandidates(nextCandidates)
     setResultCandidate(selected >= 0 ? selected : 0)
     setSelectedCandidateId(selected >= 0 ? nextCandidates[selected].id : null)
-    setResultLiked(Boolean(nextCandidates[selected >= 0 ? selected : 0]?.pinnedAt))
   }
 
   const restoreProjectState = async (resumeId: string): Promise<ViewMode | null> => {
@@ -1188,7 +1205,6 @@ function CustomerApp() {
           setLogoCandidates([])
           setSelectedCandidateId(null)
           setResultCandidate(0)
-          setResultLiked(false)
         }
         return 'result'
       }
@@ -1800,7 +1816,6 @@ function CustomerApp() {
       const selected = await projectsApi.selectCandidate(projectId, candidate.id)
       setSelectedCandidateId(selected.id)
       setLogoCandidates((current) => current.map((item) => ({ ...item, selected: item.id === selected.id })))
-      setResultLiked(Boolean(candidate.pinnedAt))
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : '로고 후보를 선택하지 못했어요.')
     }
@@ -2057,29 +2072,6 @@ function CustomerApp() {
     void submitSurveyResponse()
       .then(() => setCreditModal(null))
       .catch((error) => setProjectError(error instanceof Error ? error.message : '설문을 제출하지 못했어요.'))
-  }
-
-  const toggleCandidatePin = async (candidate: LogoCandidate) => {
-    if (!projectId) return
-    setPinError('')
-    try {
-      if (candidate.pinnedAt) {
-        await projectsApi.unpinCandidate(projectId, candidate.id)
-        setLogoCandidates((current) => current.map((item) => item.id === candidate.id ? { ...item, pinnedAt: null } : item))
-        setResultLiked(false)
-        setPinnedLogos((current) => current.filter((item) => item.candidateId !== candidate.id))
-        return
-      }
-
-      const pinned = await projectsApi.pinCandidate(projectId, candidate.id)
-      setLogoCandidates((current) => current.map((item) => item.id === candidate.id
-        ? { ...item, pinnedAt: pinned.pinnedAt ?? null }
-        : item))
-      setResultLiked(Boolean(pinned.pinnedAt))
-      setPinnedLogos((current) => [{ ...pinned, projectId }, ...current.filter((item) => item.candidateId !== candidate.id)])
-    } catch (error) {
-      setPinError(error instanceof Error ? error.message : '찜 상태를 변경하지 못했어요.')
-    }
   }
 
   const onboardingOptions: Array<{
@@ -2638,11 +2630,25 @@ function CustomerApp() {
   )
 
   const renderFeaturedHero = () => (
-    <section className="featured-hero" aria-label="NOVAIRE STUDIO 브랜드 로고 소개">
-      <img className="featured-art" src="/home/lunee-studio-white.png" alt="LUNÉE 금색 로고 이미지" />
+    <section className="featured-hero" aria-label="대표 브랜드 로고 소개">
+      <img
+        key={featuredHeroSlides[featuredHeroIndex].id}
+        className="featured-art"
+        src={featuredHeroSlides[featuredHeroIndex].src}
+        alt={featuredHeroSlides[featuredHeroIndex].alt}
+      />
       <div className="featured-scrim" />
       <div className="featured-dots" aria-label="대표 큐레이션 진행 상태">
-        <span className="active" /><span /><span /><span />
+        {featuredHeroSlides.map((slide, index) => (
+          <button
+            key={slide.id}
+            type="button"
+            className={index === featuredHeroIndex ? 'active' : undefined}
+            aria-label={`${slide.alt} 보기`}
+            aria-current={index === featuredHeroIndex}
+            onClick={() => setFeaturedHeroIndex(index)}
+          />
+        ))}
       </div>
     </section>
   )
@@ -2650,7 +2656,7 @@ function CustomerApp() {
   const renderHeroScreen = () => (
     <main className="hero-screen">
       <header className="hero-screen-header">
-        <div className="hero-screen-brand"><BrandLogo className="hero-screen-mark" /><span>GenMark AI</span></div>
+        <div className="hero-screen-brand"><BrandLogo className="hero-screen-mark" /><span><span className="brand-mark-accent">GenMark AI</span></span></div>
         <button type="button" className="hero-screen-login" onClick={() => { setLoginDestination('home'); setLoginReturnMode('hero'); setMode('login') }}>로그인</button>
       </header>
       <section className="hero-screen-panel" aria-labelledby="hero-screen-title">
@@ -2677,7 +2683,7 @@ function CustomerApp() {
         <header className="gallery-hero-header">
           <div className="gallery-hero-brand">
             <BrandLogo className="gallery-hero-mark" />
-            <span>GenMark AI</span>
+            <span><span className="brand-mark-accent">GenMark AI</span></span>
           </div>
           <button
             type="button"
@@ -2925,7 +2931,7 @@ function CustomerApp() {
                 <Shapes className="final-detail-icon" aria-hidden="true" size={22} strokeWidth={1.8} />
                 <span className="final-summary-label">원하는 로고 모양</span>
                 <span className="final-summary-value">{displayValue(logoShapePrompt)}</span>
-                <button className="final-edit-button" type="button" onClick={() => openFinalEditModal('style')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
+                <button className="final-edit-button" type="button" onClick={() => openFinalEditModal('shape')}>수정하기 <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} /></button>
               </div>
             </div>
           </section>
@@ -3017,7 +3023,7 @@ function CustomerApp() {
         <section className="trademark-loading-content">
           <div className="trademark-brand-lockup" aria-label="GenMark AI">
             <BrandLogo className="trademark-brand-mark" />
-            <span>GenMark AI</span>
+            <span><span className="brand-mark-accent">GenMark AI</span></span>
           </div>
 
           <div className="trademark-progress" aria-label="상표 분석 3단계 중 2단계">
@@ -3077,7 +3083,7 @@ function CustomerApp() {
       <main className="trademark-selection-screen" aria-labelledby="trademark-selection-title">
         <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => setMode(trademarkEntry === 'generation' ? 'final' : 'result')} />
         <header className="trademark-selection-header">
-          <div className="trademark-selection-brand"><BrandLogo className="trademark-selection-brand-mark" /><span>GenMark AI</span></div>
+          <div className="trademark-selection-brand"><BrandLogo className="trademark-selection-brand-mark" /><span><span className="brand-mark-accent">GenMark AI</span></span></div>
         </header>
 
         <section className="trademark-selection-content">
@@ -3160,7 +3166,7 @@ function CustomerApp() {
       <main className="trademark-result-screen trademark-result-screen-redesign" aria-labelledby="trademark-result-title">
         <header className="trademark-result-header trademark-result-header-redesign">
           <button className="trademark-result-back" type="button" aria-label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={22} strokeWidth={1.8} /></button>
-          <div className="trademark-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
+          <div className="trademark-result-brand"><BrandLogo /><strong><span className="brand-mark-accent">GenMark AI</span></strong></div>
         </header>
 
         <section className="trademark-result-content trademark-result-content-redesign">
@@ -3217,7 +3223,7 @@ function CustomerApp() {
       <main className="trademark-result-screen" aria-labelledby="trademark-result-title">
         <header className="trademark-result-header">
           <button className="trademark-result-back" type="button" aria-label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-          <div className="trademark-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
+          <div className="trademark-result-brand"><BrandLogo /><strong><span className="brand-mark-accent">GenMark AI</span></strong></div>
         </header>
 
         <section className="trademark-result-content">
@@ -3316,7 +3322,7 @@ function CustomerApp() {
     return (
       <main className="logo-result-screen" aria-labelledby="logo-result-title">
         <header className="logo-result-header">
-          <div className="logo-result-brand"><BrandLogo /><strong>GenMark AI</strong></div>
+          <div className="logo-result-brand"><BrandLogo /><strong><span className="brand-mark-accent">GenMark AI</span></strong></div>
         </header>
 
         <section className="logo-result-content">
@@ -3324,9 +3330,6 @@ function CustomerApp() {
           <h1 id="logo-result-title">가장 마음에 드는 로고를 선택해주세요</h1>
           <p className="logo-result-lead">후보를 비교하고 색상이나 글씨체를 수정할 수 있어요.</p>
           <section className="logo-candidate-panel" aria-label="로고 후보 미리보기">
-            <button className={resultLiked ? 'logo-candidate-action like liked' : 'logo-candidate-action like'} type="button" aria-label={resultLiked ? '찜 취소' : '찜'} aria-pressed={resultLiked} onClick={() => isResultPreview ? setResultLiked((current) => !current) : void toggleCandidatePin(candidate)}>
-              <Heart size={22} strokeWidth={1.9} fill={resultLiked ? 'currentColor' : 'none'} />
-            </button>
             {candidates.length > 1 && <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => { const next = (resultCandidate + candidates.length - 1) % candidates.length; if (isResultPreview) setResultCandidate(next); else void selectLogoCandidate(candidates[next], next) }}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>}
             <div className="logo-candidate-art">
               <img
@@ -3341,7 +3344,6 @@ function CustomerApp() {
             </button>
           </section>
           {candidate.pinnedAt ? <p className="logo-pin-expiry">찜한 로고예요. 3일 뒤 자동으로 사라져요.</p> : null}
-          {pinError && <p className="project-error" role="alert">{pinError}</p>}
           {(() => {
             const displayValue = (value: string | undefined, fallback = '입력하지 않음') => value?.trim() || fallback
             const selectedToneLabel = toneMode === 'direct'
@@ -3681,7 +3683,7 @@ function CustomerApp() {
       <main className="logo-editor-screen" aria-labelledby="logo-editor-title">
         <header className="logo-editor-header">
           <button className="logo-editor-back" type="button" aria-label="결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-          <div className="logo-editor-brand"><BrandLogo /><strong>GenMark AI</strong></div>
+          <div className="logo-editor-brand"><BrandLogo /><strong><span className="brand-mark-accent">GenMark AI</span></strong></div>
           <button className="logo-editor-save" type="button" disabled={editorLoading || editorSaving || !editorSvgSource} onClick={() => void saveEditorChanges()}>{editorSaving ? '저장 중' : editorSaved ? '저장됨' : '저장'}<ChevronDown aria-hidden="true" size={16} strokeWidth={1.8} /></button>
         </header>
 
@@ -3725,7 +3727,7 @@ function CustomerApp() {
           <header className="main-header">
             <a className="main-brand" href="#home" aria-label="GenMark AI 홈" onClick={() => setMode('home')}>
               <BrandLogo />
-              <span>GenMark AI</span>
+              <span><span className="brand-mark-accent">GenMark AI</span></span>
             </a>
           </header>
           <section className="mypage-content mypage-login-gate">
@@ -3848,7 +3850,7 @@ function CustomerApp() {
       <main className="mypage-screen" aria-labelledby="mypage-title">
         <header className="workspace-header">
           <button className="workspace-back" type="button" aria-label="홈으로 돌아가기" onClick={() => setMode('home')}><ChevronLeft aria-hidden="true" size={23} strokeWidth={1.8} /></button>
-          <div className="workspace-brand"><BrandLogo /><strong>GenMark AI</strong></div>
+          <div className="workspace-brand"><BrandLogo /><strong><span className="brand-mark-accent">GenMark AI</span></strong></div>
         </header>
 
         <section className="mypage-content">
@@ -3994,7 +3996,7 @@ function CustomerApp() {
       <main className="survey-screen" aria-labelledby="survey-title">
         <header className="workspace-header">
           <button className="workspace-back" type="button" aria-label="마이페이지로 돌아가기" onClick={() => setMode('mypage')}><ChevronLeft aria-hidden="true" size={23} strokeWidth={1.8} /></button>
-          <div className="workspace-brand"><BrandLogo /><strong>GenMark AI</strong></div>
+          <div className="workspace-brand"><BrandLogo /><strong><span className="brand-mark-accent">GenMark AI</span></strong></div>
           <span className="survey-step">만족도 평가</span>
         </header>
 
@@ -4020,7 +4022,7 @@ function CustomerApp() {
 
   const renderFinalEditModal = () => {
     if (!finalEditModal) return null
-    const title = finalEditModal === 'identity' ? '기본 정보를 수정하세요' : finalEditModal === 'values' ? '핵심 가치를 수정하세요' : finalEditModal === 'tone' ? '분위기를 수정하세요' : finalEditModal === 'color' ? '색상을 수정하세요' : '로고 타입과 모양을 수정하세요'
+    const title = finalEditModal === 'identity' ? '기본 정보를 수정하세요' : finalEditModal === 'values' ? '핵심 가치를 수정하세요' : finalEditModal === 'tone' ? '분위기를 수정하세요' : finalEditModal === 'color' ? '색상을 수정하세요' : finalEditModal === 'style' ? '로고 타입을 수정하세요' : '원하는 로고 모양을 수정하세요'
     return <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFinalEditModal(null) }}>
       <section className="credit-modal final-edit-modal" role="dialog" aria-modal="true" aria-labelledby="final-edit-title">
         <button className="modal-close" type="button" aria-label="수정 닫기" onClick={() => setFinalEditModal(null)}><X size={22} /></button>
@@ -4074,7 +4076,8 @@ function CustomerApp() {
             </label>
           </div>
         </div>}
-        {finalEditModal === 'style' && <><label>로고 타입<select autoFocus value={finalEditDraft.logoStyle} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, logoStyle: event.target.value as LogoStyle }))}>{logoStyleOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label><label>원하는 로고 모양<textarea value={finalEditDraft.logoShape} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, logoShape: event.target.value }))} maxLength={100} /></label></>}
+        {finalEditModal === 'style' && <label>로고 타입<select autoFocus value={finalEditDraft.logoStyle} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, logoStyle: event.target.value as LogoStyle }))}>{logoStyleOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
+        {finalEditModal === 'shape' && <label>원하는 로고 모양<textarea autoFocus value={finalEditDraft.logoShape} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, logoShape: event.target.value }))} maxLength={100} /></label>}
         <div className="credit-modal-actions"><button className="gradient-button" type="button" disabled={finalEditModal === 'tone' && finalEditToneMode === 'direct' && !finalEditDraft.tone.trim()} onClick={saveFinalEditModal}>저장하기</button><button className="modal-secondary-button" type="button" onClick={() => setFinalEditModal(null)}>취소</button></div>
       </section>
     </div>
@@ -4215,10 +4218,6 @@ function CustomerApp() {
   const renderLoginScreen = () => (
     <main className="login-screen">
       <section className="login-content" aria-labelledby="login-title">
-        <div className="login-brand-lockup">
-          <BrandLogo />
-          <span>GenMark AI</span>
-        </div>
         <div className="login-hero-mark">
           <img className="login-stamp-art" src="/login-hero-bubbles-wide.png" alt="빛나는 거품과 잎사귀를 담은 브랜드 이미지" />
         </div>
@@ -4251,7 +4250,7 @@ function CustomerApp() {
         <header className="main-header">
           <a className="main-brand" href="#home" aria-label="GenMark AI 홈" onClick={() => setMode('home')}>
             <BrandLogo />
-            <span>GenMark AI</span>
+            <span><span className="brand-mark-accent">GenMark AI</span></span>
           </a>
           <button className="outline-login" type="button" disabled={authRestoring} onClick={() => {
             if (loggedIn) { void handleLogout(); return }
