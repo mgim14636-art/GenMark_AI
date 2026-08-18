@@ -9148,15 +9148,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 }
 
 /* Home and login use the same soft, staggered entrance as the choice screen. */
-@property --hero-reveal {
-  syntax: '<percentage>';
-  inherits: false;
-  initial-value: -18%;
-}
-
 @keyframes home-featured-art-in {
-  from { --hero-reveal: -18%; }
-  to { --hero-reveal: 118%; }
+  from { transform: translateX(100%); }
+  to { transform: translateX(0%); }
 }
 
 @keyframes home-featured-copy-in {
@@ -9174,9 +9168,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 }
 
 .main-home .featured-art {
-  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 calc(var(--hero-reveal) - 18%), transparent var(--hero-reveal), transparent 100%);
-  mask-image: linear-gradient(90deg, #000 0%, #000 calc(var(--hero-reveal) - 18%), transparent var(--hero-reveal), transparent 100%);
-  animation: home-featured-art-in 950ms cubic-bezier(.22, .7, .18, 1) both;
+  animation: home-featured-art-in 700ms cubic-bezier(.22, .7, .18, 1) both;
 }
 
 .main-home .featured-lockup {
