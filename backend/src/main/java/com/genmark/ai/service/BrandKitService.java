@@ -140,6 +140,19 @@ public class BrandKitService {
                 zip.write(storage.read(storageKeys.get(index)));
                 zip.closeEntry();
             }
+            if (kit.getKitType() == BrandKit.KitType.BUSINESS_CARD) {
+                for (int index = 0; index < expectedCount; index += 1) {
+                    var printAsset = storage.readBrandKitPrintAsset(kit.getPublicId(), index + 1);
+                    if (printAsset.isEmpty()) continue; // legacy PNG-only brand kits remain downloadable
+                    String side = index == 0 ? "front" : "back";
+                    zip.putNextEntry(new ZipEntry(side + ".svg"));
+                    zip.write(printAsset.get().svg());
+                    zip.closeEntry();
+                    zip.putNextEntry(new ZipEntry(side + ".pdf"));
+                    zip.write(printAsset.get().pdf());
+                    zip.closeEntry();
+                }
+            }
             zip.finish();
             String filename = kit.getKitType() == BrandKit.KitType.BUSINESS_CARD
                     ? "genmark-business-card.zip"

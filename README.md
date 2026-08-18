@@ -41,6 +41,20 @@ docker compose logs -f
 
 ---
 
+## 🧰 Portable Codex Setup
+
+이 프로젝트는 전역 Codex 지침과 사용자 관리 스킬을 Git으로 재현할 수 있도록 portable 패키지를 제공합니다.
+
+다른 환경에서 저장소를 받은 뒤 한 번 실행하세요:
+
+```powershell
+pwsh -NoProfile -File .\scripts\setup-codex.ps1
+```
+
+스킬까지 Git 버전으로 업데이트하려면 `-Force`를 사용합니다. 자세한 범위, 백업, 전역 설정 교체 방법은 [`docs/codex-portable.md`](docs/codex-portable.md)를 참고하세요.
+
+---
+
 ## 📁 Project Structure
 
 ```text

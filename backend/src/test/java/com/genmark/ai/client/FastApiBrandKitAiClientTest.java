@@ -50,8 +50,8 @@ class FastApiBrandKitAiClientTest {
                         {
                           "imageBase64": "front-png",
                           "images": [
-                            {"imageBase64": "front-png", "width": 1050, "height": 600},
-                            {"imageBase64": "back-png", "width": 1050, "height": 600}
+                            {"imageBase64": "front-png", "svgBase64": "front-svg", "pdfBase64": "front-pdf", "width": 1050, "height": 600},
+                            {"imageBase64": "back-png", "svgBase64": "back-svg", "pdfBase64": "back-pdf", "width": 1050, "height": 600}
                           ],
                           "preliminary": true,
                           "warnings": ["AI 연출 배경 미적용"]
@@ -62,6 +62,9 @@ class FastApiBrandKitAiClientTest {
 
         assertThat(result.imageBase64Values())
                 .containsExactly("front-png", "back-png");
+        assertThat(result.printAssets()).containsExactly(
+                new BrandKitAiClient.PrintAsset("front-svg", "front-pdf"),
+                new BrandKitAiClient.PrintAsset("back-svg", "back-pdf"));
         assertThat(result.preliminary()).isTrue();
         assertThat(result.warnings()).containsExactly("AI 연출 배경 미적용");
         server.verify();

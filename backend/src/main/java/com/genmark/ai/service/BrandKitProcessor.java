@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 브랜드킷 이미지를 실제로 만들어 저장한다. {@link LogoGenerationProcessor}와 같은 흐름이다.
@@ -49,12 +50,27 @@ public class BrandKitProcessor {
             if (imageBase64Values.size() != expectedImageCount) {
                 throw new IllegalStateException("Brand kit response image count mismatch");
             }
+            if (kit.getKitType() == BrandKit.KitType.BUSINESS_CARD
+                    && !hasCompletePrintAssets(result, expectedImageCount)) {
+                throw new ApiException(ErrorCode.AI_INVALID_RESPONSE,
+                        "명함 SVG/PDF 앞·뒷면이 모두 생성되지 않았습니다.");
+            }
             // 저장 경로는 브랜드킷 public_id 아래에 둔다. 로고 후보와 섞이지 않게 하기 위함이다.
             LogoFileStorage.StoredImage stored = null;
             for (int index = 0; index < imageBase64Values.size(); index += 1) {
                 LogoFileStorage.StoredImage current = storage.store(
                         "brand-kits/" + kit.getPublicId(), index + 1, imageBase64Values.get(index));
                 if (stored == null) stored = current;
+            }
+            if (kit.getKitType() == BrandKit.KitType.BUSINESS_CARD) {
+                for (int index = 0; index < Math.min(result.printAssets().size(), expectedImageCount); index += 1) {
+                    BrandKitAiClient.PrintAsset asset = result.printAssets().get(index);
+                    if (asset.svgBase64() != null && !asset.svgBase64().isBlank()
+                            && asset.pdfBase64() != null && !asset.pdfBase64().isBlank()) {
+                        storage.storeBrandKitPrintAsset(
+                                kit.getPublicId(), index + 1, asset.svgBase64(), asset.pdfBase64());
+                    }
+                }
             }
             if (stored == null) throw new IllegalStateException("Brand kit response contains no images");
             storage.storeBrandKitSourceKey(kit.getPublicId(), sourceStorageKey);
@@ -85,6 +101,16 @@ public class BrandKitProcessor {
         request.put("kit_type", kit.getKitType().name());
         byte[] logoPng = storage.read(sourceStorageKey);
         request.put("logo_image_base64", Base64.getEncoder().encodeToString(logoPng));
+        try {
+            byte[] logoSvg = storage.readSvg(
+                    candidate.getGeneration().getPublicId(), candidate.getCandidateOrder(),
+                    svgRevision(candidate.getAiMetadataJson()));
+            if (logoSvg != null && logoSvg.length > 0) {
+                request.put("logo_svg", new String(logoSvg, StandardCharsets.UTF_8));
+            }
+        } catch (ApiException ex) {
+            if (ex.getErrorCode() != ErrorCode.RESOURCE_NOT_FOUND) throw ex;
+        }
         Map<String, Object> renderSpec = readRenderSpec(kit.getRenderSpecJson());
         // 생성 요청 시점에 저장한 설문 스냅샷을 사용해야 캐시 해시와 실제 렌더 입력이 일치한다.
         Object survey = renderSpec.get("survey");
@@ -102,6 +128,24 @@ public class BrandKitProcessor {
             request.put("card_info", cardInfo);
         }
         return request;
+    }
+
+    private boolean hasCompletePrintAssets(BrandKitAiClient.Result result, int expectedCount) {
+        if (result.printAssets().size() != expectedCount) return false;
+        return result.printAssets().stream().allMatch(asset -> asset != null
+                && asset.svgBase64() != null && !asset.svgBase64().isBlank()
+                && asset.pdfBase64() != null && !asset.pdfBase64().isBlank());
+    }
+
+    @SuppressWarnings("unchecked")
+    private String svgRevision(String metadataJson) {
+        if (metadataJson == null || metadataJson.isBlank()) return null;
+        try {
+            Object revision = JSON.readValue(metadataJson, Map.class).get("svgRevision");
+            return revision instanceof String value && value.matches("[0-9a-f]{64}") ? value : null;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     @SuppressWarnings("unchecked")

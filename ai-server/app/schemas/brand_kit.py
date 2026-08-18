@@ -91,6 +91,7 @@ class CardInfo(BaseModel):
 class BrandKitRequest(BaseModel):
     kit_type: KitType
     logo_image_base64: str = Field(..., description="완성 로고 PNG의 Base64 (data URI 접두어 허용)")
+    logo_svg: Optional[str] = Field(None, description="완성 로고 SVG. 없으면 PNG를 안전하게 포함해 인쇄 파일을 만든다")
     ci_bi: Optional[str] = Field(None, description="'CI' 또는 'BI'")
 
     # 로고 생성 때 넘긴 것과 같은 설문 구조. 색상·톤만 참조하므로 스키마를 고정하지
@@ -128,6 +129,8 @@ class BrandKitImage(BaseModel):
     imageBase64: str
     width: int
     height: int
+    svgBase64: Optional[str] = None
+    pdfBase64: Optional[str] = None
 
 
 class BrandKitResponse(BaseModel):

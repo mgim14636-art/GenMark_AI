@@ -268,7 +268,7 @@ def _logo_already_has_brand_name(survey: dict, brand: str) -> bool:
     return model_draws_wordmark(survey) or _wants_text_overlay(survey, style_key, brand)
 
 
-def _compose_business_card(logo: Image.Image, info: Optional[CardInfo], survey: dict) -> Tuple[Image.Image, Image.Image]:
+def _business_card_inputs(logo: Image.Image, info: Optional[CardInfo], survey: dict):
     """명함 앞면과 뒷면을 만든다.
 
     앞면은 로고 대표색 바탕에 흰 로고(역상), 뒷면은 흰 바탕에 원래 색 로고다.
@@ -279,11 +279,7 @@ def _compose_business_card(logo: Image.Image, info: Optional[CardInfo], survey: 
     info가 없으면(백엔드가 아직 card_info를 안 보내는 상태) 인적사항 영역이 비고
     브랜드 정보만 남는다. 레이아웃은 동일하므로 값이 채워지면 그대로 명함이 된다.
     """
-    from app.services.business_card import (
-        CARD_BACK_BG,
-        compose_card_back,
-        compose_card_front,
-    )
+    from app.services.business_card import CARD_BACK_BG
 
     # 배경색 추정에는 흰색을 남긴 상태를 쓰고(대표색 계산이 흔들리지 않도록),
     # 실제로 카드에 얹는 이미지는 흰 면을 비운 버전을 쓴다.
@@ -307,11 +303,20 @@ def _compose_business_card(logo: Image.Image, info: Optional[CardInfo], survey: 
         brand = ""
         tagline = ""
 
+    return logo_front, logo_rgba, brand, tagline, _card_contact(info), front_bg, back_bg
+
+
+def _compose_business_card(logo: Image.Image, info: Optional[CardInfo], survey: dict) -> Tuple[Image.Image, Image.Image]:
+    from app.services.business_card import compose_card_back, compose_card_front
+
+    logo_front, logo_rgba, brand, tagline, contact, front_bg, back_bg = _business_card_inputs(
+        logo, info, survey
+    )
     front = compose_card_front(
         logo_front, brand, tagline, front_bg, _CARD_FONT_BOLD, _CARD_FONT_REGULAR
     )
     back = compose_card_back(
-        logo_rgba, brand, tagline, _card_contact(info), back_bg,
+        logo_rgba, brand, tagline, contact, back_bg,
         _CARD_FONT_BOLD, _CARD_FONT_REGULAR,
     )
     return front, back
@@ -442,6 +447,13 @@ def create_brand_kit(req: BrandKitRequest) -> BrandKitResponse:
         # 앞면을 복제한다 — 백엔드가 최상위 한 장만 읽고 있어 수정 없이 붙는다.
         front, back = _compose_business_card(logo, req.card_info, req.survey)
         images = [front, back]
+        from app.services.business_card_print import compose_business_card_svgs, svg_to_pdf
+
+        print_inputs = _business_card_inputs(logo, req.card_info, req.survey)
+        svg_values = list(compose_business_card_svgs(
+            req.logo_svg, *print_inputs, _CARD_FONT_BOLD, _CARD_FONT_REGULAR
+        ))
+        pdf_values = [svg_to_pdf(svg, images[index]) for index, svg in enumerate(svg_values)]
         if req.card_info is None:
             warnings.append(
                 "card_info가 없어 인적사항 없이 브랜드 정보만 넣었습니다. "
@@ -455,6 +467,8 @@ def create_brand_kit(req: BrandKitRequest) -> BrandKitResponse:
             headline=req.headline,
         )
         images = [thumb]
+        svg_values = []
+        pdf_values = []
         # 판매 채널 가이드라인 자동 검수. 업로드 후 반려되어 재제작하는 비용을
         # 생성 단계에서 미리 막는다.
         if text_ratio > TEXT_AREA_LIMIT:
@@ -470,8 +484,16 @@ def create_brand_kit(req: BrandKitRequest) -> BrandKitResponse:
         kitType=kit_type,
         imageBase64=encoded[0],
         images=[
-            BrandKitImage(imageBase64=b64, width=img.width, height=img.height)
-            for b64, img in zip(encoded, images)
+            BrandKitImage(
+                imageBase64=b64,
+                width=img.width,
+                height=img.height,
+                svgBase64=base64.b64encode(svg_values[index].encode("utf-8")).decode("ascii")
+                if index < len(svg_values) else None,
+                pdfBase64=base64.b64encode(pdf_values[index]).decode("ascii")
+                if index < len(pdf_values) else None,
+            )
+            for index, (b64, img) in enumerate(zip(encoded, images))
         ],
         preliminary=bool(warnings),
         warnings=warnings,

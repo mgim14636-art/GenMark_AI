@@ -307,6 +307,12 @@ class BrandKitServiceTest {
                 .thenReturn(List.of("front-key", "back-key"));
         when(storage.read("front-key")).thenReturn("front-image".getBytes(StandardCharsets.UTF_8));
         when(storage.read("back-key")).thenReturn("back-image".getBytes(StandardCharsets.UTF_8));
+        when(storage.readBrandKitPrintAsset("kit-1", 1)).thenReturn(java.util.Optional.of(
+                new LogoFileStorage.BrandKitPrintAsset("front-svg".getBytes(StandardCharsets.UTF_8),
+                        "front-pdf".getBytes(StandardCharsets.UTF_8))));
+        when(storage.readBrandKitPrintAsset("kit-1", 2)).thenReturn(java.util.Optional.of(
+                new LogoFileStorage.BrandKitPrintAsset("back-svg".getBytes(StandardCharsets.UTF_8),
+                        "back-pdf".getBytes(StandardCharsets.UTF_8))));
 
         BrandKitService.BrandKitArchive archive = service.downloadArchive(
                 "project-1", "candidate-1", "kit-1", 7L);
@@ -315,7 +321,11 @@ class BrandKitServiceTest {
         Map<String, String> entries = unzipTextEntries(archive.bytes());
         assertThat(entries).containsExactly(
                 Map.entry("front.png", "front-image"),
-                Map.entry("back.png", "back-image"));
+                Map.entry("back.png", "back-image"),
+                Map.entry("front.svg", "front-svg"),
+                Map.entry("front.pdf", "front-pdf"),
+                Map.entry("back.svg", "back-svg"),
+                Map.entry("back.pdf", "back-pdf"));
     }
 
     private BrandKitCreateRequest request(String name, String phone) {

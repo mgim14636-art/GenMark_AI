@@ -14,6 +14,8 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 class BrandKitProcessorTest {
+    private static final String SVG_REVISION = "a".repeat(64);
+
     @Test
     void usesCandidateStorageKeyAndRecordsItForSuccessfulKit() {
         BrandKitRepository repository = mock(BrandKitRepository.class);
@@ -22,6 +24,7 @@ class BrandKitProcessorTest {
         CiProject project = CiProject.builder().companyName("현재 회사명").build();
         LogoGeneration generation = LogoGeneration.builder().publicId("generation-1").ciProject(project).build();
         LogoCandidate candidate = LogoCandidate.builder().candidateOrder(1).storageKey("logos/original.png")
+                .aiMetadataJson("{\"svgRevision\":\"" + SVG_REVISION + "\"}")
                 .generation(generation).build();
         BrandKit kit = BrandKit.builder().id(9L).publicId("kit-1").candidate(candidate)
                 .kitType(BrandKit.KitType.BUSINESS_CARD)
@@ -40,6 +43,7 @@ class BrandKitProcessorTest {
                 .build());
         when(repository.findById(9L)).thenReturn(Optional.of(kit));
         when(storage.read("logos/original.png")).thenReturn(new byte[]{1, 2, 3});
+        when(storage.readSvg("generation-1", 1, SVG_REVISION)).thenReturn("<svg/>".getBytes());
         when(aiClient.generate(argThat(request -> {
             Object raw = request.get("card_info");
             if (!(raw instanceof java.util.Map<?, ?> cardInfo)) return false;
@@ -47,6 +51,7 @@ class BrandKitProcessorTest {
             if (!(rawSurvey instanceof java.util.Map<?, ?> survey)) return false;
             return Base64.getEncoder().encodeToString(new byte[]{1, 2, 3})
                     .equals(request.get("logo_image_base64"))
+                    && "<svg/>".equals(request.get("logo_svg"))
                     && !request.containsKey("card_design")
                     && "생성 당시 회사명".equals(survey.get("company_name"))
                     && "Kim".equals(cardInfo.get("name"))
@@ -56,7 +61,10 @@ class BrandKitProcessorTest {
                     && "kim@example.com".equals(cardInfo.get("email"))
                     && "Gwangju".equals(cardInfo.get("address"));
         }))).thenReturn(new BrandKitAiClient.Result(
-                List.of("front-png", "back-png"), true, List.of("AI 연출 배경 미적용")));
+                List.of("front-png", "back-png"),
+                List.of(new BrandKitAiClient.PrintAsset("front-svg", "front-pdf"),
+                        new BrandKitAiClient.PrintAsset("back-svg", "back-pdf")),
+                true, List.of("AI 연출 배경 미적용")));
         when(storage.store(anyString(), eq(1), eq("front-png")))
                 .thenReturn(new LogoFileStorage.StoredImage("brand-kits/front.png", 100, 100));
         when(storage.store(anyString(), eq(2), eq("back-png")))
@@ -69,8 +77,11 @@ class BrandKitProcessorTest {
         assertThat(kit.isPreliminary()).isTrue();
         assertThat(kit.getWarnings()).containsExactly("AI 연출 배경 미적용");
         verify(storage).read("logos/original.png");
+        verify(storage).readSvg("generation-1", 1, SVG_REVISION);
         verify(storage).store("brand-kits/kit-1", 1, "front-png");
         verify(storage).store("brand-kits/kit-1", 2, "back-png");
+        verify(storage).storeBrandKitPrintAsset("kit-1", 1, "front-svg", "front-pdf");
+        verify(storage).storeBrandKitPrintAsset("kit-1", 2, "back-svg", "back-pdf");
         verify(storage).storeBrandKitSourceKey("kit-1", "logos/original.png");
     }
 
@@ -97,5 +108,30 @@ class BrandKitProcessorTest {
         assertThat(kit.getStatus()).isEqualTo(BrandKit.Status.FAILED);
         verify(storage, never()).store(anyString(), anyInt(), anyString());
         verify(storage, never()).storeBrandKitSourceKey(anyString(), anyString());
+    }
+
+    @Test
+    void failsBusinessCardWhenPrintAssetsAreMissing() {
+        BrandKitRepository repository = mock(BrandKitRepository.class);
+        BrandKitAiClient aiClient = mock(BrandKitAiClient.class);
+        LogoFileStorage storage = mock(LogoFileStorage.class);
+        LogoCandidate candidate = LogoCandidate.builder()
+                .storageKey("logos/original.png")
+                .generation(LogoGeneration.builder().publicId("generation-1")
+                        .ciProject(CiProject.builder().build()).build())
+                .build();
+        BrandKit kit = BrandKit.builder().id(11L).publicId("kit-no-print").candidate(candidate)
+                .kitType(BrandKit.KitType.BUSINESS_CARD).status(BrandKit.Status.QUEUED).build();
+        when(repository.findById(11L)).thenReturn(Optional.of(kit));
+        when(storage.read("logos/original.png")).thenReturn(new byte[]{1, 2, 3});
+        when(aiClient.generate(anyMap())).thenReturn(
+                new BrandKitAiClient.Result(List.of("front", "back"), false, List.of()));
+
+        new BrandKitProcessor(repository, aiClient, storage).process(11L);
+
+        assertThat(kit.getStatus()).isEqualTo(BrandKit.Status.FAILED);
+        assertThat(kit.getErrorCode()).isEqualTo("AI_INVALID_RESPONSE");
+        assertThat(kit.getErrorMessage()).contains("SVG/PDF");
+        verify(storage, never()).store(anyString(), anyInt(), anyString());
     }
 }

@@ -10,6 +10,7 @@ import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -24,7 +25,10 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.regex.Pattern;
+import java.util.zip.DataFormatException;
+import java.util.zip.Inflater;
 
 import org.w3c.dom.Element;
 import org.w3c.dom.Document;
@@ -37,6 +41,21 @@ public class LogoFileStorage {
     private static final Pattern EXTERNAL_CSS_URL = Pattern.compile(
             "url\\s*\\(\\s*['\"]?(?!#)", Pattern.CASE_INSENSITIVE);
     private static final Pattern SAFE_PATH_SEGMENT = Pattern.compile("[A-Za-z0-9_-]+");
+    private static final Pattern PDF_HEADER = Pattern.compile("^%PDF-\\d\\.\\d");
+    private static final Pattern PDF_PAGE = Pattern.compile("/Type\\s*/Page\\b");
+    private static final Pattern PDF_MEDIA_BOX = Pattern.compile(
+            "/MediaBox\\s*\\[\\s*(-?\\d+(?:\\.\\d+)?)\\s+(-?\\d+(?:\\.\\d+)?)\\s+"
+                    + "(-?\\d+(?:\\.\\d+)?)\\s+(-?\\d+(?:\\.\\d+)?)\\s*]");
+    private static final Pattern PDF_ACTIVE_CONTENT = Pattern.compile(
+            "/(?:JavaScript|JS|Launch|OpenAction|AA|EmbeddedFile|Filespec|Encrypt)\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final byte[] PDF_STREAM_MARKER = "stream".getBytes(StandardCharsets.US_ASCII);
+    private static final byte[] PDF_ENDSTREAM_MARKER = "endstream".getBytes(StandardCharsets.US_ASCII);
+    private static final byte[] PDF_OBJECT_MARKER = " obj".getBytes(StandardCharsets.US_ASCII);
+    private static final byte[] PDF_DICTIONARY_START = "<<".getBytes(StandardCharsets.US_ASCII);
+    private static final int MAX_PDF_DECODED_BYTES = 32 * 1024 * 1024;
+    private static final double CARD_WIDTH_POINTS = 87.5 / 25.4 * 72.0;
+    private static final double CARD_HEIGHT_POINTS = 50.0 / 25.4 * 72.0;
 
     private final Path root;
     private final Path privateRoot;
@@ -206,6 +225,36 @@ public class LogoFileStorage {
         return brandKitStorageKeys(brandKitPublicId, null).size() >= expectedCount;
     }
 
+    /** Stores contact-bearing print files outside the public /uploads tree. */
+    public void storeBrandKitPrintAsset(String brandKitPublicId, int order,
+                                        String svgBase64, String pdfBase64) {
+        byte[] svgEncoded = decodeBase64(svgBase64, "SVG");
+        byte[] svgBytes = validateSvg(new String(svgEncoded, StandardCharsets.UTF_8));
+        byte[] pdfBytes = decodeBase64(pdfBase64, "PDF");
+        validatePdf(pdfBytes);
+        Path svgFile = brandKitPrintPath(brandKitPublicId, order, "svg");
+        Path pdfFile = brandKitPrintPath(brandKitPublicId, order, "pdf");
+        try {
+            Files.createDirectories(svgFile.getParent());
+            writeAtomically(svgFile, svgBytes);
+            writeAtomically(pdfFile, pdfBytes);
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
+    public Optional<BrandKitPrintAsset> readBrandKitPrintAsset(String brandKitPublicId, int order) {
+        Path svgFile = brandKitPrintPath(brandKitPublicId, order, "svg");
+        Path pdfFile = brandKitPrintPath(brandKitPublicId, order, "pdf");
+        if (!Files.isRegularFile(svgFile) || !Files.isRegularFile(pdfFile)) return Optional.empty();
+        try {
+            return Optional.of(new BrandKitPrintAsset(
+                    Files.readAllBytes(svgFile), Files.readAllBytes(pdfFile)));
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
     /**
      * 사용자가 다운로드한 로고를 보관 영역(downloads/)으로 복사한다.
      *
@@ -303,6 +352,197 @@ public class LogoFileStorage {
         return file;
     }
 
+    private Path brandKitPrintPath(String brandKitPublicId, int order, String extension) {
+        if (brandKitPublicId == null || !SAFE_PATH_SEGMENT.matcher(brandKitPublicId).matches()
+                || order < 1 || order > 2 || !(extension.equals("svg") || extension.equals("pdf"))) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+        Path directory = privateRoot.resolve("brand-kits").resolve(brandKitPublicId).normalize();
+        if (!directory.startsWith(privateRoot)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+        String side = order == 1 ? "front" : "back";
+        Path file = directory.resolve(side + "." + extension).normalize();
+        if (!file.startsWith(privateRoot)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+        return file;
+    }
+
+    private byte[] decodeBase64(String value, String label) {
+        if (value == null || value.isBlank()) {
+            throw new ApiException(ErrorCode.AI_INVALID_RESPONSE, label + " 결과가 비어 있습니다.");
+        }
+        int comma = value.indexOf(',');
+        String raw = value.startsWith("data:") && comma >= 0 ? value.substring(comma + 1) : value;
+        try {
+            return Base64.getDecoder().decode(raw);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.AI_INVALID_RESPONSE, label + " Base64를 해석할 수 없습니다.");
+        }
+    }
+
+    private void validatePdf(byte[] bytes) {
+        int maxPdfBytes = Math.max(maxSvgBytes * 10, 10 * 1024 * 1024);
+        if (bytes.length < 32 || bytes.length > maxPdfBytes) throw invalidPdf();
+        String pdf = new String(bytes, StandardCharsets.ISO_8859_1)
+                + "\n" + decodePdfStreams(bytes);
+        if (!PDF_HEADER.matcher(pdf).find()
+                || new String(bytes, StandardCharsets.ISO_8859_1).lastIndexOf("%%EOF")
+                        < Math.max(0, bytes.length - 1024)
+                || PDF_ACTIVE_CONTENT.matcher(pdf).find()
+                || PDF_PAGE.matcher(pdf).results().count() != 1) {
+            throw invalidPdf();
+        }
+        var mediaBox = PDF_MEDIA_BOX.matcher(pdf);
+        if (!mediaBox.find()) throw invalidPdf();
+        double width = Double.parseDouble(mediaBox.group(3)) - Double.parseDouble(mediaBox.group(1));
+        double height = Double.parseDouble(mediaBox.group(4)) - Double.parseDouble(mediaBox.group(2));
+        if (Math.abs(width - CARD_WIDTH_POINTS) > 2.0
+                || Math.abs(height - CARD_HEIGHT_POINTS) > 2.0) {
+            throw invalidPdf();
+        }
+    }
+
+    /**
+     * CairoSVG emits compressed object streams, so page dictionaries and their MediaBox are
+     * not visible in the PDF's top-level bytes. Decode Flate streams before applying the
+     * structural checks above. Unsupported filters intentionally yield no decoded text and
+     * therefore fail the required page/media-box checks instead of being accepted blindly.
+     */
+    private String decodePdfStreams(byte[] bytes) {
+        StringBuilder decoded = new StringBuilder();
+        int cursor = 0;
+        while (cursor < bytes.length) {
+            int marker = indexOf(bytes, PDF_STREAM_MARKER, cursor);
+            if (marker < 0 || !isPdfKeyword(bytes, marker, PDF_STREAM_MARKER)) break;
+
+            int contentStart = marker + PDF_STREAM_MARKER.length;
+            if (contentStart < bytes.length && bytes[contentStart] == '\r') contentStart++;
+            if (contentStart < bytes.length && bytes[contentStart] == '\n') contentStart++;
+
+            int objectMarker = lastIndexOf(bytes, PDF_OBJECT_MARKER, marker);
+            int dictionaryStart = objectMarker < 0
+                    ? -1
+                    : indexOf(bytes, PDF_DICTIONARY_START, objectMarker + PDF_OBJECT_MARKER.length);
+            if (dictionaryStart < 0 || dictionaryStart >= marker) {
+                cursor = marker + PDF_STREAM_MARKER.length;
+                continue;
+            }
+            String dictionary = new String(bytes, dictionaryStart, marker - dictionaryStart,
+                    StandardCharsets.ISO_8859_1);
+            boolean flate = dictionary.contains("/FlateDecode");
+
+            int endMarker = indexOf(bytes, PDF_ENDSTREAM_MARKER, contentStart);
+            while (endMarker >= 0) {
+                byte[] rawStream = trimPdfLineEnding(bytes, contentStart, endMarker);
+                if (!flate) {
+                    appendDecodedPdfStream(decoded, rawStream);
+                    break;
+                }
+                try {
+                    byte[] inflated = inflatePdfStream(rawStream);
+                    appendDecodedPdfStream(decoded, inflated);
+                    break;
+                } catch (IOException e) {
+                    // A binary stream can contain the marker text by chance. Try the next
+                    // marker and only accept a candidate that is a complete Flate stream.
+                    endMarker = indexOf(bytes, PDF_ENDSTREAM_MARKER,
+                            endMarker + PDF_ENDSTREAM_MARKER.length);
+                }
+            }
+            cursor = endMarker < 0
+                    ? contentStart
+                    : endMarker + PDF_ENDSTREAM_MARKER.length;
+        }
+        return decoded.toString();
+    }
+
+    private void appendDecodedPdfStream(StringBuilder decoded, byte[] stream) {
+        if ((long) decoded.length() + stream.length > MAX_PDF_DECODED_BYTES) {
+            throw invalidPdf();
+        }
+        decoded.append(new String(stream, StandardCharsets.ISO_8859_1)).append('\n');
+    }
+
+    private byte[] trimPdfLineEnding(byte[] bytes, int start, int end) {
+        int trimmedEnd = end;
+        while (trimmedEnd > start && (bytes[trimmedEnd - 1] == '\r' || bytes[trimmedEnd - 1] == '\n')) {
+            trimmedEnd--;
+        }
+        return Arrays.copyOfRange(bytes, start, trimmedEnd);
+    }
+
+    private byte[] inflatePdfStream(byte[] compressed) throws IOException {
+        Inflater inflater = new Inflater();
+        inflater.setInput(compressed);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8_192];
+        try {
+            while (!inflater.finished()) {
+                int count;
+                try {
+                    count = inflater.inflate(buffer);
+                } catch (DataFormatException e) {
+                    throw new IOException("Invalid PDF Flate stream", e);
+                }
+                if (count > 0) {
+                    if (output.size() + count > MAX_PDF_DECODED_BYTES) {
+                        throw new IOException("PDF stream is too large");
+                    }
+                    output.write(buffer, 0, count);
+                    continue;
+                }
+                if (inflater.needsDictionary() || inflater.needsInput()) {
+                    throw new IOException("Truncated PDF Flate stream");
+                }
+            }
+            if (inflater.getRemaining() != 0) throw new IOException("Trailing PDF stream data");
+            return output.toByteArray();
+        } finally {
+            inflater.end();
+        }
+    }
+
+    private boolean isPdfKeyword(byte[] bytes, int offset, byte[] keyword) {
+        boolean before = offset == 0 || isPdfWhitespace(bytes[offset - 1]);
+        int end = offset + keyword.length;
+        boolean after = end >= bytes.length || isPdfWhitespace(bytes[end]);
+        return before && after;
+    }
+
+    private boolean isPdfWhitespace(byte value) {
+        return value == 0 || value == 9 || value == 10 || value == 12 || value == 13 || value == 32;
+    }
+
+    private int indexOf(byte[] bytes, byte[] needle, int fromIndex) {
+        int start = Math.max(0, fromIndex);
+        outer:
+        for (int i = start; i <= bytes.length - needle.length; i++) {
+            for (int j = 0; j < needle.length; j++) {
+                if (bytes[i + j] != needle[j]) continue outer;
+            }
+            return i;
+        }
+        return -1;
+    }
+
+    private int lastIndexOf(byte[] bytes, byte[] needle, int beforeIndex) {
+        int start = Math.min(beforeIndex - needle.length, bytes.length - needle.length);
+        for (int i = start; i >= 0; i--) {
+            boolean match = true;
+            for (int j = 0; j < needle.length; j++) {
+                if (bytes[i + j] != needle[j]) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return i;
+        }
+        return -1;
+    }
+
+    private ApiException invalidPdf() {
+        return new ApiException(ErrorCode.AI_INVALID_RESPONSE,
+                "AI 결과가 안전하고 올바른 단일 페이지 명함 PDF가 아닙니다.");
+    }
+
     private void validateRevision(String revision) {
         if (revision == null || !revision.matches("[0-9a-f]{64}")) {
             throw new ApiException(ErrorCode.STORAGE_ERROR);
@@ -397,7 +637,7 @@ public class LogoFileStorage {
             String normalizedValue = value.toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
             if (name.startsWith("on") || normalizedValue.contains("javascript:")) throw invalidSvg();
             if ((name.equals("href") || qualifiedName.endsWith(":href"))
-                    && !value.isEmpty() && !value.startsWith("#")) {
+                    && !value.isEmpty() && !value.startsWith("#") && !isSafeEmbeddedPng(value)) {
                 throw invalidSvg();
             }
             if (EXTERNAL_CSS_URL.matcher(value).find()) throw invalidSvg();
@@ -407,6 +647,19 @@ public class LogoFileStorage {
         NodeList children = element.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
             if (children.item(i) instanceof Element child) validateElement(child);
+        }
+    }
+
+    private boolean isSafeEmbeddedPng(String value) {
+        String prefix = "data:image/png;base64,";
+        if (!value.regionMatches(true, 0, prefix, 0, prefix.length())) return false;
+        try {
+            byte[] bytes = Base64.getDecoder().decode(value.substring(prefix.length()));
+            return bytes.length >= 8 && bytes.length <= maxSvgBytes
+                    && bytes[0] == (byte) 0x89 && bytes[1] == 0x50
+                    && bytes[2] == 0x4E && bytes[3] == 0x47;
+        } catch (IllegalArgumentException e) {
+            return false;
         }
     }
 
@@ -476,4 +729,6 @@ public class LogoFileStorage {
     public record StoredImage(String storageKey, int width, int height) {}
 
     public record StoredEditedAsset(String storageKey, String revision, int width, int height) {}
+
+    public record BrandKitPrintAsset(byte[] svg, byte[] pdf) {}
 }

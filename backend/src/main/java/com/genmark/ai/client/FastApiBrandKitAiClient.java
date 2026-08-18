@@ -45,22 +45,34 @@ public class FastApiBrandKitAiClient implements BrandKitAiClient {
                     .map(String.class::cast)
                     .filter(value -> !value.isBlank())
                     .toList();
-            if (!values.isEmpty()) return result(body, values);
+            if (!values.isEmpty()) return result(body, values, printAssets(items));
         }
 
         Object image = body.get("imageBase64");
         if (!(image instanceof String value) || value.isBlank()) {
             throw new ApiException(ErrorCode.AI_INVALID_RESPONSE, "브랜드킷 응답에 imageBase64가 없습니다.");
         }
-        return result(body, List.of(value));
+        return result(body, List.of(value), List.of());
     }
 
-    private Result result(Map<String, Object> body, List<String> images) {
+    private List<PrintAsset> printAssets(List<?> items) {
+        return items.stream()
+                .filter(Map.class::isInstance)
+                .map(Map.class::cast)
+                .map(item -> new PrintAsset(string(item.get("svgBase64")), string(item.get("pdfBase64"))))
+                .toList();
+    }
+
+    private String string(Object value) {
+        return value instanceof String text && !text.isBlank() ? text : null;
+    }
+
+    private Result result(Map<String, Object> body, List<String> images, List<PrintAsset> printAssets) {
         boolean preliminary = Boolean.TRUE.equals(body.get("preliminary"));
         List<String> warnings = body.get("warnings") instanceof List<?> items
                 ? items.stream().filter(String.class::isInstance).map(String.class::cast)
                         .filter(value -> !value.isBlank()).toList()
                 : List.of();
-        return new Result(images, preliminary, warnings);
+        return new Result(images, printAssets, preliminary, warnings);
     }
 }

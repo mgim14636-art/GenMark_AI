@@ -16,9 +16,17 @@ public interface BrandKitAiClient {
      */
     Result generate(Map<String, Object> request);
 
-    record Result(List<String> imageBase64Values, boolean preliminary, List<String> warnings) {
+    record PrintAsset(String svgBase64, String pdfBase64) {}
+
+    record Result(List<String> imageBase64Values, List<PrintAsset> printAssets,
+                  boolean preliminary, List<String> warnings) {
+        public Result(List<String> imageBase64Values, boolean preliminary, List<String> warnings) {
+            this(imageBase64Values, List.of(), preliminary, warnings);
+        }
+
         public Result {
             imageBase64Values = imageBase64Values == null ? List.of() : List.copyOf(imageBase64Values);
+            printAssets = printAssets == null ? List.of() : List.copyOf(printAssets);
             warnings = warnings == null ? List.of() : List.copyOf(warnings);
         }
     }

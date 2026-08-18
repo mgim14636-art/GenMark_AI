@@ -3491,7 +3491,7 @@ function CustomerApp() {
                 {completedBrandKit.kitType === 'BUSINESS_CARD' && !missingBusinessCardBack && (
                   <button className="brand-kit-download-button" type="button" disabled={brandKitDownloading} onClick={() => void downloadBrandKitArchive(completedBrandKit)}>
                     <Download aria-hidden="true" size={18} strokeWidth={1.9} />
-                    {brandKitDownloading ? '묶는 중…' : '앞면·뒷면 한 번에 받기'}
+                    {brandKitDownloading ? '묶는 중…' : 'PNG·SVG·PDF 한 번에 받기'}
                   </button>
                 )}
                 {missingBusinessCardBack && (
@@ -3972,7 +3972,7 @@ function CustomerApp() {
                 </div>
                 <button className="mypage-brand-kit-download" type="button" disabled={brandKitDownloading} onClick={() => void downloadBrandKitArchive(brandKit)}>
                   <Download aria-hidden="true" size={18} strokeWidth={1.9} />
-                  {brandKitDownloading ? '묶는 중…' : brandKit.kitType === 'BUSINESS_CARD' ? '앞면·뒷면 한 번에 다운로드' : '다운로드'}
+                  {brandKitDownloading ? '묶는 중…' : brandKit.kitType === 'BUSINESS_CARD' ? 'PNG·SVG·PDF 다운로드' : '다운로드'}
                 </button>
               </article>
             ) : brandKit ? (

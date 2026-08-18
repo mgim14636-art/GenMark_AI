@@ -5,6 +5,7 @@
 """
 import base64
 from io import BytesIO
+import xml.etree.ElementTree as ET
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -60,6 +61,50 @@ def test_business_card_returns_print_sized_image():
     from app.schemas.brand_kit import KIT_SIZE
     assert (image["width"], image["height"]) == KIT_SIZE["BUSINESS_CARD"]
     assert _decode(image).size == KIT_SIZE["BUSINESS_CARD"]
+
+
+def test_business_card_returns_svg_and_pdf_print_assets():
+    logo_svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M10 10H90V90H10Z" fill="#4f46e5"/></svg>"""
+    response = client.post(
+        "/api/v1/generation/brand-kit",
+        json={
+            "kit_type": "BUSINESS_CARD",
+            "logo_image_base64": _logo_b64(),
+            "logo_svg": logo_svg,
+            "survey": {"company_name": "GenMark"},
+            "card_info": {"name": "Kim", "email": "kim@example.com"},
+        },
+    )
+
+    assert response.status_code == 200
+    for image in response.json()["images"]:
+        svg = base64.b64decode(image["svgBase64"])
+        pdf = base64.b64decode(image["pdfBase64"])
+        root = ET.fromstring(svg)
+        assert root.tag.endswith("svg")
+        assert root.attrib["width"] == "87.5mm"
+        assert root.attrib["height"] == "50mm"
+        assert root.attrib.get("preserveAspectRatio") != "none"
+        assert any(element.tag.endswith("path") for element in root.iter())
+        assert b"data:image/png" not in svg
+        assert pdf.startswith(b"%PDF-")
+
+
+def test_business_card_print_assets_fall_back_to_embedded_png_logo():
+    response = client.post(
+        "/api/v1/generation/brand-kit",
+        json={
+            "kit_type": "BUSINESS_CARD",
+            "logo_image_base64": _logo_b64(),
+            "survey": {},
+            "card_info": {"name": "Kim"},
+        },
+    )
+
+    assert response.status_code == 200
+    svg = base64.b64decode(response.json()["images"][0]["svgBase64"])
+    assert b"data:image/png;base64," in svg
+    assert base64.b64decode(response.json()["images"][0]["pdfBase64"]).startswith(b"%PDF-")
 
 
 def test_response_exposes_top_level_image_base64():
