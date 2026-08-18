@@ -2,8 +2,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="225 305 330 330">
 <defs>
 <linearGradient id="genmarkPurple" x1="0" y1="0" x2="1" y2="1">
-<stop offset="0%" stop-color="#A78BFA"/>
-<stop offset="100%" stop-color="#7C5CFC"/>
+<stop offset="0%" stop-color="#7A45E8"/>
+<stop offset="100%" stop-color="#4B24C4"/>
 </linearGradient>
 </defs>
 <g transform="translate(0.000000,973.000000) scale(0.100000,-0.100000)" stroke="none">

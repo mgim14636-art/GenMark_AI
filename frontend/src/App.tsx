@@ -126,9 +126,10 @@ const industryOptions: Array<{ id: IndustryOption; title: string; description: s
 ]
 
 const logoStyleOptions: Array<{ id: LogoStyle; label: string; description: string; fit: string; recommended?: boolean }> = [
+  // 추천 항목을 맨 위에 둔다. 안내 문구 없이 순서와 배지만으로 알 수 있게.
+  { id: 'combination', label: '콤비네이션', description: '그림과 브랜드 이름을 함께 사용하는 로고', fit: '그림과 이름을 함께 보여주어 브랜드를 쉽게 기억하게 해요.', recommended: true },
   { id: 'symbol', label: '심볼마크', description: '그림이나 도형만으로 브랜드를 표현하는 로고', fit: '브랜드를 상징하는 이미지를 직관적으로 보여주어 기억에 오래 남아요.' },
   { id: 'wordmark', label: '워드마크', description: '브랜드 이름의 글씨체를 중심으로 만든 로고', fit: '브랜드 이름을 직관적으로 보여주어 기억에 오래 남아요.' },
-  { id: 'combination', label: '콤비네이션', description: '그림과 브랜드 이름을 함께 사용하는 로고', fit: '그림과 이름을 함께 보여주어 브랜드를 쉽게 기억하게 해요.', recommended: true },
   { id: 'lettermark', label: '레터마크', description: '브랜드 이름의 첫 글자나 이니셜을 활용한 로고', fit: '긴 이름을 간결하게 담아 세련된 인상을 남겨요.' },
 ]
 
@@ -825,9 +826,10 @@ function CustomerApp() {
     if (mode !== 'logo-intro') return undefined
 
     setLogoIntroStage('opening')
-    // 문구 4줄이 260ms부터 600ms 간격(260/860/1460/2060ms)으로 나오므로,
-    // 버튼도 같은 리듬을 이어서 2660ms에 등장하도록 맞춘다.
-    const timer = window.setTimeout(() => setLogoIntroStage('ready'), 2660)
+    // 문구 3줄이 180ms부터 340ms 간격(180/520/860ms)으로 나오므로,
+    // 버튼도 같은 리듬을 이어서 1240ms에 등장하도록 맞춘다.
+    // 예전에는 4줄 x 600ms 간격이라 버튼까지 2.7초가 걸려 답답했다.
+    const timer = window.setTimeout(() => setLogoIntroStage('ready'), 1240)
     return () => window.clearTimeout(timer)
   }, [mode])
 
@@ -2227,9 +2229,7 @@ function CustomerApp() {
       </button>
       <section className={`logo-intro-opening ${logoIntroStage === 'ready' ? 'is-complete' : ''}`} aria-live="polite" aria-label="브랜드 시작 문구">
         <p id="logo-intro-title" className="logo-intro-opening-copy">
-          <span>브랜드의 방향과</span>
-          <br />
-          <span>취향을 담아</span>
+          <span>생각한 그대로</span>
           <br />
           <span>나만의 로고를</span>
           <br />
@@ -2617,7 +2617,6 @@ function CustomerApp() {
 
         <header className="logo-style-heading">
           <h1 id="logo-style-title">어떤 형태의 로고가<br />필요한가요?</h1>
-          <p>잘 모르겠다면 활용도가 높은 <strong>‘콤비네이션’</strong>을 추천해요.</p>
         </header>
 
         <section className="logo-style-options" aria-label="로고 형태 선택">
@@ -2942,12 +2941,11 @@ function CustomerApp() {
           <BrandFlowProgress step={4} />
 
           <header className="final-request-heading">
-            <h1 id="final-request-title">마지막으로 꼭 반영할 내용을 알려주세요</h1>
-            <p>원하는 요소뿐 아니라 피하고 싶은 형태도 작성할 수 있어요.</p>
+            <h1 id="final-request-title">입력하신 내용을<br />확인해주세요</h1>
+            <p>수정할 항목을 눌러 바로 바꿀 수 있어요.</p>
           </header>
 
-          <section className="final-summary-section" aria-labelledby="summary-title">
-            <h2 id="summary-title">이 내용으로 로고를 만들게요</h2>
+          <section className="final-summary-section" aria-label="입력 내용 요약">
             <div className="final-summary-card">
               {summaryRows.map((row) => (
                 <div className="final-summary-row" key={row.key}>
@@ -4267,7 +4265,7 @@ function CustomerApp() {
     <main className="login-screen">
       <section className="login-content" aria-labelledby="login-title">
         <div className="login-hero-mark">
-          <img className="login-stamp-art" src="/login-hero-bubbles-wide.png" alt="빛나는 거품과 잎사귀를 담은 브랜드 이미지" />
+          <GenMarkLogo className="login-hero-logo" alt="GenMark AI" />
         </div>
         <h1 id="login-title">만들던 브랜드를<br /><strong>안전하게 저장하세요</strong></h1>
         <p className="login-description">로그인하면 작성 중인 내용과 생성한 로고,<br className="login-break" /> 상표 이미지 분석 결과를 나중에도 확인할 수 있어요.</p>
