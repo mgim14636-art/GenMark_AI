@@ -5,7 +5,7 @@ import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
 import { AiLoader } from './components/ui/ai-loader'
 import { apiBlobRequest, AuthError, type AuthProvider, type AuthUser, downloadAuthenticatedFile, loginWithProvider, logout, restoreSession } from './auth'
-import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type BusinessCardInfoInput, type DownloadRecord, type LogoCandidate, type PinnedLogo, type SurveyImprovement, type SurveySubmitInput, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
+import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type BusinessCardInfoInput, type DownloadRecord, type LogoCandidate, type SurveyImprovement, type SurveySubmitInput, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
 import { buildEditedSvg, prepareEditableSvg } from './lib/svgEditor'
 
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
@@ -14,7 +14,7 @@ const TRADEMARK_SCORE_FALLBACK = 23
 
 // 화면 설계서용 임시 목업 모드입니다. 실제 로그인 사용자와 API 데이터에는 영향을 주지 않으며,
 // 원래의 비로그인 빈 상태로 되돌릴 때는 false로 바꾸면 됩니다.
-const MYPAGE_MOCK_MODE = true
+const MYPAGE_MOCK_MODE = import.meta.env.DEV
 
 type ViewMode = 'home' | 'hero' | 'logo-intro' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'brand-kit' | 'edit' | 'login' | 'mypage' | 'survey'
 type LoginDestination = 'home' | 'industry' | 'choice' | 'mypage'
@@ -30,6 +30,20 @@ type TrademarkMatchImage = { rank: number; src: string }
 type FinalEditKind = 'identity' | 'values' | 'tone' | 'color' | 'style' | 'shape'
 type FinalToneMode = 'recommended' | 'direct'
 type EditorTarget = string
+type MypageAssetKind = 'logo' | 'business-card' | 'thumbnail'
+type MypageAssetItem = {
+  id: string
+  kind: MypageAssetKind
+  title: string
+  subtitle: string
+  imageUrl: string
+}
+type MypageAssetGroup = {
+  dateKey: string
+  label: string
+  isToday?: boolean
+  items: MypageAssetItem[]
+}
 type EditorDraft = {
   scale: number
   rotation: number
@@ -482,6 +496,7 @@ function CustomerApp() {
   const [profileEditing, setProfileEditing] = useState(false)
   const [profileCompanyNameDraft, setProfileCompanyNameDraft] = useState('')
   const [profileCompanyMottoDraft, setProfileCompanyMottoDraft] = useState('')
+  const [openMypageAssetDate, setOpenMypageAssetDate] = useState('2026-08-18')
   const [coreValues, setCoreValues] = useState<CoreValue[]>([])
   const [coreValueInputMode, setCoreValueInputMode] = useState<'category' | 'direct'>('category')
   const [brandValueDescription, setBrandValueDescription] = useState('')
@@ -532,7 +547,6 @@ function CustomerApp() {
   const [projectError, setProjectError] = useState('')
   const [logoCandidates, setLogoCandidates] = useState<LogoCandidate[]>([])
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null)
-  const [pinnedLogos, setPinnedLogos] = useState<PinnedLogo[]>([])
   const [downloadHistory, setDownloadHistory] = useState<DownloadRecord[]>([])
   const [brandKit, setBrandKit] = useState<BrandKit | null>(null)
   const [brandKitError, setBrandKitError] = useState('')
@@ -946,7 +960,6 @@ function CustomerApp() {
         setSurveySubmitted(result.completed)
         setRemainingCredits(result.creditBalance)
       }),
-      meApi.getPins().then(setPinnedLogos),
       Promise.all([
         meApi.getDownloads('CI'),
         meApi.getDownloads('BI'),
@@ -3731,7 +3744,7 @@ function CustomerApp() {
   }
 
   const renderMypageScreen = () => {
-    if (!authRestoring && !loggedIn) {
+    if (!MYPAGE_MOCK_MODE && !authRestoring && !loggedIn) {
       const goToLogin = () => { setLoginDestination('mypage'); setLoginReturnMode('home'); setMode('login') }
       return (
         <main className="mypage-screen" aria-labelledby="mypage-title">
@@ -3757,71 +3770,42 @@ function CustomerApp() {
     const displayEmail = useMypageMock ? '연결된 이메일 정보가 없어요. tkss1217@gmail.com' : authUser?.email?.trim() || '연결된 이메일 정보가 없어요.'
     const displayCompanyName = useMypageMock ? '육하원칙' : companyName.trim() || '아직 입력된 회사명이 없어요.'
     const displayCompanyMotto = useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : companyMotto.trim() || '브랜드 프로젝트에서 회사 모토를 입력해보세요.'
-    const selectedLogo = logoCandidates.find((candidate) => candidate.id === selectedCandidateId)
-      ?? logoCandidates.find((candidate) => candidate.selected)
-    const projectName = (brandKind === 'ci' ? companyName : brandName).trim()
-    const projectDescription = (brandKind === 'ci' ? companyMotto : brandValueDescription).trim()
-    const selectedIndustry = industryOptions.find((option) => option.id === industrySelection)?.title ?? '업종 미입력'
-    const selectedStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? '스타일 미입력'
-    const completedProjects = useMypageMock ? [{
-      id: 'mypage-mock-completed-brand',
-      name: '육하원칙',
-      detail: '뷰티 · 콤비네이션',
-      description: '완성된 브랜드 로고 목업',
-      candidate: { id: 'mypage-mock-completed-candidate', storageKey: 'mypage/mock-completed-brand.png' } as LogoCandidate,
-    }] : projectId && selectedLogo && projectName
-      ? [{
-          id: projectId,
-          name: projectName,
-          detail: `${selectedIndustry} · ${selectedStyle}`,
-          description: projectDescription,
-          candidate: selectedLogo,
-        }]
-      : []
-    const displayDownloadHistory: DownloadRecord[] = useMypageMock ? [
+    const mockAssetGroups: MypageAssetGroup[] = [
       {
-        downloadId: -1,
-        candidateId: 'mypage-mock-pinned-1',
-        projectType: 'BI',
-        imageUrl: '/mypage/mock-pinned/mypage-mock-pinned-1.png',
-        firstTime: false,
-        downloadedAt: '2026-08-14T09:00:00.000Z',
+        dateKey: '2026-08-18',
+        label: '2026. 08. 18.',
+        isToday: true,
+        items: [
+          { id: 'mock-asset-logo', kind: 'logo', title: '육하원칙 CI 로고', subtitle: '로고 선택 완료 · 오후 1:41', imageUrl: '/mypage/mock-completed-brand.png' },
+          { id: 'mock-asset-card', kind: 'business-card', title: '명함', subtitle: '육하원칙 브랜드킷 · 앞면', imageUrl: '/mypage/mock-brand-kit/lavenor.png' },
+          { id: 'mock-asset-thumbnail', kind: 'thumbnail', title: '제품 썸네일', subtitle: '육하원칙 브랜드킷 · 제품 이미지', imageUrl: '/mypage/mock-brand-kit/aurelis.png' },
+        ],
       },
       {
-        downloadId: -2,
-        candidateId: 'mypage-mock-pinned-2',
-        projectType: 'BI',
-        imageUrl: '/mypage/mock-pinned/mypage-mock-pinned-2.png',
-        firstTime: false,
-        downloadedAt: '2026-08-14T09:05:00.000Z',
+        dateKey: '2026-08-14',
+        label: '2026. 08. 14.',
+        items: [
+          { id: 'mock-asset-noirel', kind: 'thumbnail', title: '제품 썸네일', subtitle: 'NOIRÉL 브랜드킷', imageUrl: '/mypage/mock-brand-kit/noirel.png' },
+          { id: 'mock-asset-citrea', kind: 'thumbnail', title: '제품 썸네일', subtitle: 'CITRÉA 브랜드킷', imageUrl: '/mypage/mock-brand-kit/citrea.png' },
+        ],
       },
-    ] : downloadHistory
-    const displayPinnedLogos: PinnedLogo[] = useMypageMock ? [
-      { candidateId: 'mypage-mock-pinned-1', projectType: 'BI', storageKey: 'mypage/pinned/lysenne.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
-      { candidateId: 'mypage-mock-pinned-2', projectType: 'BI', storageKey: 'mypage/pinned/sunwave.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
-      { candidateId: 'mypage-mock-pinned-3', projectType: 'BI', storageKey: 'mypage/pinned/gn.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
-      { candidateId: 'mypage-mock-pinned-4', projectType: 'BI', storageKey: 'mypage/pinned/vastel.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
-      { candidateId: 'mypage-mock-pinned-5', projectType: 'BI', storageKey: 'mypage/pinned/rk.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
-    ] : pinnedLogos
-    const savedBrandKitStorageKeys = brandKit?.status === 'SUCCEEDED'
-      ? brandKit.storageKeys?.length
-        ? brandKit.storageKeys
-        : brandKit.storageKey
-          ? [brandKit.storageKey]
-          : []
-      : []
-    const savedBrandKitImageUrls = savedBrandKitStorageKeys.map(getLogoCandidateImageUrl)
-    const mockBrandKitItems = [
-      { image: '/mypage/mock-brand-kit/lavenor.png', name: 'LAVENOR' },
-      { image: '/mypage/mock-brand-kit/aurelis.png', name: 'AURELIS' },
-      { image: '/mypage/mock-brand-kit/solairea.png', name: 'SOLAIREA' },
-      { image: '/mypage/mock-brand-kit/noirel.png', name: 'NOIRÉL' },
-      { image: '/mypage/mock-brand-kit/citrea.png', name: 'CITRÉA' },
     ]
-    const getPinnedImageUrl = (item: PinnedLogo) => useMypageMock
-      ? `/mypage/mock-pinned/${item.candidateId}.png`
-      : getLogoCandidateImageUrl(item.storageKey)
-    const remainingPinDays = (expiresAt: string) => Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000))
+    const actualAssetGroups = downloadHistory.reduce<MypageAssetGroup[]>((groups, item) => {
+      const dateKey = item.downloadedAt.slice(0, 10)
+      const group = groups.find((entry) => entry.dateKey === dateKey)
+      const asset: MypageAssetItem = {
+        id: `download-${item.downloadId}`,
+        kind: 'logo',
+        title: `${item.projectType} 로고`,
+        subtitle: `${new Date(item.downloadedAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 저장`,
+        imageUrl: item.imageUrl,
+      }
+      if (group) group.items.push(asset)
+      else groups.push({ dateKey, label: `${dateKey.slice(0, 4)}. ${dateKey.slice(5, 7)}. ${dateKey.slice(8, 10)}.`, items: [asset] })
+      return groups
+    }, []).sort((a, b) => b.dateKey.localeCompare(a.dateKey)).map((group, index) => ({ ...group, isToday: index === 0 }))
+    const assetGroups = useMypageMock ? mockAssetGroups : actualAssetGroups
+    const assetKindLabel: Record<MypageAssetKind, string> = { logo: '로고', 'business-card': '명함', thumbnail: '썸네일' }
     const beginProfileEdit = () => {
       setProfileCompanyNameDraft(useMypageMock ? '육하원칙' : companyName)
       setProfileCompanyMottoDraft(useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : companyMotto)
@@ -3833,12 +3817,12 @@ function CustomerApp() {
       setCompanyMotto(profileCompanyMottoDraft.trim())
       setProfileEditing(false)
     }
-    const downloadHistoryItem = async (item: DownloadRecord) => {
+    const downloadMypageAsset = async (item: MypageAssetItem) => {
       try {
         if (item.imageUrl.startsWith('/')) {
           const link = document.createElement('a')
           link.href = item.imageUrl
-          link.download = `genmark-${item.projectType.toLowerCase()}-${item.candidateId}.png`
+          link.download = `genmark-${item.kind}-${item.id}.png`
           document.body.appendChild(link)
           link.click()
           link.remove()
@@ -3847,7 +3831,7 @@ function CustomerApp() {
         const blob = await downloadAuthenticatedFile(item.imageUrl)
         const link = document.createElement('a')
         link.href = URL.createObjectURL(blob)
-        link.download = `genmark-${item.projectType.toLowerCase()}-${item.candidateId}.png`
+        link.download = `genmark-${item.kind}-${item.id}.png`
         document.body.appendChild(link)
         link.click()
         link.remove()
@@ -3896,103 +3880,35 @@ function CustomerApp() {
             </form>
           </section>
 
-          <section className="mypage-section" aria-labelledby="completed-title">
-            <div className="section-title-row"><div><h2 id="completed-title">완성한 브랜드</h2><p>생성한 로고와 분석 결과를 다시 확인할 수 있어요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
-            {completedProjects.length > 0 ? completedProjects.map((project) => (
-              <article className="completed-project-card" key={project.id}>
-                <div className="completed-project-preview"><img src={useMypageMock ? '/mypage/mock-completed-brand.png' : getLogoCandidateImageUrl(project.candidate.storageKey)} alt={`${project.name} 선택 로고`} /></div>
-                <div className="completed-project-info"><div className="project-info-heading"><strong>{project.name}</strong><span className="project-status"><Check size={14} strokeWidth={2.3} /> 로고 선택 완료</span></div><p>{project.detail}</p>{project.description && <p className="project-description">{project.description}</p>}<div className="project-status-list"><span><Check size={14} strokeWidth={2} /> 로고 생성 완료</span><span className={trademarkAnalysisCompleted ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 상표 분석 {trademarkAnalysisCompleted ? '완료' : '미완료'}</span><span className={brandKit?.status === 'SUCCEEDED' ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 브랜드킷 {brandKit?.status === 'SUCCEEDED' ? '완료' : '미완료'}</span></div></div>
-                <div className="project-action-grid">
-                  <button type="button" onClick={() => setMode('result')}><ImageIcon size={19} strokeWidth={1.8} />결과 보기</button>
-                  <button type="button" disabled={!trademarkAnalysisCompleted} onClick={() => setMode('trademark-result')}><Search size={19} strokeWidth={1.8} />유사도 결과</button>
-                  <button type="button" onClick={() => requestLogoDownload({ name: project.name, subtitle: selectedIndustry, candidateId: project.candidate.id, storageKey: project.candidate.storageKey, svgUrl: project.candidate.svgUrl })}><Download size={19} strokeWidth={1.8} />로고 다운로드</button>
-                  <button type="button" onClick={openBrandKitSelection}><FolderCheck size={19} strokeWidth={1.8} />브랜드킷 만들기</button>
-                  <button type="button" onClick={() => setMode('style')}><RefreshCw size={19} strokeWidth={1.8} />다시 생성하기</button>
-                </div>
-              </article>
-            )) : (
-              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 완성한 브랜드가 없어요</h3><p>로고를 생성하고 최종 후보를 선택하면 이곳에 표시돼요.</p><button className="gradient-button" type="button" onClick={startOnboarding} disabled={authRestoring}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
-            )}
-          </section>
-
-          <section className="mypage-section" aria-labelledby="download-history-title">
-            <div className="section-title-row"><div><h2 id="download-history-title">내 다운로드 목록</h2><p>CI·BI 유형별로 최근 20개까지 보관돼요. 한도를 넘으면 오래된 기록부터 자동으로 정리됩니다.</p></div></div>
-            {displayDownloadHistory.length > 0 ? (
-              useMypageMock ? (
-                <div className="download-logo-grid">
-                  {displayDownloadHistory.map((item) => (
-                    <article className="download-logo-card" key={item.downloadId}>
-                      <img src={item.imageUrl} alt="다운로드한 로고" />
-                      <div><strong>{item.projectType} 로고</strong><p>{new Date(item.downloadedAt).toLocaleString('ko-KR')}에 저장</p><button type="button" onClick={() => void downloadHistoryItem(item)}>다시 받기</button></div>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="mypage-record-list">
-                  {displayDownloadHistory.map((item) => (
-                    <article className="mypage-record-row" key={item.downloadId}>
-                      <span className="record-icon"><Download size={19} strokeWidth={1.8} /></span>
-                      <div><strong>{item.projectType} 로고</strong><p>{new Date(item.downloadedAt).toLocaleString('ko-KR')}에 저장</p></div>
-                      <button type="button" onClick={() => void downloadHistoryItem(item)}>다시 받기</button>
-                    </article>
-                  ))}
-                </div>
-              )
-            ) : <div className="mypage-inline-empty"><Download size={22} strokeWidth={1.6} /><span>아직 다운로드한 로고가 없어요.</span></div>}
-          </section>
-
-          <section className="mypage-section" aria-labelledby="pinned-title">
-              <div className="section-title-row"><div><h2 id="pinned-title">찜한 로고</h2><p>찜한 로고는 3일 동안 잠시 보관돼요. 기간이 지나면 목록에서 자동으로 사라집니다.</p></div></div>
-            {displayPinnedLogos.length > 0 ? (
-              <div className="pinned-logo-grid">
-                {displayPinnedLogos.map((item) => (
-                  <article className="pinned-logo-card" key={item.candidateId}>
-                    <img src={getPinnedImageUrl(item)} alt="찜한 로고" />
-                    <div><strong>{item.projectType ?? '브랜드'} 로고</strong><span>{remainingPinDays(item.expiresAt)}일 후 목록에서 사라져요</span><small>{new Date(item.expiresAt).toLocaleDateString('ko-KR')}까지 보관</small></div>
-                  </article>
-                ))}
-              </div>
-            ) : <div className="mypage-inline-empty"><Heart size={22} strokeWidth={1.6} /><span>잠시 보관하고 싶은 로고를 찜해보세요.</span></div>}
-          </section>
-
-          <section className="mypage-section" aria-labelledby="brand-kit-list-title">
-            <div className="section-title-row"><div><h2 id="brand-kit-list-title">내 브랜드킷</h2><p>선택한 로고로 만든 명함과 제품 썸네일을 확인하세요.</p></div></div>
-            {useMypageMock ? (
-              <div className="pinned-logo-grid brand-kit-mock-grid">
-                {mockBrandKitItems.map((item) => (
-                  <article className="pinned-logo-card" key={item.name}>
-                    <img src={item.image} alt={`${item.name} 제품 썸네일`} />
-                    <div><strong>{item.name}</strong><span>제품 썸네일</span><small>브랜드 키트 목업</small></div>
-                  </article>
-                ))}
-              </div>
-            ) : brandKit?.status === 'SUCCEEDED' && savedBrandKitImageUrls.length > 0 ? (
-              <article className="mypage-brand-kit-result">
-                <div className="mypage-brand-kit-images">
-                  {savedBrandKitImageUrls.map((imageUrl, index) => {
-                    const label = brandKit.kitType === 'BUSINESS_CARD'
-                      ? index === 0 ? '앞면' : '뒷면'
-                      : '제품 썸네일'
-                    return (
-                      <figure className="mypage-brand-kit-image" key={`${imageUrl}-${index}`}>
-                        <figcaption>{label}</figcaption>
-                        <img src={imageUrl} alt={`완성된 ${label}`} />
-                      </figure>
-                    )
-                  })}
-                </div>
-                <button className="mypage-brand-kit-download" type="button" disabled={brandKitDownloading} onClick={() => void downloadBrandKitArchive(brandKit)}>
-                  <Download aria-hidden="true" size={18} strokeWidth={1.9} />
-                  {brandKitDownloading ? '묶는 중…' : brandKit.kitType === 'BUSINESS_CARD' ? 'PNG·SVG·PDF 다운로드' : '다운로드'}
-                </button>
-              </article>
-            ) : brandKit ? (
-              <article className="brand-kit-summary-row">
-                <span className="record-icon"><FolderCheck size={20} strokeWidth={1.8} /></span>
-                <div><strong>{brandKit.kitType === 'BUSINESS_CARD' ? '명함' : '제품 썸네일'}</strong><p>{brandKit.status === 'SUCCEEDED' ? '생성이 완료됐어요.' : brandKit.status === 'FAILED' ? '생성에 실패했어요.' : '현재 생성 중이에요.'}</p></div>
-                <span className={`brand-kit-state ${brandKit.status.toLowerCase()}`}>{brandKit.status === 'SUCCEEDED' ? '완료' : brandKit.status === 'FAILED' ? '실패' : '생성 중'}</span>
-              </article>
-            ) : <div className="mypage-inline-empty"><FolderCheck size={22} strokeWidth={1.6} /><span>아직 만든 브랜드킷이 없어요.</span></div>}
+          <section className="mypage-section asset-library-section" aria-labelledby="asset-library-title">
+            <div className="section-title-row asset-library-heading">
+              <div><h2 id="asset-library-title">내 자산 목록</h2></div>
+              <FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} />
+            </div>
+            <div className="asset-date-list">
+              {assetGroups.length > 0 ? assetGroups.map((group) => {
+                const isOpen = openMypageAssetDate === group.dateKey
+                return (
+                  <div className={isOpen ? 'asset-date-group is-open' : 'asset-date-group'} key={group.dateKey}>
+                    <button className="asset-date-toggle" type="button" aria-expanded={isOpen} aria-controls={`asset-items-${group.dateKey}`} onClick={() => setOpenMypageAssetDate(isOpen ? '' : group.dateKey)}>
+                      <span><time dateTime={group.dateKey}>{group.label}</time>{group.isToday && <em>오늘</em>}</span>
+                      <ChevronDown className="asset-date-chevron" aria-hidden="true" size={21} strokeWidth={1.8} />
+                    </button>
+                    {isOpen && (
+                      <div className="asset-item-list" id={`asset-items-${group.dateKey}`}>
+                        {group.items.map((item) => (
+                          <article className="asset-item" key={item.id}>
+                            <div className={`asset-item-thumb asset-item-thumb-${item.kind}`}><img src={item.imageUrl} alt={`${item.title} 미리보기`} /></div>
+                            <div className="asset-item-copy"><span className={`asset-kind asset-kind-${item.kind}`}>{assetKindLabel[item.kind]}</span><strong>{item.title}</strong><p>{item.subtitle}</p></div>
+                            <button className="asset-download-button" type="button" aria-label={`${item.title} 다운로드`} onClick={() => void downloadMypageAsset(item)}><Download aria-hidden="true" size={19} strokeWidth={1.9} /></button>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              }) : <div className="mypage-inline-empty"><FolderCheck size={22} strokeWidth={1.6} /><span>아직 저장된 자산이 없어요.</span></div>}
+            </div>
           </section>
 
           {projectError && <p className="project-error mypage-project-error" role="alert">{projectError}</p>}
