@@ -5,7 +5,7 @@ import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
 import { AiLoader } from './components/ui/ai-loader'
 import { apiBlobRequest, AuthError, type AuthProvider, type AuthUser, downloadAuthenticatedFile, loginWithProvider, logout, restoreSession } from './auth'
-import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type BusinessCardInfoInput, type DownloadRecord, type LogoCandidate, type PinnedLogo, type SurveyImprovement, type SurveySubmitInput, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
+import { ciProjectsApi, getLogoCandidateImageUrl, meApi, onboardingApi, projectsApi, type BrandKit, type BusinessCardInfoInput, type DownloadRecord, type LogoCandidate, type SurveyImprovement, type SurveySubmitInput, type TrademarkMatch, waitForLogoGeneration, waitForTrademarkAnalysis, type ProjectInput } from './lib/genmarkApi'
 import { buildEditedSvg, prepareEditableSvg } from './lib/svgEditor'
 
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
@@ -14,7 +14,16 @@ const TRADEMARK_SCORE_FALLBACK = 23
 
 // 화면 설계서용 임시 목업 모드입니다. 실제 로그인 사용자와 API 데이터에는 영향을 주지 않으며,
 // 원래의 비로그인 빈 상태로 되돌릴 때는 false로 바꾸면 됩니다.
-const MYPAGE_MOCK_MODE = true
+const MYPAGE_MOCK_MODE = import.meta.env.DEV
+
+const getLocalDateKey = (value: Date | string = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return typeof value === 'string' ? value.slice(0, 10) : ''
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
 type ViewMode = 'home' | 'hero' | 'logo-intro' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'brand-kit' | 'edit' | 'login' | 'mypage' | 'survey'
 type LoginDestination = 'home' | 'industry' | 'choice' | 'mypage'
@@ -30,6 +39,23 @@ type TrademarkMatchImage = { rank: number; src: string }
 type FinalEditKind = 'identity' | 'values' | 'tone' | 'color' | 'style' | 'shape'
 type FinalToneMode = 'recommended' | 'direct'
 type EditorTarget = string
+type MypageAssetKind = 'logo' | 'business-card' | 'thumbnail'
+type MypageAssetItem = {
+  id: string
+  kind: MypageAssetKind
+  title: string
+  subtitle: string
+  imageUrl: string
+  imageUrls?: string[]
+  brandKit?: BrandKit
+  dateKey: string
+}
+type MypageAssetGroup = {
+  dateKey: string
+  label: string
+  isToday?: boolean
+  items: MypageAssetItem[]
+}
 type EditorDraft = {
   scale: number
   rotation: number
@@ -184,6 +210,14 @@ const galleryItems = [
   { id: 'lysenne', name: 'LYSENNE', category: '워드마크', meta: '뷰티 · 워드마크', likes: '860', image: '/curation-gallery/lysenne.png', position: '50% 50%', tone: 'lysenne' },
 ]
 
+const businessCardGalleryItems = [
+  { id: 'nevia-card', name: 'NEVIA', category: '명함', meta: '미니멀 · 내추럴', likes: '1.8k', image: '/business-card-gallery/nevia.png', position: '50% 50%', tone: 'nevia' },
+  { id: 'morvan-card', name: 'MORVAN', category: '명함', meta: '브라운 · 내추럴', likes: '1.5k', image: '/business-card-gallery/morvan.png', position: '50% 50%', tone: 'morvan' },
+  { id: 'eloris-card', name: 'ELORIS', category: '명함', meta: '라벤더 · 감성', likes: '1.3k', image: '/business-card-gallery/eloris.png', position: '50% 50%', tone: 'eloris' },
+  { id: 'vitara-card', name: 'VITARA', category: '명함', meta: '골드 · 내추럴', likes: '1.1k', image: '/business-card-gallery/vitara.png', position: '50% 50%', tone: 'vitara' },
+  { id: 'aurion-card', name: 'AURION', category: '명함', meta: '네이비 · 프리미엄', likes: '980', image: '/business-card-gallery/aurion.png', position: '50% 50%', tone: 'aurion' },
+]
+
 const productGalleryItems = [
   { id: 'lavenor-product', name: 'LAVENOR', category: '클렌저', meta: '라벤더 · 포밍 클렌저', likes: '2.4k', image: '/product-gallery/lavenor.png', position: '50% 50%', tone: 'lavenor' },
   { id: 'solairea-product', name: 'SOLAIREA', category: '선케어', meta: '선밤 · SPF 50', likes: '2.1k', image: '/product-gallery/solairea.png', position: '50% 50%', tone: 'solairea' },
@@ -195,14 +229,6 @@ const productGalleryItems = [
   { id: 'citrea-product', name: 'CITRÉA', category: '미스트', meta: '시트러스 · 페이셜 미스트', likes: '1.1k', image: '/product-gallery/citrea.png', position: '50% 50%', tone: 'citrea' },
   { id: 'aurelis-product', name: 'AURELIS', category: '바디로션', meta: '시트러스 · 바디 로션', likes: '980', image: '/product-gallery/aurelis.png', position: '50% 50%', tone: 'aurelis' },
   { id: 'terraluna-product', name: 'TERRALUNA', category: '토너', meta: '보태니컬 · 클라리파잉 토너', likes: '860', image: '/product-gallery/terraluna.png', position: '50% 50%', tone: 'terraluna' },
-]
-
-const businessCardGalleryItems = [
-  { id: 'nevia-card', name: 'NEVIA', category: '명함', meta: '미니멀 · 내추럴', likes: '1.8k', image: '/business-card-gallery/nevia.png', position: '50% 50%', tone: 'nevia' },
-  { id: 'morvan-card', name: 'MORVAN', category: '명함', meta: '브라운 · 내추럴', likes: '1.5k', image: '/business-card-gallery/morvan.png', position: '50% 50%', tone: 'morvan' },
-  { id: 'eloris-card', name: 'ELORIS', category: '명함', meta: '라벤더 · 감성', likes: '1.3k', image: '/business-card-gallery/eloris.png', position: '50% 50%', tone: 'eloris' },
-  { id: 'vitara-card', name: 'VITARA', category: '명함', meta: '골드 · 내추럴', likes: '1.1k', image: '/business-card-gallery/vitara.png', position: '50% 50%', tone: 'vitara' },
-  { id: 'aurion-card', name: 'AURION', category: '명함', meta: '네이비 · 프리미엄', likes: '980', image: '/business-card-gallery/aurion.png', position: '50% 50%', tone: 'aurion' },
 ]
 
 const surveyImprovementOptions: SurveyImprovement[] = ['로고 생성·재생성', '브랜드 맞춤 로고', '로고 수정', '유사 상표 확인', '로고 저장·활용', '기타']
@@ -482,6 +508,7 @@ function CustomerApp() {
   const [profileEditing, setProfileEditing] = useState(false)
   const [profileCompanyNameDraft, setProfileCompanyNameDraft] = useState('')
   const [profileCompanyMottoDraft, setProfileCompanyMottoDraft] = useState('')
+  const [openMypageAssetDate, setOpenMypageAssetDate] = useState('2026-08-18')
   const [coreValues, setCoreValues] = useState<CoreValue[]>([])
   const [coreValueInputMode, setCoreValueInputMode] = useState<'category' | 'direct'>('category')
   const [brandValueDescription, setBrandValueDescription] = useState('')
@@ -532,12 +559,15 @@ function CustomerApp() {
   const [projectError, setProjectError] = useState('')
   const [logoCandidates, setLogoCandidates] = useState<LogoCandidate[]>([])
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null)
-  const [pinnedLogos, setPinnedLogos] = useState<PinnedLogo[]>([])
   const [downloadHistory, setDownloadHistory] = useState<DownloadRecord[]>([])
+  const [brandKitHistory, setBrandKitHistory] = useState<BrandKit[]>([])
+  const [mypageDownloadImageUrls, setMypageDownloadImageUrls] = useState<Record<string, string>>({})
+  const [mypageGeneratedLogoCandidates, setMypageGeneratedLogoCandidates] = useState<Record<string, LogoCandidate>>({})
   const [brandKit, setBrandKit] = useState<BrandKit | null>(null)
   const [brandKitError, setBrandKitError] = useState('')
   const [brandKitDownloading, setBrandKitDownloading] = useState(false)
   const [brandKitType, setBrandKitType] = useState<BrandKit['kitType'] | null>(null)
+  const [brandKitPreview, setBrandKitPreview] = useState<{ imageUrls: string[]; label: string } | null>(null)
   const [businessCardModalOpen, setBusinessCardModalOpen] = useState(false)
   const [businessCardInfo, setBusinessCardInfo] = useState<BusinessCardInfoInput>({
     name: '', title: '', company: '', phone: '', email: '', address: '',
@@ -610,7 +640,7 @@ function CustomerApp() {
   }
 
   useEffect(() => {
-    if (!creditModal && !businessCardModalOpen && !resumePromptProject && !finalEditModal && !regenerationConfirmOpen) return
+    if (!creditModal && !businessCardModalOpen && !resumePromptProject && !finalEditModal && !regenerationConfirmOpen && !brandKitPreview) return
 
     const modalRoot = activeModalRef.current
     if (!modalRoot) return
@@ -632,7 +662,9 @@ function CustomerApp() {
     const handleModalKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        if (businessCardModalOpen) {
+        if (brandKitPreview) {
+          setBrandKitPreview(null)
+        } else if (businessCardModalOpen) {
           setBusinessCardModalOpen(false)
           setBusinessCardTarget(null)
           setBusinessCardInfoErrors({})
@@ -675,7 +707,29 @@ function CustomerApp() {
       document.body.style.overflow = previousOverflow
       previouslyFocused?.focus()
     }
-  }, [businessCardModalOpen, creditModal, finalEditModal, regenerationConfirmOpen, resumePromptProject])
+  }, [brandKitPreview, businessCardModalOpen, creditModal, finalEditModal, regenerationConfirmOpen, resumePromptProject])
+
+  useEffect(() => {
+    const handleBackgroundWheel = (event: WheelEvent) => {
+      if (event.defaultPrevented || document.body.style.overflow === 'hidden' || event.deltaY === 0) return
+      const shell = document.querySelector<HTMLElement>('.app-shell')
+      const target = event.target
+      if (!shell || (target instanceof Node && shell.contains(target))) return
+
+      const main = shell.querySelector<HTMLElement>(':scope > main')
+      if (!main || main.scrollHeight <= main.clientHeight) return
+
+      const maxScrollTop = main.scrollHeight - main.clientHeight
+      const nextScrollTop = Math.min(maxScrollTop, Math.max(0, main.scrollTop + event.deltaY))
+      if (nextScrollTop === main.scrollTop) return
+      main.scrollTop = nextScrollTop
+      event.preventDefault()
+    }
+
+    window.addEventListener('wheel', handleBackgroundWheel, { passive: false })
+    return () => window.removeEventListener('wheel', handleBackgroundWheel)
+  }, [mode])
+
   const [choiceInfoModal, setChoiceInfoModal] = useState<'ci' | 'bi' | null>(null)
   const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; candidateId?: string; storageKey?: string; svgUrl?: string | null } | null>(null)
   const editorCandidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
@@ -946,7 +1000,6 @@ function CustomerApp() {
         setSurveySubmitted(result.completed)
         setRemainingCredits(result.creditBalance)
       }),
-      meApi.getPins().then(setPinnedLogos),
       Promise.all([
         meApi.getDownloads('CI'),
         meApi.getDownloads('BI'),
@@ -960,6 +1013,7 @@ function CustomerApp() {
     void meApi.getBrandKits()
       .then((kits) => {
         if (cancelled) return
+        setBrandKitHistory(kits)
         const latest = selectedCandidateId
           ? kits.find((kit) => kit.candidateId === selectedCandidateId) ?? null
           : kits[0] ?? null
@@ -985,6 +1039,83 @@ function CustomerApp() {
       })
     return () => { cancelled = true }
   }, [loggedIn, mode, selectedCandidateId])
+
+  useEffect(() => {
+    if (!loggedIn || mode !== 'mypage') {
+      setMypageGeneratedLogoCandidates({})
+      return undefined
+    }
+
+    const projectIds = [...new Set([
+      projectId,
+      ...brandKitHistory.map((kit) => kit.projectId),
+    ].filter((value): value is string => Boolean(value)))]
+    if (projectIds.length === 0) {
+      setMypageGeneratedLogoCandidates({})
+      return undefined
+    }
+
+    let cancelled = false
+    void Promise.all(projectIds.map(async (candidateProjectId) => {
+      try {
+        return await projectsApi.getLatestCandidates(candidateProjectId)
+      } catch {
+        return [] as LogoCandidate[]
+      }
+    })).then((candidateGroups) => {
+      if (cancelled) return
+      setMypageGeneratedLogoCandidates(Object.fromEntries(candidateGroups.flat().map((candidate) => [candidate.id, candidate])))
+    })
+
+    return () => { cancelled = true }
+  }, [brandKitHistory, loggedIn, mode, projectId])
+
+  useEffect(() => {
+    if (!loggedIn || mode !== 'mypage' || downloadHistory.length === 0) {
+      setMypageDownloadImageUrls({})
+      return undefined
+    }
+
+    let cancelled = false
+    const objectUrls: string[] = []
+    void Promise.all(downloadHistory.map(async (item) => {
+      const itemId = `download-${item.downloadId}`
+      try {
+        const blob = await downloadAuthenticatedFile(item.imageUrl)
+        if (cancelled) return [itemId, ''] as const
+        const objectUrl = URL.createObjectURL(blob)
+        objectUrls.push(objectUrl)
+        return [itemId, objectUrl] as const
+      } catch {
+        return [itemId, ''] as const
+      }
+    })).then((entries) => {
+      if (cancelled) return
+      setMypageDownloadImageUrls(Object.fromEntries(entries.filter(([, imageUrl]) => imageUrl)))
+    })
+
+    return () => {
+      cancelled = true
+      objectUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
+    }
+  }, [downloadHistory, loggedIn, mode])
+
+  useEffect(() => {
+    if (mode !== 'mypage') return
+    const todayDateKey = getLocalDateKey()
+    const assetDates = [
+      ...downloadHistory.map((item) => getLocalDateKey(item.downloadedAt)),
+      ...brandKitHistory.map((kit) => kit.createdAt ? getLocalDateKey(kit.createdAt) : ''),
+      ...Object.values(mypageGeneratedLogoCandidates).map((candidate) => getLocalDateKey(candidate.createdAt)),
+    ].filter(Boolean)
+    const latestAssetDate = assetDates.sort((left, right) => right.localeCompare(left))[0]
+    const preferredOpenDate = assetDates.includes(todayDateKey) ? todayDateKey : latestAssetDate
+    if (preferredOpenDate) {
+      setOpenMypageAssetDate((current) => current === preferredOpenDate ? current : preferredOpenDate)
+    } else if (MYPAGE_MOCK_MODE && !loggedIn) {
+      setOpenMypageAssetDate((current) => current === '2026-08-18' ? current : '2026-08-18')
+    }
+  }, [brandKitHistory, downloadHistory, loggedIn, mode, mypageGeneratedLogoCandidates])
 
   useEffect(() => () => {
     if (onboardingTransitionTimer.current !== null) window.clearTimeout(onboardingTransitionTimer.current)
@@ -1020,6 +1151,17 @@ function CustomerApp() {
     setLikedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   }
 
+  const scrollTrackByPage = (track: HTMLDivElement | null, direction: number) => {
+    if (!track) return
+    const maxScroll = track.scrollWidth - track.clientWidth
+    const target = Math.min(maxScroll, Math.max(0, track.scrollLeft + direction * track.clientWidth))
+    track.scrollTo({ left: target, behavior: 'smooth' })
+  }
+
+  const scrollGallery = (direction: number) => {
+    scrollTrackByPage(galleryRef.current, direction)
+  }
+
   const handleGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     const track = galleryRef.current
     if (!track || event.button !== 0) return
@@ -1048,6 +1190,10 @@ function CustomerApp() {
     track.classList.remove('is-dragging')
   }
 
+  const scrollProductGallery = (direction: number) => {
+    scrollTrackByPage(productGalleryRef.current, direction)
+  }
+
   const handleProductGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     const track = productGalleryRef.current
     if (!track || event.button !== 0) return
@@ -1074,6 +1220,10 @@ function CustomerApp() {
     isDraggingProductGallery.current = false
     if (track.hasPointerCapture(event.pointerId)) track.releasePointerCapture(event.pointerId)
     track.classList.remove('is-dragging')
+  }
+
+  const scrollBusinessCardGallery = (direction: number) => {
+    scrollTrackByPage(businessCardGalleryRef.current, direction)
   }
 
   const handleBusinessCardGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -1361,12 +1511,16 @@ function CustomerApp() {
     setMode('logo-intro')
   }
 
-  const startLogoCreationFromIntro = () => {
+  const startLogoCreationFromIntro = async () => {
     setIndustryBackMode('home')
     if (!loggedIn) {
       setLoginDestination('industry')
       setLoginReturnMode('home')
       setMode('login')
+      return
+    }
+    if (projectId) {
+      await presentResumePrompt(projectId, () => setMode('industry'), { skipSilentResume: true })
       return
     }
     setMode('industry')
@@ -1886,7 +2040,7 @@ function CustomerApp() {
     setMode('brand-kit')
   }
 
-  const downloadBrandKitArchive = async (kit: BrandKit) => {
+  const downloadBrandKitArchive = async (kit: BrandKit, onError: (message: string) => void = setBrandKitError) => {
     if (brandKitDownloading) return
     setBrandKitDownloading(true)
     setBrandKitError('')
@@ -1903,7 +2057,7 @@ function CustomerApp() {
       link.remove()
       URL.revokeObjectURL(objectUrl)
     } catch (error) {
-      setBrandKitError(error instanceof Error ? error.message : '브랜드 키트를 다운로드하지 못했어요.')
+      onError(error instanceof Error ? error.message : '브랜드 키트를 다운로드하지 못했어요.')
     } finally {
       setBrandKitDownloading(false)
     }
@@ -2101,7 +2255,7 @@ function CustomerApp() {
       <div className="onboarding-overlay" />
       <section className="onboarding-content" aria-labelledby="onboarding-title">
         <div className="onboarding-intro">
-          <div className="onboarding-brand"><span>GenMark</span></div>
+          <div className="onboarding-brand"><BrandLogo /><span>GenMark AI</span></div>
           <div className="onboarding-step"><span>{onboardingStep} / 2</span></div>
           {onboardingStep === 1 ? (
             <h1 id="onboarding-title">로고를 어디에<br /><strong>사용할 예정인가요?</strong></h1>
@@ -3469,7 +3623,7 @@ function CustomerApp() {
 
           {completedBrandKit && brandKitImageUrls.length > 0 ? (
             <section className="brand-kit-result-preview" aria-labelledby="brand-kit-result-title">
-              <div className="brand-kit-result-images">
+              <div className={completedBrandKit.kitType === 'BUSINESS_CARD' ? 'brand-kit-result-images business-card-result-images' : 'brand-kit-result-images'}>
                 {brandKitImageUrls.map((imageUrl, index) => {
                   const sideLabel = completedBrandKit.kitType === 'BUSINESS_CARD'
                     ? index === 0 ? '앞면' : '뒷면'
@@ -3484,7 +3638,10 @@ function CustomerApp() {
                           </a>
                         )}
                       </figcaption>
-                      <img src={imageUrl} alt={`완성된 ${completedBrandKit.kitType === 'BUSINESS_CARD' ? `명함 ${sideLabel}` : '제품 썸네일'} 브랜드 키트`} />
+                      <button className="brand-kit-result-image-button" type="button" aria-label={`${sideLabel} 이미지 크게 보기`} onClick={() => setBrandKitPreview({ imageUrls: [imageUrl], label: sideLabel })}>
+                        <img src={imageUrl} alt={`완성된 ${completedBrandKit.kitType === 'BUSINESS_CARD' ? `명함 ${sideLabel}` : '제품 썸네일'} 브랜드 키트`} />
+                        <span className="brand-kit-result-image-zoom" aria-hidden="true"><ImageIcon size={16} strokeWidth={2} /> 크게 보기</span>
+                      </button>
                     </figure>
                   )
                 })}
@@ -3553,6 +3710,35 @@ function CustomerApp() {
           </div>
         </section>
       </main>
+    )
+  }
+
+  const renderBrandKitPreviewModal = () => {
+    if (!brandKitPreview) return null
+    return (
+      <div
+        ref={activeModalRef}
+        className="modal-backdrop brand-kit-preview-backdrop"
+        role="presentation"
+        onMouseDown={(event) => { if (event.target === event.currentTarget) setBrandKitPreview(null) }}
+      >
+        <section className="brand-kit-preview-modal" role="dialog" aria-modal="true" aria-labelledby="brand-kit-preview-title">
+          <header className="brand-kit-preview-modal-header">
+            <div>
+              <span>브랜드 키트 미리보기</span>
+              <h2 id="brand-kit-preview-title">{brandKitPreview.label}</h2>
+            </div>
+            <button className="brand-kit-preview-close" type="button" aria-label="미리보기 닫기" onClick={() => setBrandKitPreview(null)}>
+              <X aria-hidden="true" size={22} strokeWidth={1.9} />
+            </button>
+          </header>
+          <div className={brandKitPreview.imageUrls.length > 1 ? 'brand-kit-preview-stage is-gallery' : 'brand-kit-preview-stage'}>
+            {brandKitPreview.imageUrls.map((imageUrl, index) => (
+              <img key={`${imageUrl}-${index}`} src={imageUrl} alt={`확대된 ${brandKitPreview.label}${brandKitPreview.imageUrls.length > 1 ? ` ${index === 0 ? '앞면' : '뒷면'}` : ''} 브랜드 키트`} />
+            ))}
+          </div>
+        </section>
+      </div>
     )
   }
 
@@ -3731,7 +3917,7 @@ function CustomerApp() {
   }
 
   const renderMypageScreen = () => {
-    if (!authRestoring && !loggedIn) {
+    if (!MYPAGE_MOCK_MODE && !authRestoring && !loggedIn) {
       const goToLogin = () => { setLoginDestination('mypage'); setLoginReturnMode('home'); setMode('login') }
       return (
         <main className="mypage-screen" aria-labelledby="mypage-title">
@@ -3753,75 +3939,100 @@ function CustomerApp() {
       )
     }
     const useMypageMock = MYPAGE_MOCK_MODE && !authRestoring && !loggedIn
+    const todayDateKey = getLocalDateKey()
     const displayUserName = useMypageMock ? '김명은' : authUser?.name?.trim() || '사용자'
     const displayEmail = useMypageMock ? '연결된 이메일 정보가 없어요. tkss1217@gmail.com' : authUser?.email?.trim() || '연결된 이메일 정보가 없어요.'
     const displayCompanyName = useMypageMock ? '육하원칙' : companyName.trim() || '아직 입력된 회사명이 없어요.'
     const displayCompanyMotto = useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : companyMotto.trim() || '브랜드 프로젝트에서 회사 모토를 입력해보세요.'
-    const selectedLogo = logoCandidates.find((candidate) => candidate.id === selectedCandidateId)
-      ?? logoCandidates.find((candidate) => candidate.selected)
-    const projectName = (brandKind === 'ci' ? companyName : brandName).trim()
-    const projectDescription = (brandKind === 'ci' ? companyMotto : brandValueDescription).trim()
-    const selectedIndustry = industryOptions.find((option) => option.id === industrySelection)?.title ?? '업종 미입력'
-    const selectedStyle = logoStyleOptions.find((option) => option.id === logoStyle)?.label ?? '스타일 미입력'
-    const completedProjects = useMypageMock ? [{
-      id: 'mypage-mock-completed-brand',
-      name: '육하원칙',
-      detail: '뷰티 · 콤비네이션',
-      description: '완성된 브랜드 로고 목업',
-      candidate: { id: 'mypage-mock-completed-candidate', storageKey: 'mypage/mock-completed-brand.png' } as LogoCandidate,
-    }] : projectId && selectedLogo && projectName
-      ? [{
-          id: projectId,
-          name: projectName,
-          detail: `${selectedIndustry} · ${selectedStyle}`,
-          description: projectDescription,
-          candidate: selectedLogo,
-        }]
-      : []
-    const displayDownloadHistory: DownloadRecord[] = useMypageMock ? [
+    const mockAssetGroups: MypageAssetGroup[] = [
       {
-        downloadId: -1,
-        candidateId: 'mypage-mock-pinned-1',
-        projectType: 'BI',
-        imageUrl: '/mypage/mock-pinned/mypage-mock-pinned-1.png',
-        firstTime: false,
-        downloadedAt: '2026-08-14T09:00:00.000Z',
+        dateKey: '2026-08-18',
+        label: '2026. 08. 18.',
+        isToday: '2026-08-18' === todayDateKey,
+        items: [
+          { id: 'mock-asset-logo', kind: 'logo', title: '육하원칙 CI 로고', subtitle: '로고 선택 완료 · 오후 1:41', imageUrl: '/mypage/mock-completed-brand.png', dateKey: '2026-08-18' },
+          { id: 'mock-asset-card', kind: 'business-card', title: '명함', subtitle: '육하원칙 브랜드킷 · 앞·뒷면', imageUrl: '/business-card-gallery/morvan.png', imageUrls: ['/business-card-gallery/morvan.png', '/business-card-gallery/eloris.png'], dateKey: '2026-08-18' },
+          { id: 'mock-asset-thumbnail', kind: 'thumbnail', title: '제품 썸네일', subtitle: '육하원칙 브랜드킷 · 제품 이미지', imageUrl: '/mypage/mock-brand-kit/aurelis.png', dateKey: '2026-08-18' },
+        ],
       },
       {
-        downloadId: -2,
-        candidateId: 'mypage-mock-pinned-2',
-        projectType: 'BI',
-        imageUrl: '/mypage/mock-pinned/mypage-mock-pinned-2.png',
-        firstTime: false,
-        downloadedAt: '2026-08-14T09:05:00.000Z',
+        dateKey: '2026-08-14',
+        label: '2026. 08. 14.',
+        items: [
+          { id: 'mock-asset-noirel', kind: 'thumbnail', title: '제품 썸네일', subtitle: 'NOIRÉL 브랜드킷', imageUrl: '/mypage/mock-brand-kit/noirel.png', dateKey: '2026-08-14' },
+          { id: 'mock-asset-citrea', kind: 'thumbnail', title: '제품 썸네일', subtitle: 'CITRÉA 브랜드킷', imageUrl: '/mypage/mock-brand-kit/citrea.png', dateKey: '2026-08-14' },
+        ],
       },
-    ] : downloadHistory
-    const displayPinnedLogos: PinnedLogo[] = useMypageMock ? [
-      { candidateId: 'mypage-mock-pinned-1', projectType: 'BI', storageKey: 'mypage/pinned/lysenne.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
-      { candidateId: 'mypage-mock-pinned-2', projectType: 'BI', storageKey: 'mypage/pinned/sunwave.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
-      { candidateId: 'mypage-mock-pinned-3', projectType: 'BI', storageKey: 'mypage/pinned/gn.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
-      { candidateId: 'mypage-mock-pinned-4', projectType: 'BI', storageKey: 'mypage/pinned/vastel.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
-      { candidateId: 'mypage-mock-pinned-5', projectType: 'BI', storageKey: 'mypage/pinned/rk.png', pinnedAt: '2026-08-14T08:00:00.000Z', expiresAt: '2026-08-17T08:00:00.000Z', createdAt: '2026-08-14T08:00:00.000Z' },
-    ] : pinnedLogos
-    const savedBrandKitStorageKeys = brandKit?.status === 'SUCCEEDED'
-      ? brandKit.storageKeys?.length
-        ? brandKit.storageKeys
-        : brandKit.storageKey
-          ? [brandKit.storageKey]
-          : []
-      : []
-    const savedBrandKitImageUrls = savedBrandKitStorageKeys.map(getLogoCandidateImageUrl)
-    const mockBrandKitItems = [
-      { image: '/mypage/mock-brand-kit/lavenor.png', name: 'LAVENOR' },
-      { image: '/mypage/mock-brand-kit/aurelis.png', name: 'AURELIS' },
-      { image: '/mypage/mock-brand-kit/solairea.png', name: 'SOLAIREA' },
-      { image: '/mypage/mock-brand-kit/noirel.png', name: 'NOIRÉL' },
-      { image: '/mypage/mock-brand-kit/citrea.png', name: 'CITRÉA' },
     ]
-    const getPinnedImageUrl = (item: PinnedLogo) => useMypageMock
-      ? `/mypage/mock-pinned/${item.candidateId}.png`
-      : getLogoCandidateImageUrl(item.storageKey)
-    const remainingPinDays = (expiresAt: string) => Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000))
+    const downloadedCandidateIds = new Set(downloadHistory.map((item) => item.candidateId))
+    const generatedLogoAssets: MypageAssetItem[] = Object.values(mypageGeneratedLogoCandidates)
+      .filter((candidate) => candidate.storageKey && !downloadedCandidateIds.has(candidate.id))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((candidate) => {
+        const relatedKit = brandKitHistory.find((kit) => kit.candidateId === candidate.id)
+        const projectLabel = relatedKit?.kitType === 'THUMBNAIL' ? 'BI' : relatedKit?.kitType === 'BUSINESS_CARD' ? 'CI' : '생성'
+        const imageUrl = getLogoCandidateImageUrl(candidate.storageKey)
+        return {
+          id: `generated-logo-${candidate.id}`,
+          kind: 'logo',
+          title: `${projectLabel} 로고`,
+          subtitle: `${new Date(candidate.createdAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성`,
+          imageUrl,
+          imageUrls: [imageUrl],
+          dateKey: getLocalDateKey(candidate.createdAt),
+        }
+      })
+    const actualAssetItems: MypageAssetItem[] = [
+      ...downloadHistory.map((item) => {
+        const dateKey = getLocalDateKey(item.downloadedAt)
+        return {
+          id: `download-${item.downloadId}`,
+          kind: 'logo' as const,
+          title: `${item.projectType} 로고`,
+          subtitle: `${new Date(item.downloadedAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 저장`,
+          imageUrl: item.imageUrl,
+          dateKey,
+        }
+      }),
+      ...generatedLogoAssets,
+      ...brandKitHistory.flatMap((kit): MypageAssetItem[] => {
+        if (kit.status !== 'SUCCEEDED' || !kit.createdAt) return []
+        const storageKeys = (kit.storageKeys?.length ? kit.storageKeys : kit.storageKey ? [kit.storageKey] : []).filter(Boolean)
+        const dateKey = getLocalDateKey(kit.createdAt)
+        const imageUrls = storageKeys.slice(0, kit.kitType === 'BUSINESS_CARD' ? 2 : 1).map(getLogoCandidateImageUrl)
+        if (imageUrls.length === 0) return []
+        if (kit.kitType === 'BUSINESS_CARD') {
+          return [{
+            id: `brand-kit-${kit.id}`,
+            kind: 'business-card' as const,
+            title: '명함',
+            subtitle: `${new Date(kit.createdAt as string).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성 · 앞·뒷면`,
+            imageUrl: imageUrls[0],
+            imageUrls,
+            brandKit: kit,
+            dateKey,
+          }]
+        }
+        return [{
+          id: `brand-kit-${kit.id}`,
+          kind: 'thumbnail' as const,
+          title: '제품 썸네일',
+          subtitle: `${new Date(kit.createdAt as string).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성`,
+          imageUrl: imageUrls[0],
+          imageUrls,
+          brandKit: kit,
+          dateKey,
+        }]
+      }),
+    ]
+    const actualAssetGroups = actualAssetItems.reduce<MypageAssetGroup[]>((groups, asset) => {
+      const group = groups.find((entry) => entry.dateKey === asset.dateKey)
+      if (group) group.items.push(asset)
+      else groups.push({ dateKey: asset.dateKey, label: `${asset.dateKey.slice(0, 4)}. ${asset.dateKey.slice(5, 7)}. ${asset.dateKey.slice(8, 10)}.`, items: [asset] })
+      return groups
+    }, []).sort((a, b) => b.dateKey.localeCompare(a.dateKey)).map((group) => ({ ...group, isToday: group.dateKey === todayDateKey }))
+    const assetGroups = useMypageMock ? mockAssetGroups : actualAssetGroups
+    const assetKindLabel: Record<MypageAssetKind, string> = { logo: '로고', 'business-card': '명함', thumbnail: '썸네일' }
     const beginProfileEdit = () => {
       setProfileCompanyNameDraft(useMypageMock ? '육하원칙' : companyName)
       setProfileCompanyMottoDraft(useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : companyMotto)
@@ -3833,12 +4044,26 @@ function CustomerApp() {
       setCompanyMotto(profileCompanyMottoDraft.trim())
       setProfileEditing(false)
     }
-    const downloadHistoryItem = async (item: DownloadRecord) => {
+    const resolveMypageAssetImageUrls = (item: MypageAssetItem) => {
+      const sourceUrls = item.imageUrls?.length ? item.imageUrls : [item.imageUrl]
+      if (!useMypageMock && item.kind === 'logo' && !sourceUrls[0]?.startsWith('/uploads/') && !sourceUrls[0]?.startsWith('/mypage/')) {
+        const protectedImageUrl = mypageDownloadImageUrls[item.id]
+        return protectedImageUrl ? [protectedImageUrl] : []
+      }
+      return sourceUrls.filter(Boolean)
+    }
+    const downloadMypageAsset = async (item: MypageAssetItem) => {
+      if (item.brandKit) {
+        setProjectError('')
+        await downloadBrandKitArchive(item.brandKit, (message) => setProjectError(message))
+        return
+      }
       try {
-        if (item.imageUrl.startsWith('/')) {
+        const isPublicAsset = item.imageUrl.startsWith('/uploads/') || item.imageUrl.startsWith('/mypage/')
+        if (isPublicAsset) {
           const link = document.createElement('a')
           link.href = item.imageUrl
-          link.download = `genmark-${item.projectType.toLowerCase()}-${item.candidateId}.png`
+          link.download = `genmark-${item.kind}-${item.id}.png`
           document.body.appendChild(link)
           link.click()
           link.remove()
@@ -3847,7 +4072,7 @@ function CustomerApp() {
         const blob = await downloadAuthenticatedFile(item.imageUrl)
         const link = document.createElement('a')
         link.href = URL.createObjectURL(blob)
-        link.download = `genmark-${item.projectType.toLowerCase()}-${item.candidateId}.png`
+        link.download = `genmark-${item.kind}-${item.id}.png`
         document.body.appendChild(link)
         link.click()
         link.remove()
@@ -3896,107 +4121,61 @@ function CustomerApp() {
             </form>
           </section>
 
-          <section className="mypage-section" aria-labelledby="completed-title">
-            <div className="section-title-row"><div><h2 id="completed-title">완성한 브랜드</h2><p>생성한 로고와 분석 결과를 다시 확인할 수 있어요.</p></div><FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} /></div>
-            {completedProjects.length > 0 ? completedProjects.map((project) => (
-              <article className="completed-project-card" key={project.id}>
-                <div className="completed-project-preview"><img src={useMypageMock ? '/mypage/mock-completed-brand.png' : getLogoCandidateImageUrl(project.candidate.storageKey)} alt={`${project.name} 선택 로고`} /></div>
-                <div className="completed-project-info"><div className="project-info-heading"><strong>{project.name}</strong><span className="project-status"><Check size={14} strokeWidth={2.3} /> 로고 선택 완료</span></div><p>{project.detail}</p>{project.description && <p className="project-description">{project.description}</p>}<div className="project-status-list"><span><Check size={14} strokeWidth={2} /> 로고 생성 완료</span><span className={trademarkAnalysisCompleted ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 상표 분석 {trademarkAnalysisCompleted ? '완료' : '미완료'}</span><span className={brandKit?.status === 'SUCCEEDED' ? '' : 'muted'}><Check size={14} strokeWidth={2} /> 브랜드킷 {brandKit?.status === 'SUCCEEDED' ? '완료' : '미완료'}</span></div></div>
-                <div className="project-action-grid">
-                  <button type="button" onClick={() => setMode('result')}><ImageIcon size={19} strokeWidth={1.8} />결과 보기</button>
-                  <button type="button" disabled={!trademarkAnalysisCompleted} onClick={() => setMode('trademark-result')}><Search size={19} strokeWidth={1.8} />유사도 결과</button>
-                  <button type="button" onClick={() => requestLogoDownload({ name: project.name, subtitle: selectedIndustry, candidateId: project.candidate.id, storageKey: project.candidate.storageKey, svgUrl: project.candidate.svgUrl })}><Download size={19} strokeWidth={1.8} />로고 다운로드</button>
-                  <button type="button" onClick={openBrandKitSelection}><FolderCheck size={19} strokeWidth={1.8} />브랜드킷 만들기</button>
-                  <button type="button" onClick={() => setMode('style')}><RefreshCw size={19} strokeWidth={1.8} />다시 생성하기</button>
-                </div>
-              </article>
-            )) : (
-              <div className="mypage-empty-state"><div className="empty-state-icon"><Sparkles size={30} strokeWidth={1.7} /></div><h3>아직 완성한 브랜드가 없어요</h3><p>로고를 생성하고 최종 후보를 선택하면 이곳에 표시돼요.</p><button className="gradient-button" type="button" onClick={startOnboarding} disabled={authRestoring}>로고 만들기 시작 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button></div>
-            )}
-          </section>
-
-          <section className="mypage-section" aria-labelledby="download-history-title">
-            <div className="section-title-row"><div><h2 id="download-history-title">내 다운로드 목록</h2><p>CI·BI 유형별로 최근 20개까지 보관돼요. 한도를 넘으면 오래된 기록부터 자동으로 정리됩니다.</p></div></div>
-            {displayDownloadHistory.length > 0 ? (
-              useMypageMock ? (
-                <div className="download-logo-grid">
-                  {displayDownloadHistory.map((item) => (
-                    <article className="download-logo-card" key={item.downloadId}>
-                      <img src={item.imageUrl} alt="다운로드한 로고" />
-                      <div><strong>{item.projectType} 로고</strong><p>{new Date(item.downloadedAt).toLocaleString('ko-KR')}에 저장</p><button type="button" onClick={() => void downloadHistoryItem(item)}>다시 받기</button></div>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="mypage-record-list">
-                  {displayDownloadHistory.map((item) => (
-                    <article className="mypage-record-row" key={item.downloadId}>
-                      <span className="record-icon"><Download size={19} strokeWidth={1.8} /></span>
-                      <div><strong>{item.projectType} 로고</strong><p>{new Date(item.downloadedAt).toLocaleString('ko-KR')}에 저장</p></div>
-                      <button type="button" onClick={() => void downloadHistoryItem(item)}>다시 받기</button>
-                    </article>
-                  ))}
-                </div>
-              )
-            ) : <div className="mypage-inline-empty"><Download size={22} strokeWidth={1.6} /><span>아직 다운로드한 로고가 없어요.</span></div>}
-          </section>
-
-          <section className="mypage-section" aria-labelledby="pinned-title">
-              <div className="section-title-row"><div><h2 id="pinned-title">찜한 로고</h2><p>찜한 로고는 3일 동안 잠시 보관돼요. 기간이 지나면 목록에서 자동으로 사라집니다.</p></div></div>
-            {displayPinnedLogos.length > 0 ? (
-              <div className="pinned-logo-grid">
-                {displayPinnedLogos.map((item) => (
-                  <article className="pinned-logo-card" key={item.candidateId}>
-                    <img src={getPinnedImageUrl(item)} alt="찜한 로고" />
-                    <div><strong>{item.projectType ?? '브랜드'} 로고</strong><span>{remainingPinDays(item.expiresAt)}일 후 목록에서 사라져요</span><small>{new Date(item.expiresAt).toLocaleDateString('ko-KR')}까지 보관</small></div>
-                  </article>
-                ))}
-              </div>
-            ) : <div className="mypage-inline-empty"><Heart size={22} strokeWidth={1.6} /><span>잠시 보관하고 싶은 로고를 찜해보세요.</span></div>}
-          </section>
-
-          <section className="mypage-section" aria-labelledby="brand-kit-list-title">
-            <div className="section-title-row"><div><h2 id="brand-kit-list-title">내 브랜드킷</h2><p>선택한 로고로 만든 명함과 제품 썸네일을 확인하세요.</p></div></div>
-            {useMypageMock ? (
-              <div className="pinned-logo-grid brand-kit-mock-grid">
-                {mockBrandKitItems.map((item) => (
-                  <article className="pinned-logo-card" key={item.name}>
-                    <img src={item.image} alt={`${item.name} 제품 썸네일`} />
-                    <div><strong>{item.name}</strong><span>제품 썸네일</span><small>브랜드 키트 목업</small></div>
-                  </article>
-                ))}
-              </div>
-            ) : brandKit?.status === 'SUCCEEDED' && savedBrandKitImageUrls.length > 0 ? (
-              <article className="mypage-brand-kit-result">
-                <div className="mypage-brand-kit-images">
-                  {savedBrandKitImageUrls.map((imageUrl, index) => {
-                    const label = brandKit.kitType === 'BUSINESS_CARD'
-                      ? index === 0 ? '앞면' : '뒷면'
-                      : '제품 썸네일'
-                    return (
-                      <figure className="mypage-brand-kit-image" key={`${imageUrl}-${index}`}>
-                        <figcaption>{label}</figcaption>
-                        <img src={imageUrl} alt={`완성된 ${label}`} />
-                      </figure>
-                    )
-                  })}
-                </div>
-                <button className="mypage-brand-kit-download" type="button" disabled={brandKitDownloading} onClick={() => void downloadBrandKitArchive(brandKit)}>
-                  <Download aria-hidden="true" size={18} strokeWidth={1.9} />
-                  {brandKitDownloading ? '묶는 중…' : brandKit.kitType === 'BUSINESS_CARD' ? 'PNG·SVG·PDF 다운로드' : '다운로드'}
-                </button>
-              </article>
-            ) : brandKit ? (
-              <article className="brand-kit-summary-row">
-                <span className="record-icon"><FolderCheck size={20} strokeWidth={1.8} /></span>
-                <div><strong>{brandKit.kitType === 'BUSINESS_CARD' ? '명함' : '제품 썸네일'}</strong><p>{brandKit.status === 'SUCCEEDED' ? '생성이 완료됐어요.' : brandKit.status === 'FAILED' ? '생성에 실패했어요.' : '현재 생성 중이에요.'}</p></div>
-                <span className={`brand-kit-state ${brandKit.status.toLowerCase()}`}>{brandKit.status === 'SUCCEEDED' ? '완료' : brandKit.status === 'FAILED' ? '실패' : '생성 중'}</span>
-              </article>
-            ) : <div className="mypage-inline-empty"><FolderCheck size={22} strokeWidth={1.6} /><span>아직 만든 브랜드킷이 없어요.</span></div>}
+          <section className="mypage-section asset-library-section" aria-labelledby="asset-library-title">
+            <div className="section-title-row asset-library-heading">
+              <div><h2 id="asset-library-title">내 자산 목록</h2></div>
+              <FolderCheck aria-hidden="true" size={27} strokeWidth={1.8} />
+            </div>
+            <div className="asset-date-list">
+              {assetGroups.length > 0 ? assetGroups.map((group) => {
+                const isOpen = openMypageAssetDate === group.dateKey
+                return (
+                  <div className={isOpen ? 'asset-date-group is-open' : 'asset-date-group'} key={group.dateKey}>
+                    <button className="asset-date-toggle" type="button" aria-expanded={isOpen} aria-controls={`asset-items-${group.dateKey}`} onClick={() => setOpenMypageAssetDate(isOpen ? '' : group.dateKey)}>
+                      <span><time dateTime={group.dateKey}>{group.label}</time>{group.isToday && <em>오늘</em>}</span>
+                      <ChevronDown className="asset-date-chevron" aria-hidden="true" size={21} strokeWidth={1.8} />
+                    </button>
+                    {isOpen && (
+                      <div className="asset-item-list" id={`asset-items-${group.dateKey}`}>
+                        {group.items.map((item) => (
+                          <article className={item.kind === 'business-card' ? 'asset-item asset-item-business-card' : 'asset-item'} key={item.id}>
+                            {(() => {
+                              const imageUrls = resolveMypageAssetImageUrls(item)
+                              const imageUrl = imageUrls[0] ?? ''
+                              const isComposite = imageUrls.length > 1
+                              return (
+                                isComposite && item.kind === 'business-card' ? (
+                                  <div className="asset-item-business-card-faces" aria-label="명함 앞면과 뒷면 미리보기">
+                                    {imageUrls.map((previewUrl, index) => (
+                                      <button className="asset-item-business-card-face" type="button" key={`${previewUrl}-${index}`} aria-label={`명함 ${index === 0 ? '앞면' : '뒷면'} 크게 보기`} onClick={() => setBrandKitPreview({ imageUrls, label: item.title })}>
+                                        <img src={previewUrl} alt={`명함 ${index === 0 ? '앞면' : '뒷면'} 미리보기`} onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.closest('.asset-item-business-card-face')?.classList.add('is-missing') }} />
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className={imageUrl ? `asset-item-thumb asset-item-thumb-${item.kind}` : `asset-item-thumb asset-item-thumb-${item.kind} is-missing`}>
+                                    {imageUrl ? (
+                                      <button className="asset-item-thumb-button" type="button" aria-label={`${item.title} 크게 보기`} onClick={() => setBrandKitPreview({ imageUrls, label: item.title })}>
+                                        <img src={imageUrl} alt={`${item.title} 미리보기`} onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.closest('.asset-item-thumb')?.classList.add('is-missing') }} />
+                                      </button>
+                                    ) : <ImageIcon aria-hidden="true" size={22} strokeWidth={1.7} />}
+                                  </div>
+                                )
+                              )
+                            })()}
+                            <div className="asset-item-copy"><span className={`asset-kind asset-kind-${item.kind}`}>{assetKindLabel[item.kind]}</span><strong>{item.title}</strong><p>{item.subtitle}</p></div>
+                            <button className="asset-download-button" type="button" aria-label={`${item.title} 다운로드`} onClick={() => void downloadMypageAsset(item)}><Download aria-hidden="true" size={19} strokeWidth={1.9} /></button>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              }) : <div className="mypage-inline-empty"><FolderCheck size={22} strokeWidth={1.6} /><span>아직 저장된 자산이 없어요.</span></div>}
+            </div>
           </section>
 
           {projectError && <p className="project-error mypage-project-error" role="alert">{projectError}</p>}
-          <button className="survey-entry-card" type="button" onClick={() => { setSurveySubmitted(false); setMode('survey') }}><span><MessageSquare aria-hidden="true" size={23} strokeWidth={1.8} /></span><div><strong>서비스를 이용해보셨나요?</strong><p>더 쉬운 브랜드 제작을 위해 의견을 들려주세요.</p></div><ChevronRight aria-hidden="true" size={21} strokeWidth={1.8} /></button>
         </section>
       </main>
     )
@@ -4293,26 +4472,30 @@ function CustomerApp() {
                 </button>
               ))}
             </div>
-            <div
-              className="gallery-track"
-              ref={galleryRef}
-              onPointerDown={handleGalleryPointerDown}
-              onPointerMove={handleGalleryPointerMove}
-              onPointerUp={handleGalleryPointerUp}
-              onPointerCancel={handleGalleryPointerUp}
-            >
-              {filteredItems.map((item) => {
-                const liked = likedIds.includes(item.id)
-                return (
-                  <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }}>
-                      <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
-                        <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
-                      </button>
-                    </div>
-                  </article>
-                )
-              })}
+            <div className="gallery-scroll-area">
+              <button type="button" className="gallery-side-arrow prev" aria-label="이전 로고 묶음 보기" onClick={() => scrollGallery(-1)}><ChevronLeft aria-hidden="true" size={20} strokeWidth={2} /></button>
+              <div
+                className="gallery-track"
+                ref={galleryRef}
+                onPointerDown={handleGalleryPointerDown}
+                onPointerMove={handleGalleryPointerMove}
+                onPointerUp={handleGalleryPointerUp}
+                onPointerCancel={handleGalleryPointerUp}
+              >
+                {filteredItems.map((item) => {
+                  const liked = likedIds.includes(item.id)
+                  return (
+                    <article className="gallery-card" key={item.id}>
+                      <div className={`gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }}>
+                        <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
+                          <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
+                        </button>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+              <button type="button" className="gallery-side-arrow next" aria-label="다음 로고 묶음 보기" onClick={() => scrollGallery(1)}><ChevronRight aria-hidden="true" size={20} strokeWidth={2} /></button>
             </div>
           </section>
 
@@ -4320,21 +4503,25 @@ function CustomerApp() {
             <div className="section-heading">
               <h2 id="business-card-gallery-title">명함 갤러리</h2>
             </div>
-            <div
-              className="gallery-track"
-              ref={businessCardGalleryRef}
-              onPointerDown={handleBusinessCardGalleryPointerDown}
-              onPointerMove={handleBusinessCardGalleryPointerMove}
-              onPointerUp={handleBusinessCardGalleryPointerUp}
-              onPointerCancel={handleBusinessCardGalleryPointerUp}
-            >
-              {businessCardGalleryItems.map((item) => {
-                return (
-                  <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual business-card-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
-                  </article>
-                )
-              })}
+            <div className="gallery-scroll-area">
+              <button type="button" className="gallery-side-arrow prev" aria-label="이전 명함 묶음 보기" onClick={() => scrollBusinessCardGallery(-1)}><ChevronLeft aria-hidden="true" size={20} strokeWidth={2} /></button>
+              <div
+                className="gallery-track"
+                ref={businessCardGalleryRef}
+                onPointerDown={handleBusinessCardGalleryPointerDown}
+                onPointerMove={handleBusinessCardGalleryPointerMove}
+                onPointerUp={handleBusinessCardGalleryPointerUp}
+                onPointerCancel={handleBusinessCardGalleryPointerUp}
+              >
+                {businessCardGalleryItems.map((item) => {
+                  return (
+                    <article className="gallery-card" key={item.id}>
+                      <div className={`gallery-visual business-card-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
+                    </article>
+                  )
+                })}
+              </div>
+              <button type="button" className="gallery-side-arrow next" aria-label="다음 명함 묶음 보기" onClick={() => scrollBusinessCardGallery(1)}><ChevronRight aria-hidden="true" size={20} strokeWidth={2} /></button>
             </div>
           </section>
 
@@ -4342,21 +4529,25 @@ function CustomerApp() {
             <div className="section-heading">
               <h2 id="product-gallery-title">제품 썸네일 갤러리</h2>
             </div>
-            <div
-              className="gallery-track"
-              ref={productGalleryRef}
-              onPointerDown={handleProductGalleryPointerDown}
-              onPointerMove={handleProductGalleryPointerMove}
-              onPointerUp={handleProductGalleryPointerUp}
-              onPointerCancel={handleProductGalleryPointerUp}
-            >
-              {productGalleryItems.map((item) => {
-                return (
-                  <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
-                  </article>
-                )
-              })}
+            <div className="gallery-scroll-area">
+              <button type="button" className="gallery-side-arrow prev" aria-label="이전 제품 묶음 보기" onClick={() => scrollProductGallery(-1)}><ChevronLeft aria-hidden="true" size={20} strokeWidth={2} /></button>
+              <div
+                className="gallery-track"
+                ref={productGalleryRef}
+                onPointerDown={handleProductGalleryPointerDown}
+                onPointerMove={handleProductGalleryPointerMove}
+                onPointerUp={handleProductGalleryPointerUp}
+                onPointerCancel={handleProductGalleryPointerUp}
+              >
+                {productGalleryItems.map((item) => {
+                  return (
+                    <article className="gallery-card" key={item.id}>
+                      <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
+                    </article>
+                  )
+                })}
+              </div>
+              <button type="button" className="gallery-side-arrow next" aria-label="다음 제품 묶음 보기" onClick={() => scrollProductGallery(1)}><ChevronRight aria-hidden="true" size={20} strokeWidth={2} /></button>
             </div>
           </section>
         </main>
@@ -4379,6 +4570,7 @@ function CustomerApp() {
       {regenerationConfirmOpen && renderRegenerationConfirmModal()}
       {businessCardModalOpen && renderBusinessCardModal()}
       {resumePromptProject && renderResumePromptModal()}
+      {brandKitPreview && renderBrandKitPreviewModal()}
     </div>
   )
 }

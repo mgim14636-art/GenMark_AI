@@ -197,8 +197,19 @@ export const apiRequestWithToken = async <T>(token: string, path: string, init: 
   return (payload as { data: T } | undefined)?.data as T
 }
 
+const resolveApiUrl = (path: string) => {
+  if (/^https?:\/\//i.test(path)) return path
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const normalizedBase = API_BASE_URL.replace(/\/$/, '')
+  if (normalizedPath.startsWith('/api/v1/')) {
+    if (normalizedBase.startsWith('/')) return normalizedPath
+    try { return new URL(normalizedPath, normalizedBase).toString() } catch { return normalizedPath }
+  }
+  return `${normalizedBase}${normalizedPath}`
+}
+
 const downloadFileWithToken = async (token: string | null, path: string, refresh = false): Promise<Blob> => {
-  const doFetch = async () => fetch(`${API_BASE_URL}${path}`, {
+  const doFetch = async () => fetch(resolveApiUrl(path), {
     headers: (token ?? accessToken) ? { Authorization: `Bearer ${token ?? accessToken}` } : undefined,
   })
 

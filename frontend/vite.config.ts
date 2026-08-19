@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '')
   const backendPort = env.BACKEND_PORT || '8081'
+  const backendTarget = `http://localhost:${backendPort}`
 
   return {
     // Expose only the existing public values needed by the frontend.
@@ -16,7 +17,11 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api': {
-          target: `http://localhost:${backendPort}`,
+          target: backendTarget,
+          changeOrigin: true,
+        },
+        '/uploads': {
+          target: backendTarget,
           changeOrigin: true,
         },
       },

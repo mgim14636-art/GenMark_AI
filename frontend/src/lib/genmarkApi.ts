@@ -122,6 +122,7 @@ export type BrandKit = {
   errorMessage?: string | null
   preliminary?: boolean
   warnings?: string[]
+  createdAt?: string
 }
 
 export type BusinessCardInfoInput = {
