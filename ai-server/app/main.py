@@ -2,7 +2,16 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.api.routes import brand_kit, business_card_sample, embedding, generation, health, similarity
+from app.api.routes import (
+    brand_kit,
+    business_card_api,
+    business_card_sample,
+    embedding,
+    generation,
+    health,
+    recraft_brief,
+    similarity,
+)
 from app.core.config import settings
 from app.core.exceptions import CodedHTTPException, sanitize_validation_errors
 from app.core.logging import logger
@@ -50,3 +59,5 @@ app.include_router(brand_kit.router, prefix="/api/v1/generation", tags=["Brand K
 app.include_router(embedding.router, prefix="/api/v1/embedding", tags=["Embedding"])
 app.include_router(similarity.router, prefix="/api/v1/similarity", tags=["Similarity"])
 app.include_router(business_card_sample.router, prefix="/api/v1/business-card-sample", tags=["BusinessCardSample"])
+app.include_router(business_card_api.router, prefix="/api/v1/business-card", tags=["BusinessCard"])
+app.include_router(recraft_brief.router, prefix="/api/v1/recraft-brief", tags=["RecraftBrief"])
