@@ -9,8 +9,11 @@ import java.time.LocalDateTime;
  *                  화면에 "n일 뒤 사라져요" 안내를 띄우는 데 쓴다
  */
 public record PinnedCandidateResponse(
+        String projectId,
+        String projectType,
         String candidateId,
         String storageKey,
         LocalDateTime pinnedAt,
-        LocalDateTime expiresAt
+        LocalDateTime expiresAt,
+        LocalDateTime createdAt
 ) {}

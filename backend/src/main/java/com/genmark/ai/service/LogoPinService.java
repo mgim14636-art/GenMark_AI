@@ -86,11 +86,15 @@ public class LogoPinService {
 
     private PinnedCandidateResponse toResponse(LogoCandidate candidate) {
         LocalDateTime pinnedAt = candidate.getPinnedAt();
+        ProjectLike project = candidate.getGeneration().getProject();
         return new PinnedCandidateResponse(
+                project.getPublicId(),
+                project instanceof CiProject ? "CI" : "BI",
                 candidate.getPublicId(),
                 candidate.getStorageKey(),
                 pinnedAt,
                 // 화면에 "n일 뒤 사라져요"를 표시할 수 있도록 만료 시각을 함께 내려준다
-                pinnedAt == null ? null : pinnedAt.plusDays(retentionDays));
+                pinnedAt == null ? null : pinnedAt.plusDays(retentionDays),
+                candidate.getCreatedAt());
     }
 }

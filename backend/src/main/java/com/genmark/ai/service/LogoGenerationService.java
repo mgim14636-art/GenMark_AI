@@ -120,6 +120,22 @@ public class LogoGenerationService {
         return candidatesFor(generation);
     }
 
+    /** 마이페이지에서 과거에 저장한 로고 한 장을 다시 열 때 사용한다. */
+    public LogoCandidateResponse candidate(String projectId, String candidateId, Long memberId) {
+        ProjectLike project = projectLookup.requireOwned(projectId, memberId);
+        boolean isCi = project instanceof CiProject;
+        LogoCandidate candidate = (isCi
+                ? candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
+                        candidateId, project.getId(), memberId)
+                : candidateRepository.findByPublicIdAndGenerationBiProjectIdAndGenerationBiProjectMemberId(
+                        candidateId, project.getId(), memberId))
+                .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (candidate.getGeneration().getStatus() != LogoGeneration.Status.SUCCEEDED) {
+            throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "완료된 생성 작업의 후보만 조회할 수 있습니다.");
+        }
+        return toResponse(candidate);
+    }
+
     @Transactional
     public LogoCandidateResponse select(String projectId, String candidateId, Long memberId) {
         ProjectLike project = projectLookup.requireOwned(projectId, memberId);

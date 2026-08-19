@@ -52,6 +52,14 @@ public class LogoGenerationController {
                 service.candidates(projectId, generationId, principal.id())));
     }
 
+    @GetMapping("/logo-candidates/{candidateId}")
+    public ResponseEntity<ApiSuccessResponse<LogoCandidateResponse>> candidate(
+            @AuthenticationPrincipal MemberPrincipal principal, @PathVariable String projectId,
+            @PathVariable String candidateId) {
+        return ResponseEntity.ok(ApiSuccessResponse.of(
+                service.candidate(projectId, candidateId, principal.id())));
+    }
+
     @PostMapping("/logo-candidates/{candidateId}/select")
     public ResponseEntity<ApiSuccessResponse<LogoCandidateResponse>> select(
             @AuthenticationPrincipal MemberPrincipal principal, @PathVariable String projectId,

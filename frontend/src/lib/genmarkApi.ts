@@ -73,17 +73,18 @@ export type CiLatestProfile = {
 }
 
 export type PinnedLogo = {
-  projectId?: string
-  projectType?: 'CI' | 'BI'
+  projectId: string
+  projectType: 'CI' | 'BI'
   candidateId: string
   storageKey: string
   pinnedAt: string | null
   expiresAt: string
-  createdAt?: string
+  createdAt: string
 }
 
 export type DownloadRecord = {
   downloadId: number
+  projectId: string
   candidateId: string
   projectType: 'CI' | 'BI'
   imageUrl: string
@@ -487,6 +488,7 @@ export const projectsApi = {
   }),
   getGeneration: (projectId: string, generationId: string) => apiRequest<LogoGeneration>(`/projects/${projectId}/logo-generations/${generationId}`),
   getLatestCandidates: (projectId: string) => apiRequest<LogoCandidate[]>(`/projects/${projectId}/logo-candidates`),
+  getCandidate: (projectId: string, candidateId: string) => apiRequest<LogoCandidate>(`/projects/${projectId}/logo-candidates/${candidateId}`),
   getCandidates: (projectId: string, generationId: string) => apiRequest<LogoCandidate[]>(`/projects/${projectId}/logo-generations/${generationId}/logo-candidates`),
   getCandidateSvg: (svgUrl: string) => apiTextRequest(svgUrl),
   saveCandidateSvg: (svgUrl: string, svg: string) => apiTextRequest(svgUrl, {

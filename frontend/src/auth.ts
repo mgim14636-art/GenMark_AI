@@ -35,6 +35,7 @@ type ApiErrorPayload = {
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/$/, '')
 let accessToken: string | null = null
+let refreshPromise: Promise<boolean> | null = null
 
 export class AuthError extends Error {
   code: string
@@ -75,22 +76,41 @@ const requestRaw = async (path: string, init: RequestInit = {}) => {
   return { response, payload: await parsePayload(response) }
 }
 
-const refreshAccessToken = async () => {
-  const refreshToken = getRefreshToken()
-  if (!refreshToken) return false
+const refreshAccessToken = () => {
+  if (refreshPromise) return refreshPromise
 
-  const { response, payload } = await requestRaw('/auth/refresh', {
-    method: 'POST',
-    body: JSON.stringify({ refreshToken }),
+  refreshPromise = (async () => {
+    const refreshToken = getRefreshToken()
+    if (!refreshToken) return false
+
+    let response: Response
+    let payload: unknown
+    try {
+      ({ response, payload } = await requestRaw('/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken }),
+      }))
+    } catch {
+      // A backend restart or transient network failure must not destroy a
+      // still-valid refresh token. The next request can retry the refresh.
+      return false
+    }
+
+    if (!response.ok || !payload || typeof payload !== 'object' || !('data' in payload)) {
+      // Only an explicit client/auth failure proves that the stored token is
+      // unusable. Keep it across 5xx/proxy errors so a brief outage does not
+      // turn into a permanent logout.
+      if (response.status >= 400 && response.status < 500) clearTokens()
+      return false
+    }
+
+    saveTokens((payload as { data: TokenResponse }).data)
+    return true
+  })().finally(() => {
+    refreshPromise = null
   })
 
-  if (!response.ok || !payload || typeof payload !== 'object' || !('data' in payload)) {
-    clearTokens()
-    return false
-  }
-
-  saveTokens((payload as { data: TokenResponse }).data)
-  return true
+  return refreshPromise
 }
 
 const request = async <T>(path: string, init: RequestInit = {}, retry = true): Promise<T> => {

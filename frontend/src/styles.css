@@ -316,6 +316,31 @@
 .asset-download-button { display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid #ded1f5; border-radius: 12px; color: #724cb5; background: #fff; }
 .asset-download-button:hover { border-color: #a981e5; color: #5b399c; background: #f8f3ff; }
 .asset-download-button:focus-visible { outline: 3px solid rgb(129 80 222 / .25); outline-offset: 2px; }
+.asset-logo-use-button { display: inline-flex; min-height: 32px; align-items: center; justify-self: start; gap: 5px; border: 0; border-radius: 10px; padding: 6px 9px; color: #6840ad; background: #f1eaff; font-size: 12px; font-weight: 800; letter-spacing: -.03em; }
+.asset-logo-use-button:hover { color: #4f2a91; background: #e9dcff; }
+.asset-logo-use-button:focus-visible { outline: 3px solid rgb(129 80 222 / .3); outline-offset: 2px; }
+.asset-logo-use-button svg:last-child { transition: transform 160ms ease; }
+.asset-logo-use-button:hover svg:last-child { transform: translateX(2px); }
+
+.mypage-logo-action-backdrop { z-index: 1120; }
+.mypage-logo-action-modal { position: relative; display: grid; width: min(100%, 440px); max-height: calc(100dvh - 32px); overflow: auto; gap: 18px; border-radius: 24px; padding: 28px; color: #222b43; background: #fff; box-shadow: 0 24px 70px rgb(45 30 90 / .24); }
+.mypage-logo-action-preview { display: grid; width: 132px; height: 132px; overflow: hidden; place-items: center; border: 1px solid #ebe3f7; border-radius: 16px; background: #faf8ff; }
+.mypage-logo-action-preview img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.mypage-logo-action-copy { display: grid; min-width: 0; gap: 7px; padding-right: 38px; }
+.mypage-logo-action-copy h2 { margin: 0; overflow-wrap: anywhere; font-size: 24px; letter-spacing: -.04em; }
+.mypage-logo-action-copy p { margin: 0; color: #737b91; font-size: 15px; line-height: 1.55; letter-spacing: -.03em; }
+.mypage-logo-action-list { display: grid; gap: 9px; }
+.mypage-logo-action-list button { display: flex; min-height: 56px; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid #e8e0f4; border-radius: 14px; padding: 13px 15px; color: #394158; background: #fff; text-align: left; }
+.mypage-logo-action-list button > span { display: inline-flex; min-width: 0; align-items: center; gap: 11px; }
+.mypage-logo-action-list button b { overflow-wrap: anywhere; font-size: 15px; letter-spacing: -.03em; }
+.mypage-logo-action-list button:hover { border-color: #baa0e7; color: #5d349f; background: #faf7ff; }
+.mypage-logo-action-list button:focus-visible { outline: 3px solid rgb(129 80 222 / .3); outline-offset: 2px; }
+.mypage-logo-action-list button:disabled { cursor: not-allowed; opacity: .55; }
+.mypage-logo-action-list .mypage-logo-action-primary { border-color: #7750ba; color: #fff; background: #7750ba; }
+.mypage-logo-action-list .mypage-logo-action-primary:hover { border-color: #63409e; color: #fff; background: #63409e; }
+.mypage-logo-action-status, .mypage-logo-action-error { margin: -2px 0 0; font-size: 13px; line-height: 1.5; letter-spacing: -.02em; }
+.mypage-logo-action-status { color: #6d4aa8; }
+.mypage-logo-action-error { color: #b73d59; }
 .continue-project-card { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; align-items: center; gap: 18px; border: 1px solid #e8defd; border-radius: 20px; padding: 16px; background: linear-gradient(105deg, #fff, #fbf8ff); }
 .project-art-placeholder { display: grid; width: 82px; height: 82px; place-items: center; border-radius: 22px; color: #a464ed; background: linear-gradient(135deg, #eee6ff, #ffe8f4); }
 .project-card-copy { display: grid; gap: 7px; }

@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
  */
 public record LogoDownloadResponse(
         Long downloadId,
+        String projectId,
         String candidateId,
         String projectType,
         String imageUrl,

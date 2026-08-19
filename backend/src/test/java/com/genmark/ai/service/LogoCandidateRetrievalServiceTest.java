@@ -110,6 +110,36 @@ class LogoCandidateRetrievalServiceTest {
                         exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AI_INCOMPLETE_RESULT));
     }
 
+    @Test
+    void returnsOwnedCandidateByIdEvenWhenItIsFromAnEarlierGeneration() {
+        LogoGeneration earlierGeneration = succeededGeneration(18L, "generation-1");
+        LogoCandidate savedCandidate = candidates(earlierGeneration, "saved").get(0);
+        when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
+                "saved-1", PROJECT_ID, MEMBER_ID)).thenReturn(Optional.of(savedCandidate));
+
+        var result = service.candidate("project-1", "saved-1", MEMBER_ID);
+
+        assertThat(result.id()).isEqualTo("saved-1");
+        assertThat(result.storageKey()).contains("generation-1");
+    }
+
+    @Test
+    void rejectsCandidateFromIncompleteGeneration() {
+        LogoGeneration running = LogoGeneration.builder()
+                .id(23L)
+                .publicId("generation-running")
+                .ciProject(project)
+                .status(LogoGeneration.Status.RUNNING)
+                .build();
+        LogoCandidate candidate = candidates(running, "running").get(0);
+        when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
+                "running-1", PROJECT_ID, MEMBER_ID)).thenReturn(Optional.of(candidate));
+
+        assertThatThrownBy(() -> service.candidate("project-1", "running-1", MEMBER_ID))
+                .isInstanceOfSatisfying(ApiException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.RESOURCE_CONFLICT));
+    }
+
     private LogoGeneration succeededGeneration(Long id, String publicId) {
         return LogoGeneration.builder()
                 .id(id)

@@ -138,8 +138,10 @@ public class LogoDownloadService {
     }
 
     private LogoDownloadResponse toResponse(LogoDownload download, boolean firstTime) {
+        ProjectLike project = download.getCandidate().getGeneration().getProject();
         return new LogoDownloadResponse(
                 download.getId(),
+                project.getPublicId(),
                 download.getCandidate().getPublicId(),
                 download.getProjectType().name(),
                 "/api/v1/me/downloads/" + download.getId() + "/image",
