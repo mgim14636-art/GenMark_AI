@@ -1,5 +1,5 @@
 import { CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent, lazy, MouseEvent as ReactMouseEvent, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageSquare, Palette, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
+import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageCircle, MessageSquare, Palette, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
@@ -3068,9 +3068,8 @@ function CustomerApp() {
             </div>
           </section>
 
-          <button className="final-generate-button" type="button" onClick={() => openTrademarkSelection('generation')} disabled={generationLoading}>
-            로고 생성하기
-            <ChevronRight className="final-generate-arrow" aria-hidden="true" size={28} strokeWidth={1.8} />
+          <button className="logo-style-next" type="button" onClick={() => openTrademarkSelection('generation')} disabled={generationLoading}>
+            로고 생성하기 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
           </button>
           {generationError && <p className="generation-error" role="alert">{generationError}</p>}
           <p className="final-footnote"><Info aria-hidden="true" size={18} strokeWidth={1.8} /> 생성된 후보는 나중에 색상과 글씨체를 수정할 수 있어요.</p>
@@ -3086,15 +3085,14 @@ function CustomerApp() {
       { number: '3', icon: 'palette', text: '색상과 글씨체를 조합하고 있어요' },
       { number: '4', icon: 'pen', text: '로고 후보를 생성하고 있어요' },
       { number: '5', icon: 'folder', text: '결과를 비교하기 쉽게 정리하고 있어요' },
-      ...(trademarkAnalysisRequested ? [{ number: '6', icon: 'search', text: '유사도를 분석하고 있어요' }] : []),
+      ...(trademarkAnalysisRequested ? [{ number: '6', icon: 'search', text: '로고 유사도를 분석하고 있어요' }] : []),
     ]
 
     return (
       <main className="logo-loading-screen" aria-labelledby="logo-loading-title">
         <section className="logo-loading-content">
           <header className="logo-loading-heading">
-            <h1 id="logo-loading-title">브랜드 정보를 바탕으로<br />로고를 만들고 있어요</h1>
-            <p>요청하신 로고 1개를 준비하고 있어요.</p>
+            <h1 id="logo-loading-title">입력 정보를 바탕으로<br />로고를 생성하고 있습니다.</h1>
           </header>
 
           <div className="logo-loading-orb" aria-label="로고 생성 진행 중">
@@ -3206,33 +3204,24 @@ function CustomerApp() {
 
   const renderTrademarkSelectionScreen = () => {
     const benefits = [
-      { icon: 'image', title: '이미지로 비슷한 상표 찾기', description: '생성한 로고와 형태, 구도, 배치가 비슷한 화장품 상표를 찾아요.' },
-      { icon: 'chart', title: '유사도 점수 확인', description: '가장 비슷한 상표와 어느 정도 닮았는지 점수로 보여드려요.' },
-      { icon: 'pencil', title: '확정 전 수정', description: '유사도가 높으면 패키지와 쇼핑몰을 만들기 전에 로고를 수정할 수 있어요.' },
+      { Icon: ImageIcon, title: '이미지로 비슷한 상표 찾기', description: '생성한 로고와 형태, 구도, 배치가 비슷한 화장품 상표를 찾아요.' },
+      { Icon: BarChart3, title: '유사도 점수 확인', description: '가장 비슷한 상표와 어느 정도 닮았는지 점수로 보여드려요.' },
+      { Icon: Pencil, title: '확정 전 수정', description: '유사도가 높으면 패키지와 쇼핑몰을 만들기 전에 로고를 수정할 수 있어요.' },
     ]
 
     return (
       <main className="trademark-selection-screen" aria-labelledby="trademark-selection-title">
         <ScreenBackButton label="이전 화면으로 돌아가기" onClick={() => setMode(trademarkEntry === 'generation' ? 'final' : 'result')} />
-        <header className="trademark-selection-header">
-          <div className="trademark-selection-brand"><BrandLogo className="trademark-selection-brand-mark" /><span><span className="brand-mark-accent">GenMark AI</span></span></div>
-        </header>
 
         <section className="trademark-selection-content">
-          <div className="trademark-selection-hero-icon" aria-hidden="true">
-            <span className="trademark-selection-shield" />
-            <span className="trademark-selection-search" />
-          </div>
-
           <header className="trademark-selection-heading">
-            <h1 id="trademark-selection-title">로고를 확정하기 전에<br />비슷한 상표 이미지도 확인할까요?</h1>
-            <p>기존 서비스에서는 이름 검색은 가능하지만,<br />로고의 형태나 배치가 비슷한 상표를 직접 찾기는 어려워요.</p>
+            <h1 id="trademark-selection-title">등록된 상표 중에<br />내 로고와 비슷한 게 있는지 확인할까요?</h1>
           </header>
 
           <section className="trademark-benefit-card" aria-label="상표 분석 기능">
             {benefits.map((benefit) => (
               <article className="trademark-benefit-row" key={benefit.title}>
-                <span className={`trademark-benefit-icon icon-${benefit.icon}`} aria-hidden="true" />
+                <span className="trademark-benefit-icon" aria-hidden="true"><benefit.Icon size={40} strokeWidth={1.8} /></span>
                 <div>
                   <h2>{benefit.title}</h2>
                   <p>{benefit.description}</p>
@@ -3243,12 +3232,12 @@ function CustomerApp() {
 
           <section className="trademark-question-card" aria-label="상표 분석 안내">
             <div className="trademark-question-row">
-              <span className="trademark-question-badge">Q</span>
+              <span className="trademark-question-badge" aria-label="질문"><CircleHelp aria-hidden="true" size={22} strokeWidth={2} /></span>
               <p>이름이 다른데 로고 모양이 비슷해도 문제가 되나요?</p>
             </div>
             <div className="trademark-answer-row">
-              <span className="trademark-answer-badge">A</span>
-              <p>상표는 이름뿐 아니라 로고의 외관도 함께 검토될 수 있어요.<br />GenMark AI는 그중 이미지의 시각적 유사성을 확인하는 데 도움을 드려요.</p>
+              <span className="trademark-answer-badge" aria-label="답변"><MessageCircle aria-hidden="true" size={20} strokeWidth={2} /></span>
+              <p>상표는 이름뿐 아니라 로고의 외관도 함께 검토될 가능성이 있으며, GenMark AI는 이미지의 시각적 유사성을 확인하는 데 도움을 드려요.</p>
             </div>
           </section>
 
@@ -3260,9 +3249,8 @@ function CustomerApp() {
               if (trademarkEntry === 'generation') void startLogoGeneration(true)
               else void startTrademarkAnalysis()
             }}>
-              <span className="trademark-check-search" aria-hidden="true" />
-              <span>비슷한 상표 이미지 확인하기</span>
-              <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
+              <span>유사한 상표 이미지 확인</span>
+              <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
             </button>
             <button className="trademark-skip-button" type="button" onClick={() => {
               setTrademarkAnalysisSkipped(true)
@@ -3272,11 +3260,11 @@ function CustomerApp() {
               else setMode('result')
             }}>
               <span>지금은 건너뛰기</span>
-              <ChevronRight aria-hidden="true" size={23} strokeWidth={1.8} />
+              <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
             </button>
           </div>
 
-          <p className="trademark-disclaimer"><Info aria-hidden="true" size={20} strokeWidth={1.8} /><span>본 분석은 기존 등록 상표 이미지와의 시각적 유사성을 보여주는 참고 자료입니다.<br />상표 등록 가능 여부나 법적 침해 여부를 판단하지 않습니다.</span></p>
+          <p className="trademark-disclaimer"><Info aria-hidden="true" size={20} strokeWidth={1.8} /><span>본 분석은 기존 등록 상표 이미지와의 시각적 유사성을 보여주는 참고 자료이며, 상표 등록 가능 여부나 법적 침해 여부를 판단하지 않습니다.</span></p>
         </section>
       </main>
     )
@@ -3453,14 +3441,8 @@ function CustomerApp() {
 
     return (
       <main className="logo-result-screen" aria-labelledby="logo-result-title">
-        <header className="logo-result-header">
-          <div className="logo-result-brand"><BrandLogo /><strong><span className="brand-mark-accent">GenMark AI</span></strong></div>
-        </header>
-
         <section className="logo-result-content">
-          <div className="logo-result-complete"><CircleCheck aria-hidden="true" size={21} strokeWidth={1.8} /> 로고 후보가 완성됐어요</div>
-          <h1 id="logo-result-title">가장 마음에 드는 로고를 선택해주세요</h1>
-          <p className="logo-result-lead">후보를 비교하고 색상이나 글씨체를 수정할 수 있어요.</p>
+          <h1 id="logo-result-title">로고 생성이 완료되었어요.</h1>
           <section className="logo-candidate-panel" aria-label="로고 후보 미리보기">
             {candidates.length > 1 && <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => { const next = (resultCandidate + candidates.length - 1) % candidates.length; if (isResultPreview) setResultCandidate(next); else void selectLogoCandidate(candidates[next], next) }}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>}
             <div className="logo-candidate-art">
@@ -3550,7 +3532,7 @@ function CustomerApp() {
           </div>
 
           <div className="logo-result-utility-grid">
-            <button className="utility-primary" type="button" onClick={openRegenerationConfirm}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />재 생성<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+            <button className="utility-primary" type="button" onClick={openRegenerationConfirm}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />로고 재생성<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
             <button className="utility-secondary" type="button" onClick={openBrandKitSelection}><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />{brandKit?.status === 'SUCCEEDED' ? '브랜드 키트 확인하기' : '브랜드 키트 만들기'}<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
           </div>
           {brandKit && <p className="project-error" role="status">브랜드 키트 상태: {brandKit.status === 'QUEUED' || brandKit.status === 'RUNNING' ? '생성 중' : brandKit.status === 'SUCCEEDED' ? '완료' : '실패'}</p>}
@@ -3582,8 +3564,6 @@ function CustomerApp() {
         <ScreenBackButton label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')} />
         <section className="brand-kit-selection-content">
           <header className="brand-kit-selection-header">
-            <div className="brand-kit-selection-mark" aria-hidden="true"><BrandLogo /></div>
-            <p>브랜드 키트 만들기</p>
             <h1 id="brand-kit-selection-title">로고를 어디에<br />먼저 써볼까요?</h1>
             <span>필요한 활용처를 골라 주세요.</span>
           </header>

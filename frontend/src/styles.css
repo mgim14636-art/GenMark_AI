@@ -416,6 +416,8 @@
 
 /* Brand kit selection */
 .brand-kit-selection-screen {
+  /* 뒤로가기 버튼 기준점 고정 — trademark-selection-screen과 동일한 문제 */
+  position: relative;
   min-height: 100dvh;
   overflow-x: hidden;
   color: #1d2942;
@@ -429,8 +431,25 @@
 .brand-kit-selection-mark { display: grid; place-items: center; width: 60px; height: 60px; border: 1px solid rgb(171 131 239 / .33); border-radius: 22px; color: #8859e3; background: rgb(255 255 255 / .78); box-shadow: 0 12px 24px rgb(113 76 187 / .1), inset 0 1px 0 #fff; }
 .brand-kit-selection-mark .brand-emblem { width: 32px; height: 32px; }
 .brand-kit-selection-header > p { margin: 19px 0 0; color: #8d55de; font-size: 17px; font-weight: 700; letter-spacing: -.06em; }
-.brand-kit-selection-header h1 { margin: 11px 0 0; color: #202943; font-size: clamp(39px, 5.2vw, 58px); font-weight: 800; line-height: 1.18; letter-spacing: -.11em; }
-.brand-kit-selection-header h1::first-line { color: #7947da; }
+/* 제목 글자색을 final(입력 내용 확인 화면) 제목과 같은 보라~분홍 그라데이션으로
+   맞춘다. 로고 마크·"브랜드 키트 만들기" 라벨을 지우면서 이 제목이 화면의
+   첫 요소가 됐고, 예전에 첫 줄만 보라색으로 칠하던 ::first-line 방식은
+   더 이상 쓰지 않는다. */
+.brand-kit-selection-header h1 {
+  margin: 0;
+  color: #6a3ddd;
+  background: linear-gradient(100deg, #6138df 0%, #9a55db 49%, #ed5f9c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: clamp(39px, 5.2vw, 58px);
+  font-weight: 800;
+  /* 줄 높이가 1.18로 너무 빠듯해서, 그라데이션 글자(-webkit-background-clip: text)를
+     칠하는 영역이 "?" 같은 위로 튀어나온 글자를 못 담고 위쪽을 잘라 먹었다.
+     줄 높이를 넉넉하게 늘려서 글자가 온전히 다 칠해지게 한다. */
+  line-height: 1.32;
+  letter-spacing: -.11em;
+}
 .brand-kit-selection-header > span { margin-top: 17px; color: #6d758a; font-size: clamp(17px, 2vw, 22px); letter-spacing: -.07em; }
 .brand-kit-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .brand-kit-choice { display: grid; grid-template-rows: 176px auto; position: relative; min-height: 338px; overflow: hidden; border: 1px solid #e5dff2; border-radius: 24px; padding: 0; color: #202943; background: rgb(255 255 255 / .82); box-shadow: 0 12px 26px rgb(91 63 146 / .08); text-align: left; transition: transform 180ms cubic-bezier(.2, .7, .25, 1), border-color 180ms ease, box-shadow 180ms ease, background 180ms ease; }
@@ -525,7 +544,7 @@
   .brand-kit-selection-mark { width: 52px; height: 52px; border-radius: 19px; }
   .brand-kit-selection-mark .brand-emblem { width: 28px; height: 28px; }
   .brand-kit-selection-header > p { margin-top: 14px; font-size: 15px; }
-  .brand-kit-selection-header h1 { margin-top: 8px; font-size: clamp(32px, 9.2vw, 43px); }
+  .brand-kit-selection-header h1 { margin-top: 0; font-size: clamp(32px, 9.2vw, 43px); }
   .brand-kit-selection-header > span { margin-top: 13px; font-size: 15px; }
   .brand-kit-choice-grid { grid-template-columns: 1fr; gap: 12px; }
   .brand-kit-choice { grid-template-columns: 108px minmax(0, 1fr); grid-template-rows: 1fr; min-height: 143px; border-radius: 18px; }
@@ -630,7 +649,19 @@
 .logo-result-content { width: min(calc(100% - 96px), 804px); margin: 0 auto; padding: 26px 0 46px; text-align: center; }
 .logo-result-complete { display: inline-flex; align-items: center; gap: 12px; min-height: 54px; margin-bottom: 17px; border-radius: 999px; padding: 9px 28px; color: #9857ea; background: linear-gradient(100deg, #f2edff, #ffeaf6); font-size: clamp(18px, 2vw, 25px); font-weight: 700; letter-spacing: -.08em; }
 .logo-result-complete span { display: grid; width: 24px; height: 24px; place-items: center; border: 2px solid currentColor; border-radius: 50%; font-size: 15px; line-height: 1; }
-.logo-result-content h1 { margin: 0; color: #182039; font-size: clamp(29px, 4vw, 43px); font-weight: 800; line-height: 1.25; letter-spacing: -.1em; }
+.logo-result-content h1 {
+  margin: 0;
+  /* final(입력 내용 확인 화면) 제목과 같은 보라~분홍 그라데이션 글자색으로 맞춘다. */
+  color: #6a3ddd;
+  background: linear-gradient(100deg, #6138df 0%, #9a55db 49%, #ed5f9c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: clamp(29px, 4vw, 43px);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -.1em;
+}
 .logo-result-lead { margin: 12px 0 18px; color: #66708a; font-size: clamp(17px, 2vw, 23px); line-height: 1.45; letter-spacing: -.08em; }
 .logo-candidate-panel { position: relative; display: grid; min-height: 450px; place-items: center; margin: 18px auto 14px; border: 1px solid #e8e3f7; border-radius: 28px; background: rgb(255 255 255 / .88); box-shadow: 0 11px 28px rgb(86 64 144 / .1), inset 0 1px 0 #fff; }
 .logo-candidate-art { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 426px; color: #2b2c3b; }
@@ -673,19 +704,19 @@
 .logo-candidate-action.like.liked { color: #e35eae; border-color: #e6a4ca; background: #fff7fc; }
 .logo-candidate-action.download { right: 18px; bottom: 18px; }
 .logo-candidate-action svg { display: block; }
-.logo-result-details { overflow: hidden; border: 1px solid #ebe7f4; border-radius: 23px; background: #fff; box-shadow: 0 7px 19px rgb(81 61 130 / .08); text-align: left; }
-.logo-result-detail-row { display: grid; grid-template-columns: 38px 245px minmax(0, 1fr); align-items: center; min-height: 63px; gap: 13px; margin: 0 19px; border-bottom: 1px solid #ebe7f4; color: #17203a; font-size: clamp(16px, 1.9vw, 23px); letter-spacing: -.07em; }
+/* 표 크기·글자 크기를 final(입력 내용 확인 화면)의 요약 표와 같은 값으로 맞춘다.
+   화면 폭에 따라 달라지지 않도록 고정값으로 둔다 — final 쪽도 실제로는 화면 폭과
+   무관하게 이 크기로 고정되어 있다. */
+.logo-result-details { overflow: hidden; border: 1px solid #ebe7f4; border-radius: 16px; background: #fff; box-shadow: 0 7px 19px rgb(81 61 130 / .08); text-align: left; }
+.logo-result-detail-row { display: grid; grid-template-columns: 22px minmax(58px, auto) minmax(0, 1fr); align-items: center; min-height: 46px; gap: 9px; margin: 0 14px; border-bottom: 1px solid #ebe7f4; }
 .logo-result-detail-row:last-child { border-bottom: 0; }
-.logo-result-detail-row > strong { font-weight: 600; }
-.logo-result-detail-row > span:last-child { color: #66708a; line-height: 1.35; }
-.result-detail-icon { position: relative; display: grid; width: 31px; height: 31px; place-items: center; color: #9058ed; }
+.logo-result-detail-row > strong { color: #202535; font-size: 15px; font-weight: 600; letter-spacing: -.08em; white-space: nowrap; }
+.logo-result-detail-row > span:last-child { min-width: 0; overflow: hidden; color: #5f6678; font-size: 14px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -.07em; text-align: right; }
+.result-detail-icon { position: relative; display: grid; width: 22px; height: 22px; place-items: center; color: #9058ed; font-size: 18px; }
 .result-detail-icon svg { display: block; }
 .logo-result-detail-row.feeling { min-height: 84px; }
-.result-color-swatches { display: flex; gap: 22px; align-items: center; }
-.result-color-swatches i { display: block; width: 39px; height: 39px; border-radius: 50%; background: #a993d4; }
-.result-color-swatches i:nth-child(2) { background: #e6a3c3; }
-.result-color-swatches i:nth-child(3) { background: #aeb99e; }
-.result-color-swatches i:nth-child(4) { background: #f5ead6; }
+.result-color-swatches { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
+.result-color-swatches i { display: block; width: 20px; height: 20px; border-radius: 50%; }
 .logo-result-trademark { display: grid; grid-template-columns: 119px minmax(0, 1fr); align-items: center; gap: 24px; margin-top: 20px; border: 1px solid #ebe7f4; border-radius: 24px; padding: 23px 30px; background: #fff; box-shadow: 0 7px 19px rgb(81 61 130 / .07); text-align: left; }
 .trademark-result-icon { position: relative; display: grid; width: 94px; height: 94px; place-items: center; border-radius: 50%; color: #8556ea; background: #f7f1ff; }
 .trademark-result-icon svg { display: block; width: 46px; height: 46px; }
@@ -745,9 +776,9 @@
   .logo-result-complete span { width: 20px; height: 20px; font-size: 12px; }
   .logo-result-content h1 { font-size: clamp(26px, 7.8vw, 38px); line-height: 1.33; }
   .logo-result-lead { margin: 9px 0 14px; font-size: 16px; }
-  .logo-candidate-panel { min-height: 350px; margin-top: 14px; border-radius: 20px; }
-  .logo-candidate-art { min-height: 330px; }
-  .logo-candidate-image { width: min(86%, 300px); height: 235px; }
+  .logo-candidate-panel { min-height: 305px; margin-top: 14px; border-radius: 20px; }
+  .logo-candidate-art { min-height: 285px; }
+  .logo-candidate-image { width: min(86%, 300px); height: 200px; }
   .candidate-emblem { width: 107px; height: 107px; margin-bottom: 10px; }
   .candidate-emblem span, .candidate-emblem i, .candidate-emblem b { bottom: 7px; width: 37px; height: 60px; }
   .candidate-emblem span { left: 15px; }
@@ -763,13 +794,8 @@
   .logo-candidate-action.like { top: 12px; right: 12px; }
   .logo-candidate-action.download { right: 12px; bottom: 12px; }
   .logo-candidate-action svg { width: 19px; height: 19px; }
-  .logo-result-details { border-radius: 17px; }
-  .logo-result-detail-row { grid-template-columns: 27px 107px minmax(0, 1fr); min-height: 58px; gap: 8px; margin: 0 12px; font-size: 14px; }
   .logo-result-detail-row.feeling { min-height: 82px; }
-  .result-detail-icon { width: 24px; height: 24px; }
   .result-detail-icon.heart svg { width: 22px; height: 22px; }
-  .result-color-swatches { gap: 7px; }
-  .result-color-swatches i { width: 22px; height: 22px; }
   .logo-result-trademark { grid-template-columns: 58px minmax(0, 1fr); gap: 12px; margin-top: 14px; border-radius: 17px; padding: 15px; }
   .trademark-result-icon { width: 56px; height: 56px; }
   .trademark-result-icon svg { width: 29px; height: 29px; }
@@ -788,6 +814,11 @@
 
 /* Trademark analysis choice screen */
 .trademark-selection-screen {
+  /* 뒤로가기 버튼(position:absolute)의 기준점을 이 화면 자신으로 명시적으로 고정한다.
+     이 화면은 진입 애니메이션이 빠져 있는데(9629번째 줄 근처 예외 처리 참고),
+     다른 화면은 그 애니메이션의 transform이 우연히 이 기준점 역할까지 해주고
+     있었다. 애니메이션 유무에 기대지 않도록 여기서 직접 지정한다. */
+  position: relative;
   min-height: 100dvh;
   overflow-x: hidden;
   color: #252b3d;
@@ -843,78 +874,32 @@
   padding: 42px 0 48px;
 }
 
-.trademark-selection-hero-icon {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 112px;
-  height: 112px;
-  margin: 0 auto 25px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 38%, #fff 0 26%, #f7f1ff 64%, #f1ebfb 100%);
-  box-shadow: 0 9px 24px rgb(151 116 224 / 0.13), inset 0 0 0 1px rgb(221 211 246 / 0.7);
-}
-
-.trademark-selection-shield {
-  position: relative;
-  width: 45px;
-  height: 55px;
-  border: 4px solid #7c50df;
-  border-radius: 48% 48% 42% 42% / 28% 28% 66% 66%;
-  transform: translate(-6px, 1px);
-}
-
-.trademark-selection-shield::after {
-  position: absolute;
-  top: 15px;
-  left: 14px;
-  width: 12px;
-  height: 20px;
-  border: 3px solid #c485ec;
-  border-radius: 50%;
-  content: '';
-}
-
-.trademark-selection-search {
-  position: absolute;
-  right: 29px;
-  bottom: 28px;
-  width: 25px;
-  height: 25px;
-  border: 5px solid #e16cc5;
-  border-radius: 50%;
-  background: #fff;
-}
-
-.trademark-selection-search::after {
-  position: absolute;
-  right: -13px;
-  bottom: -10px;
-  width: 16px;
-  height: 5px;
-  border-radius: 4px;
-  background: #e16cc5;
-  content: '';
-  transform: rotate(45deg);
-}
-
-.trademark-selection-heading { text-align: center; }
+/* 위쪽 원형 아이콘을 없앤 뒤로 제목이 화면 맨 위(뒤로가기 버튼 옆)까지
+   올라붙어서, 아이콘이 만들어주던 여백만큼을 여기서 대신 준다. */
+.trademark-selection-heading { margin-top: 44px; text-align: center; }
 
 .trademark-selection-heading h1 {
   margin: 0;
-  color: #12182c;
-  font-size: clamp(34px, 4.8vw, 53px);
+  /* 글자 색을 final(입력 내용 확인 화면) 제목과 같은 보라~분홍 그라데이션으로 맞춘다. */
+  color: #6a3ddd;
+  background: linear-gradient(100deg, #6138df 0%, #9a55db 49%, #ed5f9c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: clamp(30px, 4.2vw, 46px);
   font-weight: 800;
   line-height: 1.36;
-  letter-spacing: -0.095em;
+  letter-spacing: -0.045em;
+  word-break: keep-all;
 }
 
 .trademark-selection-heading p {
   margin: 25px 0 0;
   color: #697189;
-  font-size: clamp(18px, 2.25vw, 25px);
+  font-size: clamp(16px, 2vw, 22px);
   line-height: 1.65;
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
+  word-break: keep-all;
 }
 
 .trademark-benefit-card,
@@ -941,6 +926,9 @@
 
 .trademark-benefit-row + .trademark-benefit-row { border-top: 1px solid #f0edf7; }
 
+/* 이 원형 상자 안의 그림은 App.tsx에서 Lucide 아이콘(ImageIcon/BarChart3/Pencil)으로
+   그린다. (예전에는 ::before/::after 두 겹을 억지로 겹쳐서 사진·그래프·연필
+   모양을 흉내 냈는데, Lucide 아이콘으로 바꾸면서 필요 없어졌다.) */
 .trademark-benefit-icon {
   position: relative;
   display: grid;
@@ -953,77 +941,25 @@
   background: radial-gradient(circle at 50% 32%, #fff 0 25%, #f7f0ff 100%);
 }
 
-.trademark-benefit-icon::before,
-.trademark-benefit-icon::after { position: absolute; content: ''; }
-
-.trademark-benefit-icon.icon-image::before {
-  width: 38px;
-  height: 29px;
-  border: 4px solid #7d4de0;
-  border-radius: 4px;
-}
-
-.trademark-benefit-icon.icon-image::after {
-  right: 19px;
-  bottom: 24px;
-  width: 18px;
-  height: 18px;
-  border: 4px solid #dc72cf;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 11px 11px 0 -7px #dc72cf;
-}
-
-.trademark-benefit-icon.icon-chart::before {
-  bottom: 27px;
-  width: 46px;
-  height: 4px;
-  border-radius: 4px;
-  background: #9c63e3;
-}
-
-.trademark-benefit-icon.icon-chart::after {
-  width: 32px;
-  height: 38px;
-  border-left: 7px solid #9c63e3;
-  border-right: 7px solid #dc70c9;
-  box-shadow: 13px 11px 0 -5px #a86be9;
-}
-
-.trademark-benefit-icon.icon-pencil::before {
-  width: 42px;
-  height: 13px;
-  border: 4px solid #8b5de1;
-  border-radius: 4px;
-  transform: rotate(-45deg);
-}
-
-.trademark-benefit-icon.icon-pencil::after {
-  right: 21px;
-  bottom: 23px;
-  width: 0;
-  height: 0;
-  border-top: 8px solid transparent;
-  border-bottom: 8px solid transparent;
-  border-right: 15px solid #e071c7;
-  transform: rotate(-45deg);
-}
+.trademark-benefit-icon svg { width: 40px; height: 40px; }
 
 .trademark-benefit-row h2 {
   margin: 0;
   color: #7444d9;
-  font-size: clamp(22px, 2.65vw, 31px);
+  font-size: clamp(19px, 2.3vw, 26px);
   font-weight: 750;
-  letter-spacing: -0.09em;
+  letter-spacing: -0.04em;
+  word-break: keep-all;
 }
 
 .trademark-benefit-row p {
   max-width: 600px;
   margin: 10px 0 0;
   color: #606b82;
-  font-size: clamp(17px, 2.1vw, 23px);
-  line-height: 1.55;
-  letter-spacing: -0.085em;
+  font-size: clamp(15px, 1.85vw, 20px);
+  line-height: 1.6;
+  letter-spacing: -0.03em;
+  word-break: keep-all;
 }
 
 .trademark-question-card {
@@ -1043,6 +979,8 @@
   gap: 18px;
 }
 
+/* Q/A 동그라미 안은 이제 글자 "Q"/"A"가 아니라 App.tsx의 Lucide 아이콘
+   (CircleHelp/MessageCircle)이 채운다. font-size는 더 이상 쓰지 않는다. */
 .trademark-question-badge,
 .trademark-answer-badge {
   display: grid;
@@ -1051,9 +989,10 @@
   height: 47px;
   border-radius: 50%;
   color: #fff;
-  font-size: 25px;
-  font-weight: 800;
 }
+
+.trademark-question-badge svg,
+.trademark-answer-badge svg { width: 24px; height: 24px; }
 
 .trademark-question-badge { background: linear-gradient(145deg, #8d55e7, #6244d5); }
 .trademark-answer-badge { background: linear-gradient(145deg, #e568b0, #d14d91); }
@@ -1062,9 +1001,10 @@
 .trademark-answer-row p {
   margin: 0;
   color: #5d6780;
-  font-size: clamp(17px, 2.1vw, 23px);
+  font-size: clamp(15px, 1.85vw, 20px);
   line-height: 1.6;
-  letter-spacing: -0.085em;
+  letter-spacing: -0.03em;
+  word-break: keep-all;
 }
 
 .trademark-question-row p { color: #7048da; font-weight: 700; }
@@ -1075,17 +1015,22 @@
 .trademark-skip-button {
   display: grid;
   align-items: center;
-  min-height: 78px;
-  padding: 0 27px;
-  border-radius: 22px;
+  /* 최종 확인 화면(final)의 "로고 생성하기" 버튼(.logo-style-next)과
+     크기·글꼴·자간을 동일하게 맞춘다. 아래 수치는 그 버튼의 실측값이다.
+     데스크톱 66px / 20px, 모바일 54px / 19px. */
+  min-height: 66px;
+  padding: 0 20px;
+  border-radius: 13px;
   font-family: inherit;
-  font-size: clamp(20px, 2.5vw, 28px);
+  font-size: 20px;
+  font-weight: 700;
   letter-spacing: -0.08em;
+  word-break: keep-all;
   cursor: pointer;
 }
 
 .trademark-check-button {
-  grid-template-columns: 40px minmax(0, 1fr) 20px;
+  grid-template-columns: minmax(0, 1fr) 24px;
   gap: 12px;
   border: 0;
   color: #fff;
@@ -1094,32 +1039,13 @@
   font-weight: 700;
 }
 
-.trademark-check-button span:nth-child(2) { text-align: center; }
+/* 아이콘을 없애면서 라벨 span이 첫 번째 자식이 됐다. */
+.trademark-check-button span:first-child { text-align: center; }
 .trademark-check-button span:last-child,
 .trademark-skip-button span:last-child { font-size: 38px; font-weight: 300; line-height: 1; }
 
-.trademark-check-search {
-  position: relative;
-  width: 24px;
-  height: 24px;
-  border: 3px solid #fff;
-  border-radius: 50%;
-}
-
-.trademark-check-search::after {
-  position: absolute;
-  right: -10px;
-  bottom: -7px;
-  width: 11px;
-  height: 3px;
-  border-radius: 3px;
-  background: #fff;
-  content: '';
-  transform: rotate(45deg);
-}
-
 .trademark-skip-button {
-  grid-template-columns: minmax(0, 1fr) 20px;
+  grid-template-columns: minmax(0, 1fr) 24px;
   gap: 12px;
   border: 2px solid #8050e8;
   color: #282d43;
@@ -1139,9 +1065,10 @@
   padding: 20px 25px;
   color: #707991;
   background: rgb(251 249 255 / 0.73);
-  font-size: clamp(14px, 1.75vw, 18px);
+  font-size: clamp(11px, 1.3vw, 13px);
   line-height: 1.65;
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
+  word-break: keep-all;
 }
 
 .trademark-disclaimer > span:first-child {
@@ -1158,32 +1085,32 @@
   .trademark-selection-brand-mark { width: 27px; height: 34px; }
   .trademark-help { width: 34px; height: 34px; font-size: 22px; }
   .trademark-selection-content { width: min(calc(100% - 28px), 560px); padding: 27px 0 34px; }
-  .trademark-selection-hero-icon { width: 86px; height: 86px; margin-bottom: 20px; transform: scale(.85); }
-  .trademark-selection-heading h1 { font-size: clamp(27px, 7.7vw, 40px); line-height: 1.38; }
-  .trademark-selection-heading p { margin-top: 16px; font-size: 16px; line-height: 1.55; }
-  .trademark-benefit-card { margin-top: 28px; border-radius: 20px; padding: 12px 15px; }
-  .trademark-benefit-row { grid-template-columns: 70px minmax(0, 1fr); gap: 14px; min-height: 104px; }
-  .trademark-benefit-icon { width: 62px; height: 62px; }
-  .trademark-benefit-icon.icon-image::before { width: 27px; height: 21px; border-width: 3px; }
-  .trademark-benefit-icon.icon-image::after { right: 13px; bottom: 16px; width: 13px; height: 13px; border-width: 3px; }
-  .trademark-benefit-icon.icon-chart::before { bottom: 19px; width: 32px; height: 3px; }
-  .trademark-benefit-icon.icon-chart::after { width: 23px; height: 27px; border-width: 5px; box-shadow: 9px 8px 0 -4px #a86be9; }
-  .trademark-benefit-icon.icon-pencil::before { width: 30px; height: 9px; border-width: 3px; }
-  .trademark-benefit-icon.icon-pencil::after { right: 14px; bottom: 16px; border-top-width: 6px; border-bottom-width: 6px; border-right-width: 11px; }
-  .trademark-benefit-row h2 { font-size: clamp(18px, 5.2vw, 25px); }
-  .trademark-benefit-row p { margin-top: 6px; font-size: 14px; line-height: 1.45; }
-  .trademark-question-card { gap: 16px; margin-top: 18px; border-radius: 18px; padding: 19px 15px; }
-  .trademark-question-row, .trademark-answer-row { grid-template-columns: 35px minmax(0, 1fr); gap: 10px; }
-  .trademark-question-badge, .trademark-answer-badge { width: 34px; height: 34px; font-size: 18px; }
-  .trademark-question-row p, .trademark-answer-row p { font-size: 14px; line-height: 1.5; }
-  .trademark-selection-actions { gap: 11px; margin-top: 20px; }
-  .trademark-check-button, .trademark-skip-button { min-height: 61px; padding: 0 17px; border-radius: 16px; font-size: 18px; }
-  .trademark-check-button { grid-template-columns: 27px minmax(0, 1fr) 14px; gap: 7px; }
-  .trademark-check-search { width: 19px; height: 19px; border-width: 2px; }
-  .trademark-check-search::after { right: -8px; bottom: -6px; width: 9px; height: 2px; }
+  .trademark-selection-heading { margin-top: 34px; }
+  .trademark-selection-heading h1 { font-size: clamp(23px, 6.6vw, 33px); line-height: 1.4; letter-spacing: -0.045em; word-break: keep-all; }
+  .trademark-selection-heading p { margin-top: 11px; font-size: 12.5px; line-height: 1.55; }
+  .trademark-benefit-card { margin-top: 22px; border-radius: 18px; padding: 6px 12px; }
+  .trademark-benefit-row { grid-template-columns: 50px minmax(0, 1fr); gap: 11px; min-height: 74px; }
+  .trademark-benefit-icon { width: 45px; height: 45px; }
+  .trademark-benefit-icon svg { width: 22px; height: 22px; }
+  /* 자간이 -0.085~-0.095em까지 좁아 글자가 서로 붙어 보이고, 단어 중간에서 줄이
+     끊겼다("상/표 찾기", "도움을 드려/요."). 화면 전체 자간을 제목 -0.04em /
+     본문 -0.03em으로 통일하고, keep-all로 단어를 보존한다. */
+  .trademark-benefit-row h2 { font-size: 13.5px; letter-spacing: -0.04em; line-height: 1.35; word-break: keep-all; }
+  .trademark-benefit-row p { margin-top: 4px; font-size: 11.5px; line-height: 1.5; letter-spacing: -0.03em; word-break: keep-all; }
+  /* 위쪽 안내 카드(.trademark-benefit-card)와 글자·여백 크기를 같은 눈금에 맞춘다.
+     본문 12px / 굵은 줄 12.5px, 카드 안쪽 여백 10px 12px. */
+  .trademark-question-card { gap: 8px; margin-top: 14px; border-radius: 16px; padding: 10px 12px; }
+  .trademark-question-row, .trademark-answer-row { grid-template-columns: 25px minmax(0, 1fr); gap: 9px; }
+  .trademark-question-badge, .trademark-answer-badge { width: 25px; height: 25px; }
+  .trademark-question-badge svg, .trademark-answer-badge svg { width: 13px; height: 13px; }
+  .trademark-question-row p, .trademark-answer-row p { font-size: 11.5px; line-height: 1.5; letter-spacing: -0.03em; word-break: keep-all; }
+  .trademark-question-row p { font-size: 12px; }
+  .trademark-selection-actions { gap: 10px; margin-top: 18px; }
+  .trademark-check-button, .trademark-skip-button { min-height: 54px; padding: 0 14px; border-radius: 12px; font-size: 19px; letter-spacing: -0.08em; }
+  .trademark-check-button { grid-template-columns: minmax(0, 1fr) 24px; gap: 7px; }
   .trademark-check-button span:last-child, .trademark-skip-button span:last-child { font-size: 30px; }
-  .trademark-skip-button { grid-template-columns: minmax(0, 1fr) 14px; }
-  .trademark-disclaimer { gap: 9px; margin-top: 17px; border-radius: 15px; padding: 14px; font-size: 12px; line-height: 1.5; }
+  .trademark-skip-button { grid-template-columns: minmax(0, 1fr) 24px; }
+  .trademark-disclaimer { gap: 7px; margin-top: 15px; border-radius: 14px; padding: 10px 11px; font-size: 8.5px; line-height: 1.55; letter-spacing: -0.03em; word-break: keep-all; }
   .trademark-disclaimer > span:first-child { font-size: 21px; }
 }
 
@@ -1249,11 +1176,17 @@
 
 .logo-loading-heading h1 {
   margin: 0;
-  color: #292c38;
-  font-size: clamp(36px, 4.8vw, 56px);
+  /* 글자 색을 final(입력 내용 확인 화면) 제목과 같은 보라~분홍 그라데이션으로 맞춘다. */
+  color: #6a3ddd;
+  background: linear-gradient(100deg, #6138df 0%, #9a55db 49%, #ed5f9c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: clamp(28px, 3.8vw, 42px);
   font-weight: 800;
-  line-height: 1.22;
-  letter-spacing: -0.095em;
+  line-height: 1.28;
+  letter-spacing: -0.06em;
+  word-break: keep-all;
 }
 
 .logo-loading-heading p {
@@ -1428,13 +1361,13 @@
 .logo-loading-step {
   display: grid;
   position: relative;
-  grid-template-columns: 72px 96px minmax(0, 1fr) 38px;
+  grid-template-columns: 48px 62px minmax(0, 1fr) 24px;
   align-items: center;
-  gap: 17px;
-  min-height: 112px;
+  gap: 11px;
+  min-height: 74px;
   border: 1px solid #e3e2ed;
-  border-radius: 24px;
-  padding: 17px 24px;
+  border-radius: 16px;
+  padding: 11px 16px;
   background: linear-gradient(105deg, rgb(255 255 255 / 0.96), rgb(251 249 255 / 0.81));
   box-shadow: 0 9px 22px rgb(108 87 171 / 0.055);
 }
@@ -1455,13 +1388,13 @@
   position: relative;
   z-index: 1;
   place-items: center;
-  width: 50px;
-  height: 50px;
+  width: 32px;
+  height: 32px;
   border: 1px solid #d7d7e8;
   border-radius: 50%;
   color: #667087;
   background: #fff;
-  font-size: 28px;
+  font-size: 16px;
   font-weight: 600;
 }
 
@@ -1481,23 +1414,24 @@
 .logo-loading-step-icon {
   display: grid;
   place-items: center;
-  width: 86px;
-  height: 86px;
+  width: 52px;
+  height: 52px;
   border: 1px solid #e4dfff;
-  border-radius: 20px;
+  border-radius: 13px;
   color: #9470e8;
   background: linear-gradient(145deg, #fff, #f8f2ff);
   box-shadow: 0 8px 16px rgb(111 76 188 / 0.09);
   line-height: 1;
 }
 
-.logo-loading-step-icon svg { display: block; }
+.logo-loading-step-icon svg { display: block; width: 28px; height: 28px; }
 
 .logo-loading-step p {
   margin: 0;
   color: #303544;
-  font-size: clamp(19px, 2.25vw, 24px);
-  letter-spacing: -0.08em;
+  font-size: clamp(13px, 1.5vw, 16px);
+  letter-spacing: -0.03em;
+  word-break: keep-all;
 }
 
 .logo-loading-dots,
@@ -1657,18 +1591,18 @@
     padding-top: 32px;
   }
 
-  .logo-loading-heading h1 { font-size: clamp(29px, 8vw, 42px); }
+  .logo-loading-heading h1 { font-size: clamp(22px, 6vw, 30px); letter-spacing: -0.04em; }
   .logo-loading-heading p { font-size: 16px; }
   .logo-loading-orb,
   .ai-loader { width: 180px; height: 180px; }
   .ai-loader .loader { width: 164px; height: 164px; }
   .ai-loader .loader-copy { font-size: 18px; }
   .logo-loading-step {
-    grid-template-columns: 42px 58px minmax(0, 1fr) 23px;
-    gap: 10px;
-    min-height: 88px;
-    border-radius: 18px;
-    padding: 12px 14px;
+    grid-template-columns: 26px 36px minmax(0, 1fr) 14px;
+    gap: 6px;
+    min-height: 58px;
+    border-radius: 12px;
+    padding: 7px 9px;
   }
   .logo-loading-steps::before { left: 33px; top: 44px; bottom: 44px; }
   .logo-loading-steps::after { left: 33px; top: 44px; }
@@ -1676,11 +1610,11 @@
   .logo-loading-steps.step-progress-2::after { height: 210px; }
   .logo-loading-steps.step-progress-3::after { height: 315px; }
   .logo-loading-steps.step-progress-4::after { height: 420px; }
-  .logo-loading-step-number { width: 38px; height: 38px; font-size: 20px; }
-  .logo-loading-step-icon { width: 55px; height: 55px; border-radius: 14px; }
-  .logo-loading-step-icon svg { width: 32px; height: 32px; }
-  .logo-loading-step p { font-size: clamp(14px, 3.9vw, 20px); }
-  .logo-loading-dots { width: 38px; height: auto; border-width: 0; }
+  .logo-loading-step-number { width: 23px; height: 23px; font-size: 11px; }
+  .logo-loading-step-icon { width: 33px; height: 33px; border-radius: 9px; }
+  .logo-loading-step-icon svg { width: 19px; height: 19px; }
+  .logo-loading-step p { font-size: 10.5px; line-height: 1.35; letter-spacing: -0.02em; word-break: keep-all; }
+  .logo-loading-dots { width: 22px; height: auto; border-width: 0; }
   .logo-loading-time-card,
   .logo-loading-save-card { min-height: 92px; border-radius: 18px; padding: 15px 16px; }
   .logo-loading-time-card { gap: 10px; }
@@ -1729,6 +1663,45 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
      창 전체(1280px) 기준이라, 좁은 프레임 안에서도 최대값 66px이 그대로 걸려
      글자가 칸을 꽉 채웠다(양옆 여백 1px). 프레임 폭에 맞춰 다시 잡는다. */
   .app-shell .login-content h1 { font-size: 44px; letter-spacing: -.05em; }
+
+  /* 상표 확인 안내 카드도 데스크탑 기본값(아이콘 90px·제목 31px)이 그대로 걸려
+     520px 프레임 안에서 과하게 컸다. 자간이 -0.09em까지 좁아 단어 중간에서
+     줄이 끊기던 것도 keep-all로 함께 정리한다. */
+  .app-shell .trademark-benefit-card { margin-top: 26px; border-radius: 18px; padding: 8px 16px; }
+  .app-shell .trademark-benefit-row { grid-template-columns: 56px minmax(0, 1fr); gap: 14px; min-height: 78px; }
+  .app-shell .trademark-benefit-icon { width: 48px; height: 48px; }
+  .app-shell .trademark-benefit-icon svg { width: 23px; height: 23px; }
+  .app-shell .trademark-benefit-row h2 { font-size: 16px; line-height: 1.35; letter-spacing: -.04em; word-break: keep-all; }
+  .app-shell .trademark-benefit-row p { max-width: none; margin-top: 4px; font-size: 13px; line-height: 1.5; letter-spacing: -.03em; word-break: keep-all; }
+
+  /* 로고 결과 화면(?view=result)의 "상표 이미지 유사도" 카드와 하단 버튼들도
+     데스크탑 기본값(clamp 최대치)이 그대로 걸려 있어서, 520px 프레임 안에서
+     버튼 글자가 넘쳐 두 줄로 꺾였다. 실제 좁은 모바일(max-width:768px)용으로
+     이미 만들어둔 컴팩트한 값을 여기서도 그대로 쓴다. */
+  .app-shell .logo-result-trademark { grid-template-columns: 58px minmax(0, 1fr); gap: 12px; margin-top: 14px; border-radius: 17px; padding: 15px; }
+  .app-shell .trademark-result-icon { width: 56px; height: 56px; }
+  .app-shell .trademark-result-icon svg { width: 29px; height: 29px; }
+  .app-shell .logo-result-trademark strong { font-size: 16px; }
+  .app-shell .logo-result-trademark p { margin: 3px 0 8px; font-size: 13px; }
+  .app-shell .logo-result-trademark button { min-height: 42px; border-width: 1.5px; font-size: 14px; }
+  .app-shell .logo-result-trademark button svg { width: 18px; height: 18px; }
+  .app-shell .logo-result-edit { min-height: 58px; border-radius: 14px; font-size: 20px; }
+  .app-shell .logo-result-edit > svg:last-child { margin-right: 17px; }
+  .app-shell .logo-result-edit > svg:first-child { margin-left: 16px; }
+  .app-shell .logo-result-utility-grid { gap: 9px; margin-top: 10px; }
+  .app-shell .logo-result-utility-grid button { grid-template-columns: 25px minmax(0, 1fr) 12px; min-height: 61px; gap: 6px; border-radius: 14px; padding: 8px 10px; font-size: 14px; }
+  .app-shell .logo-result-utility-grid button > svg:last-child { width: 17px; height: 17px; }
+  .app-shell .result-utility-icon { width: 23px; height: 23px; }
+
+  .app-shell .trademark-question-card { margin-top: 22px; border-radius: 18px; padding: 18px 20px; }
+  .app-shell .trademark-question-row,
+  .app-shell .trademark-answer-row { grid-template-columns: 32px minmax(0, 1fr); gap: 12px; }
+  .app-shell .trademark-question-badge,
+  .app-shell .trademark-answer-badge { width: 32px; height: 32px; }
+  .app-shell .trademark-question-badge svg,
+  .app-shell .trademark-answer-badge svg { width: 16px; height: 16px; }
+  .app-shell .trademark-question-row p,
+  .app-shell .trademark-answer-row p { font-size: 16px; line-height: 1.5; letter-spacing: -.04em; word-break: keep-all; }
 }
 
 .app-shell { min-height: 100dvh; overflow-x: hidden; background: #fffdf8; }
@@ -2570,6 +2543,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 /* Final request / summary screen */
 .final-request-screen {
+  /* 뒤로가기 버튼 기준점 고정 — trademark-selection-screen과 동일한 문제 */
+  position: relative;
   min-height: 100dvh;
   overflow-x: hidden;
   color: #313649;
@@ -2979,6 +2954,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .final-color-swatches {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 17px;
 }
 
@@ -3058,17 +3034,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   right: 4px;
   bottom: 0;
   font-size: 16px;
-}
-
-.final-generate-arrow {
-  position: absolute;
-  right: 28px;
-  margin: 0;
-  padding: 0;
-  font-family: Arial, sans-serif;
-  font-size: 42px;
-  font-weight: 300;
-  line-height: .6;
 }
 
 .final-footnote {
@@ -3265,11 +3230,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
     height: 29px;
   }
 
-  .final-generate-arrow {
-    right: 17px;
-    font-size: 32px;
-  }
-
   .final-footnote {
     gap: 7px;
     margin-top: 15px;
@@ -3283,6 +3243,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 /* Brand description and core values step */
 .brand-details-screen {
+  /* 뒤로가기 버튼(position:absolute)이 이 화면 자신을 기준으로 위치하도록 고정한다.
+     trademark-selection-screen과 같은 문제 — 기준이 되는 positioned 조상이 없으면
+     버튼이 흰 카드 밖(뷰포트 기준 왼쪽 위)으로 떨어져 나간다. */
+  position: relative;
   min-height: 100dvh;
   overflow-x: hidden;
   color: #30374b;
@@ -3800,18 +3764,23 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   margin-top: 44px;
 }
 
+/* white-space: nowrap로 강제로 한 줄에 욱여넣고 있었는데, 폰트가 딱 맞아
+   떨어지는 폭에서만 안 잘리고 그보다 조금만 좁아지거나 글자 렌더링이
+   미세하게 달라지면(기기·브라우저마다 다름) "있나요" 부분이 화면 밖으로
+   넘쳐 잘려 보였다. 두 줄로 자연스럽게 접히도록 바꾸고, 단어 중간에서
+   끊기지 않도록 keep-all을 함께 준다. */
 .brand-details-heading h1 {
   font-size: clamp(29px, 3.4vw, 40px);
   line-height: 1.25;
   letter-spacing: -.105em;
-  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .brand-details-heading p {
   margin-top: 17px;
   font-size: clamp(16px, 1.75vw, 21px);
   line-height: 1.5;
-  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .brand-details-section {
@@ -4106,13 +4075,13 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
   .brand-details-heading h1 {
     font-size: 27px;
-    white-space: nowrap;
+    word-break: keep-all;
   }
 
   .brand-details-heading p {
     margin-top: 10px;
     font-size: 13px;
-    white-space: nowrap;
+    word-break: keep-all;
   }
 
   .brand-details-section {
@@ -4456,6 +4425,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 /* Tone and color selection screen */
 .tone-selection-screen {
+  /* 뒤로가기 버튼 기준점 고정 — trademark-selection-screen과 동일한 문제 */
+  position: relative;
   min-height: 100dvh;
   overflow-x: hidden;
   color: #272b3a;
@@ -5210,6 +5181,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 /* Logo style selection screen */
 .logo-style-screen {
+  /* 뒤로가기 버튼 기준점 고정 — trademark-selection-screen과 동일한 문제 */
+  position: relative;
   min-height: 100dvh;
   overflow-x: hidden;
   color: #292d3b;
@@ -8336,7 +8309,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .survey-content { padding-bottom: 24px; }
 
   .brand-choice-screen { min-height: 100%; padding-bottom: 32px; }
-  .final-generate-button { min-height: 56px; margin-top: 8px; border-radius: 15px; font-size: 18px; }
+  /* "다음" 버튼(.logo-style-next 등)과 같은 좁은 화면에서 모서리 둥근 정도가
+     달랐다(12px vs 15px). 같은 비율로 보이게 값을 맞춘다. */
+  .final-generate-button { min-height: 56px; margin-top: 8px; border-radius: 12px; font-size: 18px; }
   .final-footnote { gap: 6px; margin-top: 2px; font-size: 12px; }
 }
 
@@ -8446,7 +8421,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 /* 업종 선택 화면(.industry-selection-heading)과 같은 형태로 맞춘다 —
    왼쪽 정렬, 1줄 단색 + 2줄 보라 그라데이션, 아래 회색 한 줄. */
 .brand-choice-intro {
-  margin: 0 0 26px;
+  /* 뒤로가기 버튼이 이 화면에서만 왼쪽 위에 겹쳐 보였다 — 버튼이 차지하는
+     높이(최대 60px)만큼 제목을 아래로 밀어서 자리를 확실히 비켜준다. */
+  margin: 46px 0 26px;
   text-align: start;
 }
 
@@ -11183,6 +11160,29 @@ textarea {
   display: none;                  /* Chrome · Safari */
 }
 
+/* 로고 생성 로딩 화면(?view=loading)은 하단 메뉴(.bottom-nav)가 없는 화면이라
+   위 규칙의 대상이 아니었다. 이 화면은 스크롤이 main 안이 아니라 브라우저
+   창(document) 레벨에서 일어나고 있어서, main의 스크롤바만 숨겨서는
+   화면 오른쪽의 회색 스크롤바가 사라지지 않는다. 그래서 이 화면만
+   bottom-nav 화면과 같은 방식(부모를 뷰포트 높이로 고정하고 main 안에서만
+   스크롤하게 함)으로 바꾸고, 그 안쪽 스크롤바를 숨긴다. */
+.app-shell:has(> main.logo-loading-screen) {
+  height: 100dvh;
+  overflow: hidden;
+}
+.app-shell > main.logo-loading-screen {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* 구형 Edge */
+}
+.app-shell > main.logo-loading-screen::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;                  /* Chrome · Safari */
+}
+
 /* ══════════════════════════════════════════════════════════════
    로고 스타일 카드 — 폭에 따라 알아서 맞는 비율로
    ──────────────────────────────────────────────────────────────
@@ -11286,7 +11286,11 @@ textarea {
    고정이라 520px 프레임에서 값에 118px밖에 안 남았다.
    ══════════════════════════════════════════════════════════════ */
 .final-request-heading { margin-top: 16px; }
-.final-request-heading h1 { font-size: clamp(26px, 4.7vw, 34px); line-height: 1.24; word-break: keep-all; }
+/* style 화면(?view=style) 제목과 같은 글자 크기로 맞춘다.
+   style 제목의 원래 값(desktop clamp(33px,4vw,46px) / 모바일 clamp(29px,8.4vw,36px))을
+   그대로 옮겨왔다. 아래 모바일 전용 값은 이 파일 끝쪽에 별도로 추가한다
+   (모바일에서는 그 규칙이 여기 있는 값보다 나중에 나와야 이긴다). */
+.final-request-heading h1 { font-size: clamp(33px, 4vw, 46px); line-height: 1.24; word-break: keep-all; }
 .final-request-heading p { margin-top: 10px; font-size: 14px; word-break: keep-all; }
 
 .final-summary-section { margin-top: 18px; }
@@ -11311,3 +11315,10 @@ textarea {
 
 .final-generate-button { min-height: 56px; margin-top: 16px; font-size: 19px; }
 .final-footnote { margin-top: 10px; font-size: 12px; }
+
+/* final-request-heading h1의 모바일 전용 크기 — style 화면(?view=style) 제목의
+   원래 모바일 값을 그대로 옮겨왔다. 파일 맨 끝에 둬서 위쪽의 다른 규칙들보다
+   나중에 적용되게 한다. */
+@media (max-width: 768px) {
+  .final-request-heading h1 { font-size: clamp(29px, 8.4vw, 36px); }
+}

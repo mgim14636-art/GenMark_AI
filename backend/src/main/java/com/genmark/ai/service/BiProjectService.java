@@ -109,7 +109,9 @@ public class BiProjectService {
             p.setLogoShape(logoShape.isEmpty() ? null : logoShape);
             if (logoShape.isEmpty()) p.setAdditionalRequirements(removeLegacyLogoShape(p.getAdditionalRequirements()));
         }
-        if (hasBrief(p)) p.setStatus(ProjectStatus.BRIEF_READY);
+        // DRAFT일 때만 BRIEF_READY로 승격한다. 이미 GENERATING 이후로 넘어간 프로젝트를
+        // 나중에 다시 저장(재요청 준비, 자동저장 등)해도 진행 상태가 뒤로 밀리지 않게 한다.
+        if (hasBrief(p) && p.getStatus() == ProjectStatus.DRAFT) p.setStatus(ProjectStatus.BRIEF_READY);
     }
 
     private void applyPalette(BiProject p, BiProjectUpsertRequest r) {
