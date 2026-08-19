@@ -286,12 +286,27 @@
 .asset-date-toggle:focus-visible { border-radius: 9px; outline: 3px solid rgb(129 80 222 / .25); outline-offset: 2px; }
 .asset-date-chevron { color: #7552bd; transition: transform 180ms ease; }
 .asset-date-group.is-open .asset-date-chevron { transform: rotate(180deg); }
-.asset-item-list { display: grid; gap: 10px; padding: 0 0 16px; }
+.asset-item-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 0 16px; }
 .asset-item { display: grid; grid-template-columns: 80px minmax(0, 1fr) 42px; align-items: center; gap: 14px; border: 1px solid #ebe4f7; border-radius: 16px; padding: 10px; background: #fcfbff; }
+.asset-item:not(.asset-item-business-card) { grid-column: 1 / -1; }
+.asset-item-business-card { grid-column: 1 / -1; grid-template-columns: 148px minmax(0, 1fr) 36px; gap: 10px; padding: 8px; }
+.asset-item-business-card-faces { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; min-width: 0; }
+.asset-item-business-card-face { display: grid; width: 100%; height: 78px; overflow: hidden; place-items: center; border: 1px solid #e8ddf4; border-radius: 11px; padding: 0; background: #f7f1ff; cursor: zoom-in; }
+.asset-item-business-card-face img { display: block; width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.asset-item-business-card-face:focus-visible { outline: 3px solid rgb(129 80 222 / .36); outline-offset: -3px; }
+.asset-item-business-card-face.is-missing { color: #968da8; background: #f6f3fa; }
+.asset-item-business-card-face.is-missing::after { content: '미리보기 없음'; font-size: 10px; }
+.asset-item-business-card .asset-download-button { width: 34px; height: 34px; border-radius: 10px; }
 .asset-item-thumb { display: grid; width: 80px; height: 80px; place-items: center; overflow: hidden; border-radius: 12px; background: #f3edff; }
 .asset-item-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.asset-item-thumb-button { display: block; width: 100%; height: 100%; border: 0; padding: 0; color: inherit; background: transparent; cursor: zoom-in; }
+.asset-item-thumb-button:focus-visible { outline: 3px solid rgb(129 80 222 / .36); outline-offset: -3px; }
+.asset-item-thumb-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; width: 100%; height: 100%; padding: 4px; }
+.asset-item-thumb-gallery img { min-width: 0; border-radius: 8px; object-fit: cover; }
+.asset-item-thumb.is-missing { color: #968da8; background: #f6f3fa; font-size: 11px; text-align: center; }
+.asset-item-thumb.is-missing::after { content: '미리보기 없음'; }
 .asset-item-thumb-business-card { background: #f7f1ff; }
-.asset-item-thumb-business-card img { object-fit: cover; }
+.asset-item-thumb-business-card img { object-fit: contain; background: #fff; }
 .asset-item-copy { display: grid; min-width: 0; gap: 4px; }
 .asset-kind { justify-self: start; border-radius: 999px; padding: 4px 7px; color: #7650bd; background: #f1eaff; font-size: 10px; font-weight: 800; letter-spacing: -.02em; }
 .asset-kind-business-card { color: #9b5c3f; background: #fff0e7; }
@@ -442,6 +457,7 @@
 .brand-kit-choice.selected .brand-kit-choice-radio { border-color: #9b5bea; background: linear-gradient(135deg, #a46df0, #df69c3); box-shadow: 0 5px 12px rgb(147 80 222 / .22); }
 .brand-kit-result-preview { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(240px, .55fr); gap: 28px; align-items: center; border: 1px solid #e3d9f3; border-radius: 26px; padding: 24px; background: rgb(255 255 255 / .9); box-shadow: 0 18px 42px rgb(97 63 157 / .12); }
 .brand-kit-result-images { display: grid; gap: 16px; min-width: 0; }
+.brand-kit-result-images.business-card-result-images { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 10px; }
 .brand-kit-result-image { display: grid; margin: 0; overflow: hidden; border: 1px solid #e9e1f5; border-radius: 19px; background: linear-gradient(145deg, #f5efff, #fff3f9); }
 .brand-kit-result-image figcaption { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 8px 14px; color: #4d3d6b; background: rgb(255 255 255 / .9); }
 .brand-kit-result-image figcaption strong { font-size: 15px; }
@@ -449,6 +465,16 @@
 .brand-kit-result-image figcaption a:hover { background: #e8ddf8; }
 .brand-kit-result-image figcaption a:focus-visible { outline: 3px solid rgb(129 80 222 / .3); outline-offset: 2px; }
 .brand-kit-result-image img { display: block; width: 100%; object-fit: contain; }
+.brand-kit-result-image-button { position: relative; display: block; width: 100%; border: 0; padding: 0; color: inherit; background: transparent; cursor: zoom-in; }
+.brand-kit-result-image-button:focus-visible { outline: 3px solid rgb(129 80 222 / .38); outline-offset: -3px; }
+.brand-kit-result-image-button img { min-height: 112px; padding: 8px; }
+.brand-kit-result-image-zoom { position: absolute; right: 9px; bottom: 9px; display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 6px 8px; color: #fff; background: rgb(42 31 74 / .72); font-size: 11px; font-weight: 800; opacity: 0; pointer-events: none; transform: translateY(3px); transition: opacity 160ms ease, transform 160ms ease; }
+.brand-kit-result-image-button:hover .brand-kit-result-image-zoom,
+.brand-kit-result-image-button:focus-visible .brand-kit-result-image-zoom { opacity: 1; transform: translateY(0); }
+.business-card-result-images .brand-kit-result-image { border-radius: 15px; }
+.business-card-result-images .brand-kit-result-image figcaption { min-height: 38px; padding: 7px 10px; }
+.business-card-result-images .brand-kit-result-image figcaption strong { font-size: 13px; }
+.business-card-result-images .brand-kit-result-image-button img { height: 132px; min-height: 0; padding: 8px; }
 .brand-kit-result-copy { display: grid; align-content: center; justify-items: start; }
 .brand-kit-result-copy > span { color: #8650df; font-size: 14px; font-weight: 800; }
 .brand-kit-result-copy .brand-kit-preliminary-badge { display: inline-flex; align-items: center; min-height: 24px; margin-top: 9px; border: 1px solid #d8c7ff; border-radius: 999px; padding: 0 9px; color: #7543d4; background: #f7f2ff; font-size: 11px; font-weight: 800; }
@@ -475,6 +501,20 @@
 .brand-kit-status { color: #7552bf; }
 .brand-kit-error { color: #c74d69; }
 
+.brand-kit-preview-backdrop { z-index: 1100; padding: clamp(12px, 3vw, 28px); }
+.brand-kit-preview-modal { display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(100%, 960px); max-height: min(92dvh, 820px); overflow: hidden; border: 1px solid #e9e0f7; border-radius: 24px; padding: 22px; background: #fff; box-shadow: 0 28px 80px rgb(29 19 61 / .3); }
+.brand-kit-preview-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 2px 2px 18px; }
+.brand-kit-preview-modal-header > div { display: grid; gap: 4px; }
+.brand-kit-preview-modal-header > div > span { color: #8650df; font-size: 13px; font-weight: 800; letter-spacing: -.04em; }
+.brand-kit-preview-modal-header h2 { margin: 0; color: #202943; font-size: clamp(23px, 3vw, 31px); letter-spacing: -.08em; }
+.brand-kit-preview-close { display: grid; width: 40px; height: 40px; flex: 0 0 auto; place-items: center; border: 1px solid #e7def3; border-radius: 50%; color: #65708b; background: #fff; }
+.brand-kit-preview-close:hover { color: #7543d4; background: #f7f1ff; }
+.brand-kit-preview-close:focus-visible { outline: 3px solid rgb(129 80 222 / .3); outline-offset: 3px; }
+.brand-kit-preview-stage { display: grid; min-height: 0; place-items: center; overflow: auto; border: 1px solid #eee7f8; border-radius: 17px; padding: clamp(14px, 3vw, 28px); background: linear-gradient(145deg, #f8f4ff, #fff7fb); }
+.brand-kit-preview-stage.is-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: clamp(10px, 2vw, 18px); }
+.brand-kit-preview-stage img { display: block; width: auto; max-width: 100%; max-height: calc(92dvh - 150px); height: auto; object-fit: contain; }
+.brand-kit-preview-stage.is-gallery img { width: 100%; max-height: calc(92dvh - 150px); }
+
 
 @media (max-width: 768px) {
   .editor-uploaded-logo-target.selected::before, .editor-uploaded-logo-target.selected::after { width: 11px; height: 11px; }
@@ -499,9 +539,22 @@
   .brand-kit-choice-radio { top: 15px; right: 15px; width: 27px; height: 27px; }
   .brand-kit-choice-radio svg { width: 15px; height: 15px; }
   .brand-kit-result-preview { grid-template-columns: 1fr; gap: 18px; border-radius: 20px; padding: 16px; }
+  .brand-kit-result-images.business-card-result-images { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .business-card-result-images .brand-kit-result-image figcaption { padding: 6px 8px; }
+  .business-card-result-images .brand-kit-result-image figcaption strong { font-size: 12px; }
+  .business-card-result-images .brand-kit-result-image-button img { height: 96px; padding: 6px; }
+  .brand-kit-result-image-zoom { right: 6px; bottom: 6px; padding: 5px 6px; font-size: 10px; }
   .brand-kit-result-image { border-radius: 15px; }
   .brand-kit-result-copy { padding: 2px 4px 8px; }
   .brand-kit-result-copy h2 { font-size: 25px; }
+  .brand-kit-preview-backdrop { align-items: center; padding: 12px; }
+  .brand-kit-preview-modal { max-height: calc(100dvh - 24px); border-radius: 20px; padding: 16px; }
+  .brand-kit-preview-modal-header { padding-bottom: 13px; }
+  .brand-kit-preview-modal-header h2 { font-size: 23px; }
+  .brand-kit-preview-stage { padding: 10px; }
+  .brand-kit-preview-stage img { max-height: calc(100dvh - 124px); }
+  .brand-kit-preview-stage.is-gallery { grid-template-columns: 1fr; gap: 10px; }
+  .brand-kit-preview-stage.is-gallery img { max-height: calc(100dvh - 150px); }
   .brand-kit-selection-footer { margin-top: 22px; }
   .brand-kit-selection-footer > p:first-child { margin-bottom: 10px; font-size: 14px; }
   .brand-kit-create-button { min-height: 58px; border-radius: 17px; font-size: 17px; }
@@ -8492,7 +8545,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 /* ⓘ는 제목 옆이 아니라 카드 오른쪽 위 모서리에 고정한다. */
 .brand-choice-card .brand-choice-info {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   top: 18px;
   right: 18px;
 }

@@ -37,6 +37,9 @@ type MypageAssetItem = {
   title: string
   subtitle: string
   imageUrl: string
+  imageUrls?: string[]
+  brandKit?: BrandKit
+  dateKey: string
 }
 type MypageAssetGroup = {
   dateKey: string
@@ -548,10 +551,14 @@ function CustomerApp() {
   const [logoCandidates, setLogoCandidates] = useState<LogoCandidate[]>([])
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null)
   const [downloadHistory, setDownloadHistory] = useState<DownloadRecord[]>([])
+  const [brandKitHistory, setBrandKitHistory] = useState<BrandKit[]>([])
+  const [mypageDownloadImageUrls, setMypageDownloadImageUrls] = useState<Record<string, string>>({})
+  const [mypageGeneratedLogoCandidates, setMypageGeneratedLogoCandidates] = useState<Record<string, LogoCandidate>>({})
   const [brandKit, setBrandKit] = useState<BrandKit | null>(null)
   const [brandKitError, setBrandKitError] = useState('')
   const [brandKitDownloading, setBrandKitDownloading] = useState(false)
   const [brandKitType, setBrandKitType] = useState<BrandKit['kitType'] | null>(null)
+  const [brandKitPreview, setBrandKitPreview] = useState<{ imageUrls: string[]; label: string } | null>(null)
   const [businessCardModalOpen, setBusinessCardModalOpen] = useState(false)
   const [businessCardInfo, setBusinessCardInfo] = useState<BusinessCardInfoInput>({
     name: '', title: '', company: '', phone: '', email: '', address: '',
@@ -624,7 +631,7 @@ function CustomerApp() {
   }
 
   useEffect(() => {
-    if (!creditModal && !businessCardModalOpen && !resumePromptProject && !finalEditModal && !regenerationConfirmOpen) return
+    if (!creditModal && !businessCardModalOpen && !resumePromptProject && !finalEditModal && !regenerationConfirmOpen && !brandKitPreview) return
 
     const modalRoot = activeModalRef.current
     if (!modalRoot) return
@@ -646,7 +653,9 @@ function CustomerApp() {
     const handleModalKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        if (businessCardModalOpen) {
+        if (brandKitPreview) {
+          setBrandKitPreview(null)
+        } else if (businessCardModalOpen) {
           setBusinessCardModalOpen(false)
           setBusinessCardTarget(null)
           setBusinessCardInfoErrors({})
@@ -689,7 +698,7 @@ function CustomerApp() {
       document.body.style.overflow = previousOverflow
       previouslyFocused?.focus()
     }
-  }, [businessCardModalOpen, creditModal, finalEditModal, regenerationConfirmOpen, resumePromptProject])
+  }, [brandKitPreview, businessCardModalOpen, creditModal, finalEditModal, regenerationConfirmOpen, resumePromptProject])
   const [choiceInfoModal, setChoiceInfoModal] = useState<'ci' | 'bi' | null>(null)
   const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; candidateId?: string; storageKey?: string; svgUrl?: string | null } | null>(null)
   const editorCandidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
@@ -973,6 +982,7 @@ function CustomerApp() {
     void meApi.getBrandKits()
       .then((kits) => {
         if (cancelled) return
+        setBrandKitHistory(kits)
         const latest = selectedCandidateId
           ? kits.find((kit) => kit.candidateId === selectedCandidateId) ?? null
           : kits[0] ?? null
@@ -998,6 +1008,81 @@ function CustomerApp() {
       })
     return () => { cancelled = true }
   }, [loggedIn, mode, selectedCandidateId])
+
+  useEffect(() => {
+    if (!loggedIn || mode !== 'mypage') {
+      setMypageGeneratedLogoCandidates({})
+      return undefined
+    }
+
+    const projectIds = [...new Set([
+      projectId,
+      ...brandKitHistory.map((kit) => kit.projectId),
+    ].filter((value): value is string => Boolean(value)))]
+    if (projectIds.length === 0) {
+      setMypageGeneratedLogoCandidates({})
+      return undefined
+    }
+
+    let cancelled = false
+    void Promise.all(projectIds.map(async (candidateProjectId) => {
+      try {
+        return await projectsApi.getLatestCandidates(candidateProjectId)
+      } catch {
+        return [] as LogoCandidate[]
+      }
+    })).then((candidateGroups) => {
+      if (cancelled) return
+      setMypageGeneratedLogoCandidates(Object.fromEntries(candidateGroups.flat().map((candidate) => [candidate.id, candidate])))
+    })
+
+    return () => { cancelled = true }
+  }, [brandKitHistory, loggedIn, mode, projectId])
+
+  useEffect(() => {
+    if (!loggedIn || mode !== 'mypage' || downloadHistory.length === 0) {
+      setMypageDownloadImageUrls({})
+      return undefined
+    }
+
+    let cancelled = false
+    const objectUrls: string[] = []
+    void Promise.all(downloadHistory.map(async (item) => {
+      const itemId = `download-${item.downloadId}`
+      try {
+        const blob = await downloadAuthenticatedFile(item.imageUrl)
+        if (cancelled) return [itemId, ''] as const
+        const objectUrl = URL.createObjectURL(blob)
+        objectUrls.push(objectUrl)
+        return [itemId, objectUrl] as const
+      } catch {
+        return [itemId, ''] as const
+      }
+    })).then((entries) => {
+      if (cancelled) return
+      setMypageDownloadImageUrls(Object.fromEntries(entries.filter(([, imageUrl]) => imageUrl)))
+    })
+
+    return () => {
+      cancelled = true
+      objectUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
+    }
+  }, [downloadHistory, loggedIn, mode])
+
+  useEffect(() => {
+    if (mode !== 'mypage') return
+    const assetDates = [
+      ...downloadHistory.map((item) => item.downloadedAt.slice(0, 10)),
+      ...brandKitHistory.map((kit) => kit.createdAt?.slice(0, 10) ?? ''),
+      ...Object.values(mypageGeneratedLogoCandidates).map((candidate) => candidate.createdAt.slice(0, 10)),
+    ].filter(Boolean)
+    const latestAssetDate = assetDates.sort((left, right) => right.localeCompare(left))[0]
+    if (latestAssetDate) {
+      setOpenMypageAssetDate((current) => current === latestAssetDate ? current : latestAssetDate)
+    } else if (MYPAGE_MOCK_MODE && !loggedIn) {
+      setOpenMypageAssetDate((current) => current === '2026-08-18' ? current : '2026-08-18')
+    }
+  }, [brandKitHistory, downloadHistory, loggedIn, mode, mypageGeneratedLogoCandidates])
 
   useEffect(() => () => {
     if (onboardingTransitionTimer.current !== null) window.clearTimeout(onboardingTransitionTimer.current)
@@ -1922,7 +2007,7 @@ function CustomerApp() {
     setMode('brand-kit')
   }
 
-  const downloadBrandKitArchive = async (kit: BrandKit) => {
+  const downloadBrandKitArchive = async (kit: BrandKit, onError: (message: string) => void = setBrandKitError) => {
     if (brandKitDownloading) return
     setBrandKitDownloading(true)
     setBrandKitError('')
@@ -1939,7 +2024,7 @@ function CustomerApp() {
       link.remove()
       URL.revokeObjectURL(objectUrl)
     } catch (error) {
-      setBrandKitError(error instanceof Error ? error.message : '브랜드 키트를 다운로드하지 못했어요.')
+      onError(error instanceof Error ? error.message : '브랜드 키트를 다운로드하지 못했어요.')
     } finally {
       setBrandKitDownloading(false)
     }
@@ -3505,7 +3590,7 @@ function CustomerApp() {
 
           {completedBrandKit && brandKitImageUrls.length > 0 ? (
             <section className="brand-kit-result-preview" aria-labelledby="brand-kit-result-title">
-              <div className="brand-kit-result-images">
+              <div className={completedBrandKit.kitType === 'BUSINESS_CARD' ? 'brand-kit-result-images business-card-result-images' : 'brand-kit-result-images'}>
                 {brandKitImageUrls.map((imageUrl, index) => {
                   const sideLabel = completedBrandKit.kitType === 'BUSINESS_CARD'
                     ? index === 0 ? '앞면' : '뒷면'
@@ -3520,7 +3605,10 @@ function CustomerApp() {
                           </a>
                         )}
                       </figcaption>
-                      <img src={imageUrl} alt={`완성된 ${completedBrandKit.kitType === 'BUSINESS_CARD' ? `명함 ${sideLabel}` : '제품 썸네일'} 브랜드 키트`} />
+                      <button className="brand-kit-result-image-button" type="button" aria-label={`${sideLabel} 이미지 크게 보기`} onClick={() => setBrandKitPreview({ imageUrls: [imageUrl], label: sideLabel })}>
+                        <img src={imageUrl} alt={`완성된 ${completedBrandKit.kitType === 'BUSINESS_CARD' ? `명함 ${sideLabel}` : '제품 썸네일'} 브랜드 키트`} />
+                        <span className="brand-kit-result-image-zoom" aria-hidden="true"><ImageIcon size={16} strokeWidth={2} /> 크게 보기</span>
+                      </button>
                     </figure>
                   )
                 })}
@@ -3589,6 +3677,35 @@ function CustomerApp() {
           </div>
         </section>
       </main>
+    )
+  }
+
+  const renderBrandKitPreviewModal = () => {
+    if (!brandKitPreview) return null
+    return (
+      <div
+        ref={activeModalRef}
+        className="modal-backdrop brand-kit-preview-backdrop"
+        role="presentation"
+        onMouseDown={(event) => { if (event.target === event.currentTarget) setBrandKitPreview(null) }}
+      >
+        <section className="brand-kit-preview-modal" role="dialog" aria-modal="true" aria-labelledby="brand-kit-preview-title">
+          <header className="brand-kit-preview-modal-header">
+            <div>
+              <span>브랜드 키트 미리보기</span>
+              <h2 id="brand-kit-preview-title">{brandKitPreview.label}</h2>
+            </div>
+            <button className="brand-kit-preview-close" type="button" aria-label="미리보기 닫기" onClick={() => setBrandKitPreview(null)}>
+              <X aria-hidden="true" size={22} strokeWidth={1.9} />
+            </button>
+          </header>
+          <div className={brandKitPreview.imageUrls.length > 1 ? 'brand-kit-preview-stage is-gallery' : 'brand-kit-preview-stage'}>
+            {brandKitPreview.imageUrls.map((imageUrl, index) => (
+              <img key={`${imageUrl}-${index}`} src={imageUrl} alt={`확대된 ${brandKitPreview.label}${brandKitPreview.imageUrls.length > 1 ? ` ${index === 0 ? '앞면' : '뒷면'}` : ''} 브랜드 키트`} />
+            ))}
+          </div>
+        </section>
+      </div>
     )
   }
 
@@ -3799,32 +3916,85 @@ function CustomerApp() {
         label: '2026. 08. 18.',
         isToday: true,
         items: [
-          { id: 'mock-asset-logo', kind: 'logo', title: '육하원칙 CI 로고', subtitle: '로고 선택 완료 · 오후 1:41', imageUrl: '/mypage/mock-completed-brand.png' },
-          { id: 'mock-asset-card', kind: 'business-card', title: '명함', subtitle: '육하원칙 브랜드킷 · 앞면', imageUrl: '/mypage/mock-brand-kit/lavenor.png' },
-          { id: 'mock-asset-thumbnail', kind: 'thumbnail', title: '제품 썸네일', subtitle: '육하원칙 브랜드킷 · 제품 이미지', imageUrl: '/mypage/mock-brand-kit/aurelis.png' },
+          { id: 'mock-asset-logo', kind: 'logo', title: '육하원칙 CI 로고', subtitle: '로고 선택 완료 · 오후 1:41', imageUrl: '/mypage/mock-completed-brand.png', dateKey: '2026-08-18' },
+          { id: 'mock-asset-card', kind: 'business-card', title: '명함', subtitle: '육하원칙 브랜드킷 · 앞·뒷면', imageUrl: '/business-card-gallery/morvan.png', imageUrls: ['/business-card-gallery/morvan.png', '/business-card-gallery/eloris.png'], dateKey: '2026-08-18' },
+          { id: 'mock-asset-thumbnail', kind: 'thumbnail', title: '제품 썸네일', subtitle: '육하원칙 브랜드킷 · 제품 이미지', imageUrl: '/mypage/mock-brand-kit/aurelis.png', dateKey: '2026-08-18' },
         ],
       },
       {
         dateKey: '2026-08-14',
         label: '2026. 08. 14.',
         items: [
-          { id: 'mock-asset-noirel', kind: 'thumbnail', title: '제품 썸네일', subtitle: 'NOIRÉL 브랜드킷', imageUrl: '/mypage/mock-brand-kit/noirel.png' },
-          { id: 'mock-asset-citrea', kind: 'thumbnail', title: '제품 썸네일', subtitle: 'CITRÉA 브랜드킷', imageUrl: '/mypage/mock-brand-kit/citrea.png' },
+          { id: 'mock-asset-noirel', kind: 'thumbnail', title: '제품 썸네일', subtitle: 'NOIRÉL 브랜드킷', imageUrl: '/mypage/mock-brand-kit/noirel.png', dateKey: '2026-08-14' },
+          { id: 'mock-asset-citrea', kind: 'thumbnail', title: '제품 썸네일', subtitle: 'CITRÉA 브랜드킷', imageUrl: '/mypage/mock-brand-kit/citrea.png', dateKey: '2026-08-14' },
         ],
       },
     ]
-    const actualAssetGroups = downloadHistory.reduce<MypageAssetGroup[]>((groups, item) => {
-      const dateKey = item.downloadedAt.slice(0, 10)
-      const group = groups.find((entry) => entry.dateKey === dateKey)
-      const asset: MypageAssetItem = {
-        id: `download-${item.downloadId}`,
-        kind: 'logo',
-        title: `${item.projectType} 로고`,
-        subtitle: `${new Date(item.downloadedAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 저장`,
-        imageUrl: item.imageUrl,
-      }
+    const downloadedCandidateIds = new Set(downloadHistory.map((item) => item.candidateId))
+    const generatedLogoAssets: MypageAssetItem[] = Object.values(mypageGeneratedLogoCandidates)
+      .filter((candidate) => candidate.storageKey && !downloadedCandidateIds.has(candidate.id))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((candidate) => {
+        const relatedKit = brandKitHistory.find((kit) => kit.candidateId === candidate.id)
+        const projectLabel = relatedKit?.kitType === 'THUMBNAIL' ? 'BI' : relatedKit?.kitType === 'BUSINESS_CARD' ? 'CI' : '생성'
+        const imageUrl = getLogoCandidateImageUrl(candidate.storageKey)
+        return {
+          id: `generated-logo-${candidate.id}`,
+          kind: 'logo',
+          title: `${projectLabel} 로고`,
+          subtitle: `${new Date(candidate.createdAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성`,
+          imageUrl,
+          imageUrls: [imageUrl],
+          dateKey: candidate.createdAt.slice(0, 10),
+        }
+      })
+    const actualAssetItems: MypageAssetItem[] = [
+      ...downloadHistory.map((item) => {
+        const dateKey = item.downloadedAt.slice(0, 10)
+        return {
+          id: `download-${item.downloadId}`,
+          kind: 'logo' as const,
+          title: `${item.projectType} 로고`,
+          subtitle: `${new Date(item.downloadedAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 저장`,
+          imageUrl: item.imageUrl,
+          dateKey,
+        }
+      }),
+      ...generatedLogoAssets,
+      ...brandKitHistory.flatMap((kit): MypageAssetItem[] => {
+        if (kit.status !== 'SUCCEEDED' || !kit.createdAt) return []
+        const storageKeys = (kit.storageKeys?.length ? kit.storageKeys : kit.storageKey ? [kit.storageKey] : []).filter(Boolean)
+        const dateKey = kit.createdAt.slice(0, 10)
+        const imageUrls = storageKeys.slice(0, kit.kitType === 'BUSINESS_CARD' ? 2 : 1).map(getLogoCandidateImageUrl)
+        if (imageUrls.length === 0) return []
+        if (kit.kitType === 'BUSINESS_CARD') {
+          return [{
+            id: `brand-kit-${kit.id}`,
+            kind: 'business-card' as const,
+            title: '명함',
+            subtitle: `${new Date(kit.createdAt as string).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성 · 앞·뒷면`,
+            imageUrl: imageUrls[0],
+            imageUrls,
+            brandKit: kit,
+            dateKey,
+          }]
+        }
+        return [{
+          id: `brand-kit-${kit.id}`,
+          kind: 'thumbnail' as const,
+          title: '제품 썸네일',
+          subtitle: `${new Date(kit.createdAt as string).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성`,
+          imageUrl: imageUrls[0],
+          imageUrls,
+          brandKit: kit,
+          dateKey,
+        }]
+      }),
+    ]
+    const actualAssetGroups = actualAssetItems.reduce<MypageAssetGroup[]>((groups, asset) => {
+      const group = groups.find((entry) => entry.dateKey === asset.dateKey)
       if (group) group.items.push(asset)
-      else groups.push({ dateKey, label: `${dateKey.slice(0, 4)}. ${dateKey.slice(5, 7)}. ${dateKey.slice(8, 10)}.`, items: [asset] })
+      else groups.push({ dateKey: asset.dateKey, label: `${asset.dateKey.slice(0, 4)}. ${asset.dateKey.slice(5, 7)}. ${asset.dateKey.slice(8, 10)}.`, items: [asset] })
       return groups
     }, []).sort((a, b) => b.dateKey.localeCompare(a.dateKey)).map((group, index) => ({ ...group, isToday: index === 0 }))
     const assetGroups = useMypageMock ? mockAssetGroups : actualAssetGroups
@@ -3840,9 +4010,23 @@ function CustomerApp() {
       setCompanyMotto(profileCompanyMottoDraft.trim())
       setProfileEditing(false)
     }
+    const resolveMypageAssetImageUrls = (item: MypageAssetItem) => {
+      const sourceUrls = item.imageUrls?.length ? item.imageUrls : [item.imageUrl]
+      if (!useMypageMock && item.kind === 'logo' && !sourceUrls[0]?.startsWith('/uploads/') && !sourceUrls[0]?.startsWith('/mypage/')) {
+        const protectedImageUrl = mypageDownloadImageUrls[item.id]
+        return protectedImageUrl ? [protectedImageUrl] : []
+      }
+      return sourceUrls.filter(Boolean)
+    }
     const downloadMypageAsset = async (item: MypageAssetItem) => {
+      if (item.brandKit) {
+        setProjectError('')
+        await downloadBrandKitArchive(item.brandKit, (message) => setProjectError(message))
+        return
+      }
       try {
-        if (item.imageUrl.startsWith('/')) {
+        const isPublicAsset = item.imageUrl.startsWith('/uploads/') || item.imageUrl.startsWith('/mypage/')
+        if (isPublicAsset) {
           const link = document.createElement('a')
           link.href = item.imageUrl
           link.download = `genmark-${item.kind}-${item.id}.png`
@@ -3920,8 +4104,31 @@ function CustomerApp() {
                     {isOpen && (
                       <div className="asset-item-list" id={`asset-items-${group.dateKey}`}>
                         {group.items.map((item) => (
-                          <article className="asset-item" key={item.id}>
-                            <div className={`asset-item-thumb asset-item-thumb-${item.kind}`}><img src={item.imageUrl} alt={`${item.title} 미리보기`} /></div>
+                          <article className={item.kind === 'business-card' ? 'asset-item asset-item-business-card' : 'asset-item'} key={item.id}>
+                            {(() => {
+                              const imageUrls = resolveMypageAssetImageUrls(item)
+                              const imageUrl = imageUrls[0] ?? ''
+                              const isComposite = imageUrls.length > 1
+                              return (
+                                isComposite && item.kind === 'business-card' ? (
+                                  <div className="asset-item-business-card-faces" aria-label="명함 앞면과 뒷면 미리보기">
+                                    {imageUrls.map((previewUrl, index) => (
+                                      <button className="asset-item-business-card-face" type="button" key={`${previewUrl}-${index}`} aria-label={`명함 ${index === 0 ? '앞면' : '뒷면'} 크게 보기`} onClick={() => setBrandKitPreview({ imageUrls, label: item.title })}>
+                                        <img src={previewUrl} alt={`명함 ${index === 0 ? '앞면' : '뒷면'} 미리보기`} onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.closest('.asset-item-business-card-face')?.classList.add('is-missing') }} />
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className={imageUrl ? `asset-item-thumb asset-item-thumb-${item.kind}` : `asset-item-thumb asset-item-thumb-${item.kind} is-missing`}>
+                                    {imageUrl ? (
+                                      <button className="asset-item-thumb-button" type="button" aria-label={`${item.title} 크게 보기`} onClick={() => setBrandKitPreview({ imageUrls, label: item.title })}>
+                                        <img src={imageUrl} alt={`${item.title} 미리보기`} onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.closest('.asset-item-thumb')?.classList.add('is-missing') }} />
+                                      </button>
+                                    ) : <ImageIcon aria-hidden="true" size={22} strokeWidth={1.7} />}
+                                  </div>
+                                )
+                              )
+                            })()}
                             <div className="asset-item-copy"><span className={`asset-kind asset-kind-${item.kind}`}>{assetKindLabel[item.kind]}</span><strong>{item.title}</strong><p>{item.subtitle}</p></div>
                             <button className="asset-download-button" type="button" aria-label={`${item.title} 다운로드`} onClick={() => void downloadMypageAsset(item)}><Download aria-hidden="true" size={19} strokeWidth={1.9} /></button>
                           </article>
@@ -3935,7 +4142,6 @@ function CustomerApp() {
           </section>
 
           {projectError && <p className="project-error mypage-project-error" role="alert">{projectError}</p>}
-          <button className="survey-entry-card" type="button" onClick={() => { setSurveySubmitted(false); setMode('survey') }}><span><MessageSquare aria-hidden="true" size={23} strokeWidth={1.8} /></span><div><strong>서비스를 이용해보셨나요?</strong><p>더 쉬운 브랜드 제작을 위해 의견을 들려주세요.</p></div><ChevronRight aria-hidden="true" size={21} strokeWidth={1.8} /></button>
         </section>
       </main>
     )
@@ -4330,6 +4536,7 @@ function CustomerApp() {
       {regenerationConfirmOpen && renderRegenerationConfirmModal()}
       {businessCardModalOpen && renderBusinessCardModal()}
       {resumePromptProject && renderResumePromptModal()}
+      {brandKitPreview && renderBrandKitPreviewModal()}
     </div>
   )
 }
