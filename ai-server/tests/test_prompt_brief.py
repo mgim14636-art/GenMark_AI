@@ -53,14 +53,17 @@ def test_no_shape_dictation(phrase):
     assert phrase.lower() not in _p().lower()
 
 
-def test_brand_name_is_given_to_model_when_latin():
+def test_brand_name_is_never_given_to_model():
+    """영문 브랜드명도 모델에게 맡기면 안 된다 - 아이콘과 겹치거나 글자가 깨지는
+    사고가 반복 확인됐다(실측: "GlowLab"에서 o/a가 잎 모티프에 가려짐). 항상
+    심볼만 받아 이후 폰트로 합성한다."""
     prompt = _p()
-    assert '"Tree"' in prompt
-    assert "designed together as one lockup" in prompt
+    assert '"Tree"' not in prompt
+    assert "designed together as one lockup" not in prompt
+    assert "no letters" in prompt
 
 
-def test_korean_brand_name_falls_back_to_symbol_only():
-    """Recraft는 한글 글자를 제대로 그리지 못한다 - 모델에게 맡기면 안 된다."""
+def test_korean_brand_name_also_symbol_only():
     prompt = _p(company_name="루나 코스매틱")
     assert "루나" not in prompt
     assert "no letters" in prompt
@@ -100,19 +103,20 @@ def test_legacy_still_available_for_comparison():
     assert len(build_prompt_legacy(BASE, 0)) > len(_p())
 
 
-# --- 모델이 그린 워드마크 위에 또 얹지 않는다 -------------------------------
-# 실측: brief 프롬프트로 바꾼 뒤 모델이 "Tree"를 그렸는데 logo_composer가
-# 그 아래 "Tree"를 또 합성해, 브랜드명이 두 번 찍힌 결과가 4장 전부 나왔다.
-def test_model_draws_wordmark_for_latin_name():
+# --- 브랜드명은 항상 폰트로 합성한다, 모델에게 맡기지 않는다 -----------------
+# 실측: 영문 브랜드명이어도 모델이 그린 락업이 아이콘과 겹치거나 글자가 깨지는
+# 사고가 반복됐다("GlowLab"에서 o/a가 잎 모티프에 가려짐). 언어와 무관하게 항상
+# 이 서버가 폰트로 합성해 정확한 글자를 보장한다.
+def test_model_never_draws_wordmark_for_latin_name():
     from app.services.prompt_service import model_draws_wordmark
 
-    assert model_draws_wordmark(BASE) is True
+    assert model_draws_wordmark(BASE) is False
 
 
-def test_composer_skips_overlay_when_model_drew_it():
+def test_composer_always_overlays_latin_name():
     from app.services.logo_composer import _wants_text_overlay
 
-    assert _wants_text_overlay(BASE, "혼합형", "Tree") is False
+    assert _wants_text_overlay(BASE, "혼합형", "Tree") is True
 
 
 def test_composer_still_overlays_korean_name():

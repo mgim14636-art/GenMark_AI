@@ -236,6 +236,40 @@ def strip_background(svg: str) -> str:
 
     return re.sub(r'<path[^>]*\sd="([^"]+)"[^>]*/>', _sub, svg, count=3)
 
+def strip_stray_specks(svg: str, min_diag_ratio: float = 0.02) -> str:
+    """심볼 사이 빈 공간에 떠 있는, 다른 도형과 이어지지 않은 미세 조각을 지운다.
+
+    Recraft 벡터 응답이 이따금 아이콘 사이 여백에 조형과 무관한 작은 선 조각을
+    남긴다(실측: "GlowLab" 잎+물방울 아이콘 - path 8개 중 5개가 캔버스 대각선의
+    1% 미만인 스크래치였고, 그중 하나는 눈에 보일 만큼 커서 로고가 "깨진" 것처럼
+    보였다). 실제 조형 요소는 실측 최소값(11.86%)에 비해 훨씬 작으므로, 대각선
+    비율이 min_diag_ratio 미만인 path는 노이즈로 보고 지운다.
+
+    strip_background 직후, rasterize_svg 이전에 호출해야 한다 - 그래야 래스터
+    (PNG)와 벡터(SVG) 출력이 같은 조각을 공유하지 않는다.
+    """
+    m = re.search(r'viewBox="\s*([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)', svg)
+    if not m:
+        return svg
+    vw, vh = float(m.group(3)), float(m.group(4))
+    canvas_diag = (vw ** 2 + vh ** 2) ** 0.5
+    if canvas_diag <= 0:
+        return svg
+
+    def _is_speck(d: str) -> bool:
+        nums = [float(v) for v in re.findall(r"[-\d.]+", d)]
+        xs, ys = nums[0::2], nums[1::2]
+        if not xs or not ys:
+            return False
+        diag = ((max(xs) - min(xs)) ** 2 + (max(ys) - min(ys)) ** 2) ** 0.5
+        return diag / canvas_diag < min_diag_ratio
+
+    def _sub(mo):
+        return "" if _is_speck(mo.group(1)) else mo.group(0)
+
+    return re.sub(r'<path[^>]*\sd="([^"]+)"[^>]*/>', _sub, svg)
+
+
 # 흰색 계열은 배경·하이라이트로 쓰이므로 색 통일 대상에서 뺀다. 이걸 칠해버리면
 # 속을 비워 둔 선 로고의 안쪽이 메워지고, 도형에 뚫어 둔 구멍도 막힌다.
 _NEAR_WHITE = re.compile(r"^#(?:fff(?:fff)?|f[ef]f[ef]f[ef])$", re.I)
@@ -455,6 +489,7 @@ def _call_image_api(prompt: str, seed: int | None = None):
         raw = base64.b64decode(data[0]["b64_json"])
         if is_vector() or raw.lstrip()[:5] in (b"<?xml", b"<svg "):
             svg = strip_background(raw.decode("utf-8"))
+            svg = strip_stray_specks(svg)
             return rasterize_svg(svg), svg
         return Image.open(BytesIO(raw)).convert("RGBA"), None
 

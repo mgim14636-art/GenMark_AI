@@ -814,16 +814,17 @@ BRIEF_TONE = {
     "미니얼하고 직관적인": "minimal and clean",
 }
 
-# 스타일별 한 줄. 한글 브랜드명일 때는 워드마크를 모델에게 맡길 수 없다 -
-# Recraft는 한글 글자를 제대로 그리지 못한다. 이 경우 심볼만 받아
-# logo_composer가 폰트로 합성한다(기존 경로).
-BRIEF_STYLE = {
-    "혼합형": 'The symbol and the brand name are designed together as one lockup.',
-    "워드마크": "A wordmark built from the brand name itself.",
-    "레터마크": "A monogram built from the brand initial.",
+# 스타일별 한 줄. 브랜드명(글자)은 모델에게 절대 맡기지 않는다 - 영문 브랜드명도
+# 아이콘과 겹치거나 글자가 깨지는 경우가 반복 확인됐다(실측: "GlowLab"의 o/a가
+# 잎 모티프에 가려짐, 재시도해도 다른 글자가 또 깨짐). 항상 심볼만 받아
+# logo_composer/svg_composer가 폰트로 정확하게 합성한다(model_draws_wordmark가
+# 항상 False인 이유와 같다).
+BRIEF_STYLE_NO_TEXT = {
+    "혼합형": "A standalone symbol designed to pair cleanly with a separately typeset brand name, with no letters.",
+    "워드마크": "An abstract symbol inspired by the brand's wordmark shape, with no readable letters.",
+    "레터마크": "An abstract monogram-style symbol inspired by the brand initial, with no readable letters.",
     "심볼": "A standalone symbol with no letters.",
 }
-BRIEF_STYLE_NO_TEXT = "A standalone symbol with no letters, to be paired with type later."
 
 # 시안마다 바꾸는 것은 "조형 방식"이 아니라 "발상의 각도"다. 획 굵기나 도형 개수
 # 같은 조형 지시를 시안별로 바꾸면 앞서 실패한 v1으로 되돌아간다.
@@ -838,21 +839,14 @@ BRIEF_ANGLES = (
 def model_draws_wordmark(survey: dict) -> bool:
     """모델이 브랜드명까지 직접 그리는가.
 
-    brief 프롬프트는 영문 브랜드명 + 텍스트를 포함하는 스타일일 때 모델에게
-    워드마크까지 맡긴다. 이때 logo_composer가 폰트로 이름을 또 얹으면 브랜드명이
-    두 번 나온다(실측 확인됨). 프롬프트와 합성이 같은 판단을 쓰도록 여기 한 곳에
-    모은다.
-
-    한글은 Recraft가 제대로 그리지 못하므로 항상 False - 심볼만 받아 합성한다.
-    legacy 프롬프트는 글자를 금지하므로 역시 False.
+    항상 False다. 예전에는 영문 브랜드명 + 텍스트 포함 스타일일 때 모델에게
+    워드마크까지 맡겼는데, 아이콘과 겹치거나 글자가 깨지는 사고가 반복
+    확인되어(실측: "GlowLab"에서 o/a가 잎 모티프에 가려짐) 브랜드명은 언어와
+    무관하게 항상 이 서버가 폰트로 합성하기로 했다 — build_prompt_brief도
+    이제 브랜드명 문자열을 프롬프트에 절대 넣지 않는다. 호출부(logo_composer,
+    brand_kit_service)와 판단을 한 곳에서 맞추기 위해 함수는 그대로 남긴다.
     """
-    if PROMPT_STYLE in ("legacy", "v1", "old"):
-        return False
-    survey = _normalize_survey(survey)
-    if survey.get("style", "혼합형") not in ("혼합형", "워드마크", "레터마크"):
-        return False
-    brand = " ".join((survey.get("brand_name") or "").split())
-    return bool(brand) and not _HANGUL.search(brand)
+    return False
 
 
 # 번역 실패 시 motif_translation_service가 넣는 자리표시자. 그 자체로는 무엇을
@@ -864,26 +858,19 @@ _SUBJECT_PLACEHOLDERS = (
 
 
 def build_prompt_brief(survey: dict, variant_index: int = 0) -> str:
-    """설문 사실만 담은 짧은 브리프. 조형은 모델에게 맡긴다."""
+    """설문 사실만 담은 짧은 브리프. 조형은 모델에게 맡긴다.
+
+    브랜드명 문자열은 언어와 무관하게 절대 포함하지 않는다 - model_draws_wordmark의
+    docstring 참고. 모델은 항상 심볼만 그리고, 브랜드명은 이후 logo_composer/
+    svg_composer가 폰트로 합성한다.
+    """
     survey = _normalize_survey(survey)
 
     industry = INDUSTRY_MAP.get(survey.get("industry", ""), INDUSTRY_MAP["기타"])
-    brand = " ".join((survey.get("brand_name") or "").split())
     style_key = survey.get("style", "혼합형")
+    style_line = BRIEF_STYLE_NO_TEXT.get(style_key, BRIEF_STYLE_NO_TEXT["혼합형"])
 
-    # 한글 브랜드명은 모델이 못 그린다 -> 심볼만 받는다.
-    model_can_draw_name = bool(brand) and not _HANGUL.search(brand)
-    if style_key in ("혼합형", "워드마크", "레터마크") and not model_can_draw_name:
-        style_line = BRIEF_STYLE_NO_TEXT
-    else:
-        style_line = BRIEF_STYLE.get(style_key, BRIEF_STYLE["혼합형"])
-
-    lines = []
-    if brand and model_can_draw_name:
-        lines.append(f'A logo for {industry} called "{brand}".')
-    else:
-        lines.append(f"A logo for {industry}.")
-    lines.append(style_line)
+    lines = [f"A logo for {industry}.", style_line]
 
     named = _manual_color_names(survey)
     if named:
