@@ -16,6 +16,15 @@ const TRADEMARK_SCORE_FALLBACK = 23
 // 원래의 비로그인 빈 상태로 되돌릴 때는 false로 바꾸면 됩니다.
 const MYPAGE_MOCK_MODE = import.meta.env.DEV
 
+const getLocalDateKey = (value: Date | string = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return typeof value === 'string' ? value.slice(0, 10) : ''
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 type ViewMode = 'home' | 'hero' | 'logo-intro' | 'onboarding' | 'industry' | 'brand-details' | 'company-details' | 'choice' | 'tone' | 'style' | 'final' | 'loading' | 'trademark-loading' | 'trademark-selection' | 'trademark-result' | 'result' | 'brand-kit' | 'edit' | 'login' | 'mypage' | 'survey'
 type LoginDestination = 'home' | 'industry' | 'choice' | 'mypage'
 type LoginReturnMode = 'hero' | 'home'
@@ -699,6 +708,28 @@ function CustomerApp() {
       previouslyFocused?.focus()
     }
   }, [brandKitPreview, businessCardModalOpen, creditModal, finalEditModal, regenerationConfirmOpen, resumePromptProject])
+
+  useEffect(() => {
+    const handleBackgroundWheel = (event: WheelEvent) => {
+      if (event.defaultPrevented || document.body.style.overflow === 'hidden' || event.deltaY === 0) return
+      const shell = document.querySelector<HTMLElement>('.app-shell')
+      const target = event.target
+      if (!shell || (target instanceof Node && shell.contains(target))) return
+
+      const main = shell.querySelector<HTMLElement>(':scope > main')
+      if (!main || main.scrollHeight <= main.clientHeight) return
+
+      const maxScrollTop = main.scrollHeight - main.clientHeight
+      const nextScrollTop = Math.min(maxScrollTop, Math.max(0, main.scrollTop + event.deltaY))
+      if (nextScrollTop === main.scrollTop) return
+      main.scrollTop = nextScrollTop
+      event.preventDefault()
+    }
+
+    window.addEventListener('wheel', handleBackgroundWheel, { passive: false })
+    return () => window.removeEventListener('wheel', handleBackgroundWheel)
+  }, [mode])
+
   const [choiceInfoModal, setChoiceInfoModal] = useState<'ci' | 'bi' | null>(null)
   const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; candidateId?: string; storageKey?: string; svgUrl?: string | null } | null>(null)
   const editorCandidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
@@ -1071,14 +1102,16 @@ function CustomerApp() {
 
   useEffect(() => {
     if (mode !== 'mypage') return
+    const todayDateKey = getLocalDateKey()
     const assetDates = [
-      ...downloadHistory.map((item) => item.downloadedAt.slice(0, 10)),
-      ...brandKitHistory.map((kit) => kit.createdAt?.slice(0, 10) ?? ''),
-      ...Object.values(mypageGeneratedLogoCandidates).map((candidate) => candidate.createdAt.slice(0, 10)),
+      ...downloadHistory.map((item) => getLocalDateKey(item.downloadedAt)),
+      ...brandKitHistory.map((kit) => kit.createdAt ? getLocalDateKey(kit.createdAt) : ''),
+      ...Object.values(mypageGeneratedLogoCandidates).map((candidate) => getLocalDateKey(candidate.createdAt)),
     ].filter(Boolean)
     const latestAssetDate = assetDates.sort((left, right) => right.localeCompare(left))[0]
-    if (latestAssetDate) {
-      setOpenMypageAssetDate((current) => current === latestAssetDate ? current : latestAssetDate)
+    const preferredOpenDate = assetDates.includes(todayDateKey) ? todayDateKey : latestAssetDate
+    if (preferredOpenDate) {
+      setOpenMypageAssetDate((current) => current === preferredOpenDate ? current : preferredOpenDate)
     } else if (MYPAGE_MOCK_MODE && !loggedIn) {
       setOpenMypageAssetDate((current) => current === '2026-08-18' ? current : '2026-08-18')
     }
@@ -3886,6 +3919,7 @@ function CustomerApp() {
       )
     }
     const useMypageMock = MYPAGE_MOCK_MODE && !authRestoring && !loggedIn
+    const todayDateKey = getLocalDateKey()
     const displayUserName = useMypageMock ? '김명은' : authUser?.name?.trim() || '사용자'
     const displayEmail = useMypageMock ? '연결된 이메일 정보가 없어요. tkss1217@gmail.com' : authUser?.email?.trim() || '연결된 이메일 정보가 없어요.'
     const displayCompanyName = useMypageMock ? '육하원칙' : companyName.trim() || '아직 입력된 회사명이 없어요.'
@@ -3894,7 +3928,7 @@ function CustomerApp() {
       {
         dateKey: '2026-08-18',
         label: '2026. 08. 18.',
-        isToday: true,
+        isToday: '2026-08-18' === todayDateKey,
         items: [
           { id: 'mock-asset-logo', kind: 'logo', title: '육하원칙 CI 로고', subtitle: '로고 선택 완료 · 오후 1:41', imageUrl: '/mypage/mock-completed-brand.png', dateKey: '2026-08-18' },
           { id: 'mock-asset-card', kind: 'business-card', title: '명함', subtitle: '육하원칙 브랜드킷 · 앞·뒷면', imageUrl: '/business-card-gallery/morvan.png', imageUrls: ['/business-card-gallery/morvan.png', '/business-card-gallery/eloris.png'], dateKey: '2026-08-18' },
@@ -3925,12 +3959,12 @@ function CustomerApp() {
           subtitle: `${new Date(candidate.createdAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성`,
           imageUrl,
           imageUrls: [imageUrl],
-          dateKey: candidate.createdAt.slice(0, 10),
+          dateKey: getLocalDateKey(candidate.createdAt),
         }
       })
     const actualAssetItems: MypageAssetItem[] = [
       ...downloadHistory.map((item) => {
-        const dateKey = item.downloadedAt.slice(0, 10)
+        const dateKey = getLocalDateKey(item.downloadedAt)
         return {
           id: `download-${item.downloadId}`,
           kind: 'logo' as const,
@@ -3944,7 +3978,7 @@ function CustomerApp() {
       ...brandKitHistory.flatMap((kit): MypageAssetItem[] => {
         if (kit.status !== 'SUCCEEDED' || !kit.createdAt) return []
         const storageKeys = (kit.storageKeys?.length ? kit.storageKeys : kit.storageKey ? [kit.storageKey] : []).filter(Boolean)
-        const dateKey = kit.createdAt.slice(0, 10)
+        const dateKey = getLocalDateKey(kit.createdAt)
         const imageUrls = storageKeys.slice(0, kit.kitType === 'BUSINESS_CARD' ? 2 : 1).map(getLogoCandidateImageUrl)
         if (imageUrls.length === 0) return []
         if (kit.kitType === 'BUSINESS_CARD') {
@@ -3976,7 +4010,7 @@ function CustomerApp() {
       if (group) group.items.push(asset)
       else groups.push({ dateKey: asset.dateKey, label: `${asset.dateKey.slice(0, 4)}. ${asset.dateKey.slice(5, 7)}. ${asset.dateKey.slice(8, 10)}.`, items: [asset] })
       return groups
-    }, []).sort((a, b) => b.dateKey.localeCompare(a.dateKey)).map((group, index) => ({ ...group, isToday: index === 0 }))
+    }, []).sort((a, b) => b.dateKey.localeCompare(a.dateKey)).map((group) => ({ ...group, isToday: group.dateKey === todayDateKey }))
     const assetGroups = useMypageMock ? mockAssetGroups : actualAssetGroups
     const assetKindLabel: Record<MypageAssetKind, string> = { logo: '로고', 'business-card': '명함', thumbnail: '썸네일' }
     const beginProfileEdit = () => {
