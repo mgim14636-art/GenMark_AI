@@ -1832,6 +1832,18 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .filter-button.active { border-color: transparent; color: #fff; background: linear-gradient(100deg, #ff5c9d, #9950ff); box-shadow: none; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; margin: 20px 0 14px; }
 .section-heading h2 { margin: 0; color: #1f2028; font-size: 29px; font-weight: 700; letter-spacing: -.08em; }
+/* 배너 화살표와 같은 패턴: 평소 숨어 있다가 갤러리에 마우스를 올리면 나타난다. */
+.gallery-scroll-area { position: relative; }
+.gallery-side-arrow { position: absolute; top: 50%; z-index: 2; display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid rgb(0 0 0 / .06); border-radius: 50%; padding: 0; color: #242631; background: rgb(255 255 255 / .92); box-shadow: 0 6px 18px rgb(53 48 75 / .16); opacity: 0; cursor: pointer; transform: translateY(-50%); transition: opacity 160ms ease, transform 160ms ease, box-shadow 160ms ease; pointer-events: none; }
+.gallery-scroll-area:hover .gallery-side-arrow, .gallery-side-arrow:focus-visible { opacity: 1; pointer-events: auto; }
+.gallery-side-arrow:hover { box-shadow: 0 8px 22px rgb(53 48 75 / .22); transform: translateY(-50%) scale(1.06); }
+.gallery-side-arrow:focus-visible { outline: 2px solid #ff58c2; outline-offset: 3px; }
+.gallery-side-arrow.prev { left: 4px; }
+.gallery-side-arrow.next { right: 4px; }
+@media (hover: none) {
+  .gallery-side-arrow { opacity: 1; pointer-events: auto; }
+}
+
 .gallery-track { display: flex; gap: 18px; overflow-x: auto; padding: 2px 2px 16px; scroll-snap-type: x mandatory; scroll-behavior: smooth; cursor: grab; touch-action: pan-y; }
 .gallery-track.is-dragging { cursor: grabbing; scroll-snap-type: none; scroll-behavior: auto; }
 .gallery-track.is-dragging .gallery-card { user-select: none; }
@@ -2236,8 +2248,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 }
 
 .onboarding-step-2 .onboarding-brand .brand-emblem {
-  width: 68px;
-  height: 80px;
+  width: 50px;
+  height: 58px;
   color: #b92fff;
 }
 

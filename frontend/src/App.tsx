@@ -184,6 +184,14 @@ const galleryItems = [
   { id: 'lysenne', name: 'LYSENNE', category: '워드마크', meta: '뷰티 · 워드마크', likes: '860', image: '/curation-gallery/lysenne.png', position: '50% 50%', tone: 'lysenne' },
 ]
 
+const businessCardGalleryItems = [
+  { id: 'nevia-card', name: 'NEVIA', category: '명함', meta: '미니멀 · 내추럴', likes: '1.8k', image: '/business-card-gallery/nevia.png', position: '50% 50%', tone: 'nevia' },
+  { id: 'morvan-card', name: 'MORVAN', category: '명함', meta: '브라운 · 내추럴', likes: '1.5k', image: '/business-card-gallery/morvan.png', position: '50% 50%', tone: 'morvan' },
+  { id: 'eloris-card', name: 'ELORIS', category: '명함', meta: '라벤더 · 감성', likes: '1.3k', image: '/business-card-gallery/eloris.png', position: '50% 50%', tone: 'eloris' },
+  { id: 'vitara-card', name: 'VITARA', category: '명함', meta: '골드 · 내추럴', likes: '1.1k', image: '/business-card-gallery/vitara.png', position: '50% 50%', tone: 'vitara' },
+  { id: 'aurion-card', name: 'AURION', category: '명함', meta: '네이비 · 프리미엄', likes: '980', image: '/business-card-gallery/aurion.png', position: '50% 50%', tone: 'aurion' },
+]
+
 const productGalleryItems = [
   { id: 'lavenor-product', name: 'LAVENOR', category: '클렌저', meta: '라벤더 · 포밍 클렌저', likes: '2.4k', image: '/product-gallery/lavenor.png', position: '50% 50%', tone: 'lavenor' },
   { id: 'solairea-product', name: 'SOLAIREA', category: '선케어', meta: '선밤 · SPF 50', likes: '2.1k', image: '/product-gallery/solairea.png', position: '50% 50%', tone: 'solairea' },
@@ -195,14 +203,6 @@ const productGalleryItems = [
   { id: 'citrea-product', name: 'CITRÉA', category: '미스트', meta: '시트러스 · 페이셜 미스트', likes: '1.1k', image: '/product-gallery/citrea.png', position: '50% 50%', tone: 'citrea' },
   { id: 'aurelis-product', name: 'AURELIS', category: '바디로션', meta: '시트러스 · 바디 로션', likes: '980', image: '/product-gallery/aurelis.png', position: '50% 50%', tone: 'aurelis' },
   { id: 'terraluna-product', name: 'TERRALUNA', category: '토너', meta: '보태니컬 · 클라리파잉 토너', likes: '860', image: '/product-gallery/terraluna.png', position: '50% 50%', tone: 'terraluna' },
-]
-
-const businessCardGalleryItems = [
-  { id: 'nevia-card', name: 'NEVIA', category: '명함', meta: '미니멀 · 내추럴', likes: '1.8k', image: '/business-card-gallery/nevia.png', position: '50% 50%', tone: 'nevia' },
-  { id: 'morvan-card', name: 'MORVAN', category: '명함', meta: '브라운 · 내추럴', likes: '1.5k', image: '/business-card-gallery/morvan.png', position: '50% 50%', tone: 'morvan' },
-  { id: 'eloris-card', name: 'ELORIS', category: '명함', meta: '라벤더 · 감성', likes: '1.3k', image: '/business-card-gallery/eloris.png', position: '50% 50%', tone: 'eloris' },
-  { id: 'vitara-card', name: 'VITARA', category: '명함', meta: '골드 · 내추럴', likes: '1.1k', image: '/business-card-gallery/vitara.png', position: '50% 50%', tone: 'vitara' },
-  { id: 'aurion-card', name: 'AURION', category: '명함', meta: '네이비 · 프리미엄', likes: '980', image: '/business-card-gallery/aurion.png', position: '50% 50%', tone: 'aurion' },
 ]
 
 const surveyImprovementOptions: SurveyImprovement[] = ['로고 생성·재생성', '브랜드 맞춤 로고', '로고 수정', '유사 상표 확인', '로고 저장·활용', '기타']
@@ -1020,6 +1020,17 @@ function CustomerApp() {
     setLikedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   }
 
+  const scrollTrackByPage = (track: HTMLDivElement | null, direction: number) => {
+    if (!track) return
+    const maxScroll = track.scrollWidth - track.clientWidth
+    const target = Math.min(maxScroll, Math.max(0, track.scrollLeft + direction * track.clientWidth))
+    track.scrollTo({ left: target, behavior: 'smooth' })
+  }
+
+  const scrollGallery = (direction: number) => {
+    scrollTrackByPage(galleryRef.current, direction)
+  }
+
   const handleGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     const track = galleryRef.current
     if (!track || event.button !== 0) return
@@ -1048,6 +1059,10 @@ function CustomerApp() {
     track.classList.remove('is-dragging')
   }
 
+  const scrollProductGallery = (direction: number) => {
+    scrollTrackByPage(productGalleryRef.current, direction)
+  }
+
   const handleProductGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     const track = productGalleryRef.current
     if (!track || event.button !== 0) return
@@ -1074,6 +1089,10 @@ function CustomerApp() {
     isDraggingProductGallery.current = false
     if (track.hasPointerCapture(event.pointerId)) track.releasePointerCapture(event.pointerId)
     track.classList.remove('is-dragging')
+  }
+
+  const scrollBusinessCardGallery = (direction: number) => {
+    scrollTrackByPage(businessCardGalleryRef.current, direction)
   }
 
   const handleBusinessCardGalleryPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -1361,12 +1380,16 @@ function CustomerApp() {
     setMode('logo-intro')
   }
 
-  const startLogoCreationFromIntro = () => {
+  const startLogoCreationFromIntro = async () => {
     setIndustryBackMode('home')
     if (!loggedIn) {
       setLoginDestination('industry')
       setLoginReturnMode('home')
       setMode('login')
+      return
+    }
+    if (projectId) {
+      await presentResumePrompt(projectId, () => setMode('industry'), { skipSilentResume: true })
       return
     }
     setMode('industry')
@@ -2101,7 +2124,7 @@ function CustomerApp() {
       <div className="onboarding-overlay" />
       <section className="onboarding-content" aria-labelledby="onboarding-title">
         <div className="onboarding-intro">
-          <div className="onboarding-brand"><span>GenMark</span></div>
+          <div className="onboarding-brand"><BrandLogo /><span>GenMark AI</span></div>
           <div className="onboarding-step"><span>{onboardingStep} / 2</span></div>
           {onboardingStep === 1 ? (
             <h1 id="onboarding-title">로고를 어디에<br /><strong>사용할 예정인가요?</strong></h1>
@@ -4293,26 +4316,30 @@ function CustomerApp() {
                 </button>
               ))}
             </div>
-            <div
-              className="gallery-track"
-              ref={galleryRef}
-              onPointerDown={handleGalleryPointerDown}
-              onPointerMove={handleGalleryPointerMove}
-              onPointerUp={handleGalleryPointerUp}
-              onPointerCancel={handleGalleryPointerUp}
-            >
-              {filteredItems.map((item) => {
-                const liked = likedIds.includes(item.id)
-                return (
-                  <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }}>
-                      <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
-                        <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
-                      </button>
-                    </div>
-                  </article>
-                )
-              })}
+            <div className="gallery-scroll-area">
+              <button type="button" className="gallery-side-arrow prev" aria-label="이전 로고 묶음 보기" onClick={() => scrollGallery(-1)}><ChevronLeft aria-hidden="true" size={20} strokeWidth={2} /></button>
+              <div
+                className="gallery-track"
+                ref={galleryRef}
+                onPointerDown={handleGalleryPointerDown}
+                onPointerMove={handleGalleryPointerMove}
+                onPointerUp={handleGalleryPointerUp}
+                onPointerCancel={handleGalleryPointerUp}
+              >
+                {filteredItems.map((item) => {
+                  const liked = likedIds.includes(item.id)
+                  return (
+                    <article className="gallery-card" key={item.id}>
+                      <div className={`gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }}>
+                        <button type="button" className={liked ? 'favorite-button liked' : 'favorite-button'} aria-label={`${item.name} 좋아요 ${liked ? '취소' : '추가'}`} onClick={() => toggleLike(item.id)}>
+                          <Heart aria-hidden="true" size={22} strokeWidth={1.8} fill={liked ? 'currentColor' : 'none'} />
+                        </button>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+              <button type="button" className="gallery-side-arrow next" aria-label="다음 로고 묶음 보기" onClick={() => scrollGallery(1)}><ChevronRight aria-hidden="true" size={20} strokeWidth={2} /></button>
             </div>
           </section>
 
@@ -4320,21 +4347,25 @@ function CustomerApp() {
             <div className="section-heading">
               <h2 id="business-card-gallery-title">명함 갤러리</h2>
             </div>
-            <div
-              className="gallery-track"
-              ref={businessCardGalleryRef}
-              onPointerDown={handleBusinessCardGalleryPointerDown}
-              onPointerMove={handleBusinessCardGalleryPointerMove}
-              onPointerUp={handleBusinessCardGalleryPointerUp}
-              onPointerCancel={handleBusinessCardGalleryPointerUp}
-            >
-              {businessCardGalleryItems.map((item) => {
-                return (
-                  <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual business-card-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
-                  </article>
-                )
-              })}
+            <div className="gallery-scroll-area">
+              <button type="button" className="gallery-side-arrow prev" aria-label="이전 명함 묶음 보기" onClick={() => scrollBusinessCardGallery(-1)}><ChevronLeft aria-hidden="true" size={20} strokeWidth={2} /></button>
+              <div
+                className="gallery-track"
+                ref={businessCardGalleryRef}
+                onPointerDown={handleBusinessCardGalleryPointerDown}
+                onPointerMove={handleBusinessCardGalleryPointerMove}
+                onPointerUp={handleBusinessCardGalleryPointerUp}
+                onPointerCancel={handleBusinessCardGalleryPointerUp}
+              >
+                {businessCardGalleryItems.map((item) => {
+                  return (
+                    <article className="gallery-card" key={item.id}>
+                      <div className={`gallery-visual business-card-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
+                    </article>
+                  )
+                })}
+              </div>
+              <button type="button" className="gallery-side-arrow next" aria-label="다음 명함 묶음 보기" onClick={() => scrollBusinessCardGallery(1)}><ChevronRight aria-hidden="true" size={20} strokeWidth={2} /></button>
             </div>
           </section>
 
@@ -4342,21 +4373,25 @@ function CustomerApp() {
             <div className="section-heading">
               <h2 id="product-gallery-title">제품 썸네일 갤러리</h2>
             </div>
-            <div
-              className="gallery-track"
-              ref={productGalleryRef}
-              onPointerDown={handleProductGalleryPointerDown}
-              onPointerMove={handleProductGalleryPointerMove}
-              onPointerUp={handleProductGalleryPointerUp}
-              onPointerCancel={handleProductGalleryPointerUp}
-            >
-              {productGalleryItems.map((item) => {
-                return (
-                  <article className="gallery-card" key={item.id}>
-                    <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
-                  </article>
-                )
-              })}
+            <div className="gallery-scroll-area">
+              <button type="button" className="gallery-side-arrow prev" aria-label="이전 제품 묶음 보기" onClick={() => scrollProductGallery(-1)}><ChevronLeft aria-hidden="true" size={20} strokeWidth={2} /></button>
+              <div
+                className="gallery-track"
+                ref={productGalleryRef}
+                onPointerDown={handleProductGalleryPointerDown}
+                onPointerMove={handleProductGalleryPointerMove}
+                onPointerUp={handleProductGalleryPointerUp}
+                onPointerCancel={handleProductGalleryPointerUp}
+              >
+                {productGalleryItems.map((item) => {
+                  return (
+                    <article className="gallery-card" key={item.id}>
+                      <div className={`gallery-visual product-gallery-visual ${item.tone}`} style={{ backgroundImage: `url(${item.image})`, backgroundPosition: item.position }} />
+                    </article>
+                  )
+                })}
+              </div>
+              <button type="button" className="gallery-side-arrow next" aria-label="다음 제품 묶음 보기" onClick={() => scrollProductGallery(1)}><ChevronRight aria-hidden="true" size={20} strokeWidth={2} /></button>
             </div>
           </section>
         </main>
