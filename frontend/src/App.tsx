@@ -1,5 +1,5 @@
 import { CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent, lazy, MouseEvent as ReactMouseEvent, PointerEvent, Suspense, useEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageCircle, MessageSquare, Palette, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
+import { AlarmClock, ArrowLeft, ArrowRight, BarChart3, Building2, Check, CircleCheck, CircleHelp, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, CloudCheck, Compass, CreditCard, Download, Droplets, FileCheck2, Flower2, FolderCheck, Gem, Gift, Heart, House, Image as ImageIcon, Info, Laptop, Leaf, MessageCircle, MessageSquare, Palette, Pencil, PenLine, Plus, RefreshCw, Search, Shapes, ShieldCheck, Shirt, Sparkles, ThumbsDown, ThumbsUp, Trash2, Type as TypeIcon, UserRound, UsersRound, Utensils, Video, X, Clock3, type LucideIcon } from 'lucide-react'
 import CopperplateHatch from './components/ui/CopperplateHatch'
 import AnimatedGallery from './components/ui/AnimatedGallery'
 import GenMarkLogo from './components/ui/GenMarkLogo'
@@ -48,6 +48,7 @@ type MypageAssetItem = {
   imageUrl: string
   imageUrls?: string[]
   brandKit?: BrandKit
+  downloadId?: number
   projectId?: string
   candidateId?: string
   projectType?: 'CI' | 'BI'
@@ -567,6 +568,7 @@ function CustomerApp() {
   const [brandKitHistory, setBrandKitHistory] = useState<BrandKit[]>([])
   const [mypageDownloadImageUrls, setMypageDownloadImageUrls] = useState<Record<string, string>>({})
   const [mypageGeneratedLogoCandidates, setMypageGeneratedLogoCandidates] = useState<Record<string, LogoCandidate>>({})
+  const [hiddenMypageLogoCandidateIds, setHiddenMypageLogoCandidateIds] = useState<string[]>([])
   const [brandKit, setBrandKit] = useState<BrandKit | null>(null)
   const [brandKitError, setBrandKitError] = useState('')
   const [brandKitDownloading, setBrandKitDownloading] = useState(false)
@@ -575,6 +577,10 @@ function CustomerApp() {
   const [mypageLogoAction, setMypageLogoAction] = useState<MypageAssetItem | null>(null)
   const [mypageLogoActionLoading, setMypageLogoActionLoading] = useState(false)
   const [mypageLogoActionError, setMypageLogoActionError] = useState('')
+  const [assetDeleteTarget, setAssetDeleteTarget] = useState<MypageAssetItem | null>(null)
+  const [assetDeleteLoading, setAssetDeleteLoading] = useState(false)
+  const [assetDeleteError, setAssetDeleteError] = useState('')
+  const [mockDeletedAssetIds, setMockDeletedAssetIds] = useState<string[]>([])
   const [businessCardModalOpen, setBusinessCardModalOpen] = useState(false)
   const [businessCardInfo, setBusinessCardInfo] = useState<BusinessCardInfoInput>({
     name: '', title: '', company: '', phone: '', email: '', address: '',
@@ -601,8 +607,6 @@ function CustomerApp() {
   const [remainingCredits, setRemainingCredits] = useState(2)
   const [creditModal, setCreditModal] = useState<'credit' | 'survey' | null>(null)
   const [finalEditModal, setFinalEditModal] = useState<FinalEditKind | null>(null)
-  const [regenerationConfirmOpen, setRegenerationConfirmOpen] = useState(false)
-  const [regenerationCreditsLoading, setRegenerationCreditsLoading] = useState(false)
   const resultHydrationProjectRef = useRef<string | null>(null)
   const [finalEditToneMode, setFinalEditToneMode] = useState<FinalToneMode>('recommended')
   const [finalEditDraft, setFinalEditDraft] = useState({ companyName: '', companyMotto: '', brandName: '', targetAge: '', valuesText: '', tone: '', colors: [] as string[], logoStyle: '' as LogoStyle | '', logoShape: '' })
@@ -648,7 +652,7 @@ function CustomerApp() {
   }
 
   useEffect(() => {
-    if (!creditModal && !businessCardModalOpen && !resumePromptProject && !finalEditModal && !regenerationConfirmOpen && !brandKitPreview && !mypageLogoAction) return
+    if (!creditModal && !businessCardModalOpen && !resumePromptProject && !finalEditModal && !brandKitPreview && !mypageLogoAction && !assetDeleteTarget) return
 
     const modalRoot = activeModalRef.current
     if (!modalRoot) return
@@ -681,8 +685,11 @@ function CustomerApp() {
           setBusinessCardInfoErrors({})
         } else if (finalEditModal) {
           setFinalEditModal(null)
-        } else if (regenerationConfirmOpen) {
-          setRegenerationConfirmOpen(false)
+        } else if (assetDeleteTarget) {
+          if (!assetDeleteLoading) {
+            setAssetDeleteTarget(null)
+            setAssetDeleteError('')
+          }
         } else if (creditModal) {
           setCreditModal(null)
         } else {
@@ -718,7 +725,7 @@ function CustomerApp() {
       document.body.style.overflow = previousOverflow
       previouslyFocused?.focus()
     }
-  }, [brandKitPreview, businessCardModalOpen, creditModal, finalEditModal, mypageLogoAction, regenerationConfirmOpen, resumePromptProject])
+  }, [assetDeleteLoading, assetDeleteTarget, brandKitPreview, businessCardModalOpen, creditModal, finalEditModal, mypageLogoAction, resumePromptProject])
 
   useEffect(() => {
     const handleBackgroundWheel = (event: WheelEvent) => {
@@ -1016,6 +1023,7 @@ function CustomerApp() {
         meApi.getDownloads('BI'),
       ]).then(([ciDownloads, biDownloads]) => setDownloadHistory([...ciDownloads, ...biDownloads].sort((a, b) => b.downloadedAt.localeCompare(a.downloadedAt)))),
       meApi.getPins().then(setPinnedLogos),
+      meApi.getHiddenLogoCandidateIds().then(setHiddenMypageLogoCandidateIds),
     ])
   }, [loggedIn, mode])
 
@@ -3056,13 +3064,8 @@ function CustomerApp() {
     setFinalEditModal(kind)
   }
 
-  const openRegenerationConfirm = () => {
-    setRegenerationConfirmOpen(true)
-    setRegenerationCreditsLoading(true)
-    void meApi.getCredits()
-      .then((result) => setRemainingCredits(result.balance))
-      .catch(() => undefined)
-      .finally(() => setRegenerationCreditsLoading(false))
+  const startRegeneration = () => {
+    void startLogoGeneration()
   }
 
   const saveFinalEditModal = () => {
@@ -3636,7 +3639,7 @@ function CustomerApp() {
           </div>
 
           <div className="logo-result-utility-grid">
-            <button className="utility-primary" type="button" onClick={openRegenerationConfirm}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />로고 재생성<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+            <button className="utility-primary" type="button" onClick={startRegeneration}><RefreshCw className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />로고 재생성<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
             <button className="utility-secondary" type="button" onClick={openBrandKitSelection}><ImageIcon className="result-utility-icon" aria-hidden="true" size={22} strokeWidth={1.8} />{brandKit?.status === 'SUCCEEDED' ? '브랜드 키트 확인하기' : '브랜드 키트 만들기'}<ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
           </div>
           {brandKit && <p className="project-error" role="status">브랜드 키트 상태: {brandKit.status === 'QUEUED' || brandKit.status === 'RUNNING' ? '생성 중' : brandKit.status === 'SUCCEEDED' ? '완료' : '실패'}</p>}
@@ -3817,6 +3820,35 @@ function CustomerApp() {
           {!hasProjectContext ? <p className="mypage-logo-action-status" role="status">이 로고의 프로젝트 연결 정보를 찾지 못했어요.</p> : null}
           {mypageLogoActionLoading ? <p className="mypage-logo-action-status" role="status">로고 프로젝트를 불러오고 있어요…</p> : null}
           {mypageLogoActionError ? <p className="mypage-logo-action-error" role="alert">{mypageLogoActionError}</p> : null}
+        </section>
+      </div>
+    )
+  }
+
+  const renderAssetDeleteModal = () => {
+    if (!assetDeleteTarget) return null
+    return (
+      <div
+        ref={activeModalRef}
+        className="modal-backdrop asset-delete-backdrop"
+        role="presentation"
+        onMouseDown={(event) => { if (event.target === event.currentTarget) closeAssetDeleteModal() }}
+      >
+        <section className="credit-modal asset-delete-modal" role="dialog" aria-modal="true" aria-labelledby="asset-delete-title">
+          <button className="modal-close" type="button" aria-label="삭제 취소" disabled={assetDeleteLoading} onClick={closeAssetDeleteModal}>
+            <X aria-hidden="true" size={22} strokeWidth={1.9} />
+          </button>
+          <div className="asset-delete-icon" aria-hidden="true"><Trash2 size={27} strokeWidth={1.8} /></div>
+          <h2 id="asset-delete-title">이 자산을 삭제할까요?</h2>
+          <p><strong>{assetDeleteTarget.title}</strong>을(를) 내 자산 목록에서 삭제합니다.</p>
+          <p>삭제한 자산은 목록에서 다시 복구할 수 없어요.</p>
+          {assetDeleteError && <p className="project-error" role="alert">{assetDeleteError}</p>}
+          <div className="asset-delete-actions">
+            <button className="gradient-button asset-delete-confirm" type="button" disabled={assetDeleteLoading} onClick={() => void deleteMypageAsset()}>
+              {assetDeleteLoading ? '삭제 중…' : '삭제하기'}
+            </button>
+            <button className="modal-secondary-button" type="button" disabled={assetDeleteLoading} onClick={closeAssetDeleteModal}>취소</button>
+          </div>
         </section>
       </div>
     )
@@ -4025,6 +4057,68 @@ function CustomerApp() {
     )
   }
 
+  const openAssetDeleteConfirm = (item: MypageAssetItem) => {
+    setAssetDeleteError('')
+    setAssetDeleteTarget(item)
+  }
+
+  const closeAssetDeleteModal = () => {
+    if (assetDeleteLoading) return
+    setAssetDeleteTarget(null)
+    setAssetDeleteError('')
+  }
+
+  const deleteMypageAsset = async () => {
+    const target = assetDeleteTarget
+    if (!target || assetDeleteLoading) return
+
+    setAssetDeleteLoading(true)
+    setAssetDeleteError('')
+    try {
+      const useMypageMock = MYPAGE_MOCK_MODE && !authRestoring && !loggedIn
+      if (useMypageMock) {
+        setMockDeletedAssetIds((current) => current.includes(target.id) ? current : [...current, target.id])
+      } else if (target.brandKit) {
+        if (!target.projectId || !target.candidateId) throw new Error('브랜드 키트의 연결 정보를 찾지 못했어요.')
+        await projectsApi.deleteBrandKit(target.projectId, target.candidateId, target.brandKit.id)
+        setBrandKitHistory((current) => current.filter((kit) => kit.id !== target.brandKit?.id))
+        setBrandKit((current) => current?.id === target.brandKit?.id ? null : current)
+      } else if (target.kind === 'logo' && target.projectId && target.candidateId) {
+        await meApi.hideLogoFromMypage(target.candidateId)
+        setHiddenMypageLogoCandidateIds((current) => current.includes(target.candidateId as string) ? current : [...current, target.candidateId as string])
+        if (target.downloadId != null) {
+          await meApi.deleteDownload(target.downloadId)
+          setDownloadHistory((current) => current.filter((item) => item.downloadId !== target.downloadId))
+          setMypageDownloadImageUrls((current) => {
+            const next = { ...current }
+            delete next[target.id]
+            return next
+          })
+        }
+        setMypageGeneratedLogoCandidates((current) => {
+          const next = { ...current }
+          delete next[target.candidateId as string]
+          return next
+        })
+      } else if (target.downloadId != null) {
+        await meApi.deleteDownload(target.downloadId)
+        setDownloadHistory((current) => current.filter((item) => item.downloadId !== target.downloadId))
+        setMypageDownloadImageUrls((current) => {
+          const next = { ...current }
+          delete next[target.id]
+          return next
+        })
+      } else {
+        throw new Error('삭제할 수 있는 저장 자산이 아니에요.')
+      }
+      setAssetDeleteTarget(null)
+    } catch (error) {
+      setAssetDeleteError(error instanceof Error ? error.message : '자산을 삭제하지 못했어요.')
+    } finally {
+      setAssetDeleteLoading(false)
+    }
+  }
+
   const renderMypageScreen = () => {
     if (!MYPAGE_MOCK_MODE && !authRestoring && !loggedIn) {
       const goToLogin = () => { setLoginDestination('mypage'); setLoginReturnMode('home'); setMode('login') }
@@ -4075,7 +4169,7 @@ function CustomerApp() {
     ]
     const downloadedCandidateIds = new Set(downloadHistory.map((item) => item.candidateId))
     const generatedLogoAssets: MypageAssetItem[] = Object.values(mypageGeneratedLogoCandidates)
-      .filter((candidate) => candidate.storageKey && !downloadedCandidateIds.has(candidate.id))
+      .filter((candidate) => candidate.storageKey && !hiddenMypageLogoCandidateIds.includes(candidate.id) && !downloadedCandidateIds.has(candidate.id))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((candidate) => {
         const relatedKit = brandKitHistory.find((kit) => kit.candidateId === candidate.id)
@@ -4113,6 +4207,7 @@ function CustomerApp() {
           projectId: item.projectId ?? relatedKit?.projectId ?? projectId ?? undefined,
           candidateId: item.candidateId,
           projectType: item.projectType,
+          downloadId: item.downloadId,
           dateKey,
         }
       }),
@@ -4132,6 +4227,9 @@ function CustomerApp() {
             imageUrl: imageUrls[0],
             imageUrls,
             brandKit: kit,
+            projectId: kit.projectId,
+            candidateId: kit.candidateId,
+            projectType: kit.kitType === 'BUSINESS_CARD' ? 'CI' : 'BI',
             dateKey,
           }]
         }
@@ -4143,6 +4241,9 @@ function CustomerApp() {
           imageUrl: imageUrls[0],
           imageUrls,
           brandKit: kit,
+          projectId: kit.projectId,
+          candidateId: kit.candidateId,
+          projectType: 'BI',
           dateKey,
         }]
       }),
@@ -4153,7 +4254,11 @@ function CustomerApp() {
       else groups.push({ dateKey: asset.dateKey, label: `${asset.dateKey.slice(0, 4)}. ${asset.dateKey.slice(5, 7)}. ${asset.dateKey.slice(8, 10)}.`, items: [asset] })
       return groups
     }, []).sort((a, b) => b.dateKey.localeCompare(a.dateKey)).map((group) => ({ ...group, isToday: group.dateKey === todayDateKey }))
-    const assetGroups = useMypageMock ? mockAssetGroups : actualAssetGroups
+    const assetGroups = useMypageMock
+      ? mockAssetGroups
+        .map((group) => ({ ...group, items: group.items.filter((item) => !mockDeletedAssetIds.includes(item.id)) }))
+        .filter((group) => group.items.length > 0)
+      : actualAssetGroups
     const assetKindLabel: Record<MypageAssetKind, string> = { logo: '로고', 'business-card': '명함', thumbnail: '썸네일' }
     const beginProfileEdit = () => {
       setProfileCompanyNameDraft(useMypageMock ? '육하원칙' : companyName)
@@ -4221,7 +4326,6 @@ function CustomerApp() {
         setProjectError(error instanceof Error ? error.message : '다운로드 파일을 불러오지 못했어요.')
       }
     }
-
     return (
       <main className="mypage-screen" aria-labelledby="mypage-title">
         <header className="workspace-header">
@@ -4315,7 +4419,10 @@ function CustomerApp() {
                                 </button>
                               ) : null}
                             </div>
-                            <button className="asset-download-button" type="button" aria-label={`${item.title} 다운로드`} onClick={() => void downloadMypageAsset(item)}><Download aria-hidden="true" size={19} strokeWidth={1.9} /></button>
+                            <div className="asset-item-actions">
+                              <button className="asset-download-button" type="button" aria-label={`${item.title} 다운로드`} onClick={() => void downloadMypageAsset(item)}><Download aria-hidden="true" size={19} strokeWidth={1.9} /></button>
+                              <button className="asset-delete-button" type="button" aria-label={`${item.title} 삭제`} onClick={() => openAssetDeleteConfirm(item)}><Trash2 aria-hidden="true" size={18} strokeWidth={1.9} /></button>
+                            </div>
                           </article>
                         ))}
                       </div>
@@ -4423,17 +4530,6 @@ function CustomerApp() {
       </section>
     </div>
   }
-
-  const renderRegenerationConfirmModal = () => <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRegenerationConfirmOpen(false) }}>
-    <section className="credit-modal regeneration-modal" role="dialog" aria-modal="true" aria-labelledby="regeneration-title">
-      <button className="modal-close" type="button" aria-label="재생성 취소" onClick={() => setRegenerationConfirmOpen(false)}><X size={22} /></button>
-      <h2 id="regeneration-title">새 로고를 다시 만들까요?</h2>
-      <p>재생성하면 크레딧 <strong>1개</strong>가 소모돼요.</p>
-      <p>현재 남은 크레딧은 <strong>{remainingCredits}개</strong>예요.</p>
-      {remainingCredits < 1 ? <p className="project-error" role="alert">크레딧이 부족해 재생성할 수 없어요.</p> : null}
-          <div className="credit-modal-actions"><button className="gradient-button" type="button" disabled={regenerationCreditsLoading || remainingCredits < 1 || generationLoading} onClick={() => { setRegenerationConfirmOpen(false); void startLogoGeneration() }}>{regenerationCreditsLoading ? '잔액 확인 중…' : '크레딧 사용하고 재생성'}</button><button className="modal-secondary-button" type="button" onClick={() => setRegenerationConfirmOpen(false)}>취소</button></div>
-    </section>
-  </div>
 
   const renderCreditModal = () => (
     <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreditModal(null) }}>
@@ -4718,11 +4814,11 @@ function CustomerApp() {
 
       {creditModal === 'credit' ? renderCreditModal() : creditModal === 'survey' ? renderCreditSurveyModal() : null}
       {finalEditModal && renderFinalEditModal()}
-      {regenerationConfirmOpen && renderRegenerationConfirmModal()}
       {businessCardModalOpen && renderBusinessCardModal()}
       {resumePromptProject && renderResumePromptModal()}
       {brandKitPreview && renderBrandKitPreviewModal()}
       {mypageLogoAction && renderMypageLogoActionModal()}
+      {assetDeleteTarget && renderAssetDeleteModal()}
     </div>
   )
 }

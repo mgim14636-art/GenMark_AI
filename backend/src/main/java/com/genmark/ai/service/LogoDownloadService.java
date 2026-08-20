@@ -98,6 +98,18 @@ public class LogoDownloadService {
         return toResponse(download, true);
     }
 
+    /** 마이페이지에서 사용자가 보관 중인 다운로드 자산을 삭제한다. */
+    @Transactional
+    public void delete(Long downloadId, Long memberId) {
+        LogoDownload download = downloadRepository.findById(downloadId)
+                .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (!download.getMember().getId().equals(memberId)) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        fileStorage.deleteQuietly(download.getStorageKey());
+        downloadRepository.delete(download);
+    }
+
     /** 다운로드한 로고의 이미지 바이트. 본인 것만 읽을 수 있다. */
     public byte[] readImage(Long downloadId, Long memberId) {
         LogoDownload download = downloadRepository.findById(downloadId)

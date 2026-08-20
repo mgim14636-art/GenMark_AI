@@ -3,7 +3,6 @@ package com.genmark.ai.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.genmark.ai.entity.BiProject;
 import com.genmark.ai.entity.CiProject;
-import com.genmark.ai.entity.CreditHistory;
 import com.genmark.ai.entity.LogoGeneration;
 import com.genmark.ai.entity.ProjectLike;
 import com.genmark.ai.repository.BiProjectRepository;
@@ -17,7 +16,6 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -58,7 +56,7 @@ class LogoGenerationValidationTest {
     }
 
     @Test
-    void regenerationConsumesCreditBeforeSavingGeneration() {
+    void regenerationDoesNotConsumeCreditBeforeSavingGeneration() {
         CiProject project = CiProject.builder().id(2L).publicId("ci-regenerate")
                 .companyName("GenMark").industry("TECH").logoStyle("symbol").build();
         LogoGeneration previous = LogoGeneration.builder().status(LogoGeneration.Status.SUCCEEDED).build();
@@ -79,12 +77,12 @@ class LogoGenerationValidationTest {
 
         service.create("ci-regenerate", 7L, "retry-key");
 
-        verify(credits).consume(7L, 1, CreditHistory.Reason.GENERATE);
+        verifyNoInteractions(credits);
         verify(generations).save(org.mockito.ArgumentMatchers.any(LogoGeneration.class));
     }
 
     @Test
-    void insufficientRegenerationCreditDoesNotQueueGeneration() {
+    void regenerationQueuesGenerationEvenWithoutCredits() {
         CiProject project = CiProject.builder().id(3L).publicId("ci-no-credit")
                 .companyName("GenMark").industry("TECH").logoStyle("symbol").build();
         LogoGeneration previous = LogoGeneration.builder().status(LogoGeneration.Status.SUCCEEDED).build();
@@ -98,17 +96,17 @@ class LogoGenerationValidationTest {
                 .thenReturn(java.util.Optional.empty());
         when(generations.findFirstByCiProjectIdAndStatusOrderByCompletedAtDesc(3L, LogoGeneration.Status.SUCCEEDED))
                 .thenReturn(java.util.Optional.of(previous));
-        when(credits.consume(7L, 1, CreditHistory.Reason.GENERATE))
-                .thenThrow(new ApiException(ErrorCode.CREDIT_NOT_ENOUGH));
+        when(generations.save(org.mockito.ArgumentMatchers.any(LogoGeneration.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         LogoGenerationService service = new LogoGenerationService(lookup, mock(CiProjectRepository.class),
                 mock(BiProjectRepository.class), generations, mock(LogoCandidateRepository.class), worker,
                 credits, new ObjectMapper());
 
-        assertThatThrownBy(() -> service.create("ci-no-credit", 7L, "no-credit"))
-                .isInstanceOfSatisfying(ApiException.class,
-                        error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.CREDIT_NOT_ENOUGH));
-        verify(generations, never()).save(org.mockito.ArgumentMatchers.any());
-        verifyNoInteractions(worker);
+        var response = service.create("ci-no-credit", 7L, "no-credit");
+
+        assertThat(response.status()).isEqualTo(LogoGeneration.Status.QUEUED);
+        verify(generations).save(org.mockito.ArgumentMatchers.any(LogoGeneration.class));
+        verifyNoInteractions(credits);
     }
 
     @Test

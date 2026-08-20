@@ -521,6 +521,10 @@ export const projectsApi = {
   downloadBrandKit: (projectId: string, candidateId: string, brandKitId: string) => downloadAuthenticatedFile(
     `/projects/${projectId}/logo-candidates/${candidateId}/brand-kits/${brandKitId}/download`,
   ),
+  deleteBrandKit: (projectId: string, candidateId: string, brandKitId: string) => apiRequest<void>(
+    `/projects/${projectId}/logo-candidates/${candidateId}/brand-kits/${brandKitId}`,
+    { method: 'DELETE' },
+  ),
   createAnalysis: (projectId: string) => apiRequest<TrademarkAnalysis>(`/projects/${projectId}/trademark-analyses`, {
     method: 'POST',
   }),
@@ -536,8 +540,15 @@ export const meApi = {
     body: JSON.stringify(input),
   }),
   getPins: () => apiRequest<PinnedLogo[]>('/me/pins'),
+  getHiddenLogoCandidateIds: () => apiRequest<string[]>('/me/assets/hidden-logo-candidates'),
+  hideLogoFromMypage: (candidateId: string) => apiRequest<void>(`/me/assets/hidden-logo-candidates/${candidateId}`, {
+    method: 'DELETE',
+  }),
   getBrandKits: () => apiRequest<BrandKit[]>('/me/brand-kits'),
   getDownloads: (type?: 'CI' | 'BI') => apiRequest<DownloadRecord[]>(`/me/downloads${type ? `?type=${type}` : ''}`),
+  deleteDownload: (downloadId: number) => apiRequest<void>(`/me/downloads/${downloadId}`, {
+    method: 'DELETE',
+  }),
 }
 
 export const adminApi = {

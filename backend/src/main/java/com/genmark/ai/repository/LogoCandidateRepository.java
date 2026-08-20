@@ -10,6 +10,9 @@ import java.util.Optional;
 public interface LogoCandidateRepository extends JpaRepository<LogoCandidate, Long> {
     Optional<LogoCandidate> findByPublicId(String publicId);
 
+    Optional<LogoCandidate> findByPublicIdAndGenerationCiProjectMemberId(String publicId, Long memberId);
+    Optional<LogoCandidate> findByPublicIdAndGenerationBiProjectMemberId(String publicId, Long memberId);
+
     List<LogoCandidate> findByGenerationIdOrderByCandidateOrder(Long generationId);
 
     Optional<LogoCandidate> findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(

@@ -120,4 +120,14 @@ public class LogoActionController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .body(archive.bytes());
     }
+
+    /** 마이페이지에서 완료된 브랜드 키트 자산을 삭제한다. */
+    @DeleteMapping("/brand-kits/{brandKitId}")
+    public ResponseEntity<Void> deleteBrandKit(
+            @AuthenticationPrincipal MemberPrincipal principal,
+            @PathVariable String projectId, @PathVariable String candidateId,
+            @PathVariable String brandKitId) {
+        brandKitService.delete(projectId, candidateId, brandKitId, principal.id());
+        return ResponseEntity.noContent().build();
+    }
 }

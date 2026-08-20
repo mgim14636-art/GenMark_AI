@@ -185,6 +185,23 @@ public class BrandKitService {
                 .toList();
     }
 
+    /** 마이페이지에서 사용자가 만든 완료된 브랜드 키트를 삭제한다. */
+    @Transactional
+    public void delete(String projectId, String candidateId, String brandKitId, Long memberId) {
+        projectLookup.requireOwned(projectId, memberId);
+        BrandKit kit = requireOwned(brandKitId, memberId);
+        ProjectLike project = kit.getCandidate().getGeneration().getProject();
+        if (!project.getPublicId().equals(projectId)
+                || !kit.getCandidate().getPublicId().equals(candidateId)) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        if (kit.getStatus() == BrandKit.Status.QUEUED || kit.getStatus() == BrandKit.Status.RUNNING) {
+            throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "생성 중인 브랜드 키트는 삭제할 수 없습니다.");
+        }
+        storage.deleteBrandKitArtifacts(kit.getPublicId(), kit.getStorageKey());
+        brandKitRepository.delete(kit);
+    }
+
     private BrandKit requireOwned(String brandKitId, Long memberId) {
         BrandKit kit = brandKitRepository.findByPublicId(brandKitId)
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));

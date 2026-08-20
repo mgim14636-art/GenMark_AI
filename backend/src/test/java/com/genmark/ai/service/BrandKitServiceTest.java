@@ -328,6 +328,33 @@ class BrandKitServiceTest {
                 Map.entry("back.pdf", "back-pdf"));
     }
 
+    @Test
+    void deletesOwnedCompletedBrandKitAndItsArtifacts() {
+        ProjectLookupService projectLookup = mock(ProjectLookupService.class);
+        LogoCandidateRepository candidateRepository = mock(LogoCandidateRepository.class);
+        BrandKitRepository brandKitRepository = mock(BrandKitRepository.class);
+        BrandKitWorker worker = mock(BrandKitWorker.class);
+        LogoFileStorage storage = mock(LogoFileStorage.class);
+        BrandKitService service = new BrandKitService(projectLookup, candidateRepository,
+                brandKitRepository, worker, storage);
+
+        Member member = Member.builder().id(7L).build();
+        CiProject project = CiProject.builder().id(3L).publicId("project-1").member(member).build();
+        LogoGeneration generation = LogoGeneration.builder().ciProject(project).build();
+        LogoCandidate candidate = LogoCandidate.builder().id(4L).publicId("candidate-1")
+                .generation(generation).build();
+        BrandKit kit = BrandKit.builder().id(9L).publicId("kit-1").candidate(candidate)
+                .kitType(BrandKit.KitType.BUSINESS_CARD).status(BrandKit.Status.SUCCEEDED)
+                .storageKey("logos/brand-kits/kit-1/candidate-1.png").build();
+        when(projectLookup.requireOwned("project-1", 7L)).thenReturn(project);
+        when(brandKitRepository.findByPublicId("kit-1")).thenReturn(Optional.of(kit));
+
+        service.delete("project-1", "candidate-1", "kit-1", 7L);
+
+        verify(storage).deleteBrandKitArtifacts("kit-1", kit.getStorageKey());
+        verify(brandKitRepository).delete(kit);
+    }
+
     private BrandKitCreateRequest request(String name, String phone) {
         return new BrandKitCreateRequest(new BusinessCardInfoRequest(
                 name, "CEO", "GenMark", phone, "kim@example.com", "Gwangju"));

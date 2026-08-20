@@ -189,6 +189,17 @@ CREATE TABLE IF NOT EXISTS logo_downloads (
     INDEX idx_download_member_type_time (member_id, project_type, downloaded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS mypage_hidden_logo_assets (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    member_id BIGINT NOT NULL,
+    candidate_id BIGINT NOT NULL,
+    hidden_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_mypage_hidden_member FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
+    CONSTRAINT fk_mypage_hidden_candidate FOREIGN KEY (candidate_id) REFERENCES logo_candidates(id) ON DELETE CASCADE,
+    CONSTRAINT uq_mypage_hidden_member_candidate UNIQUE (member_id, candidate_id),
+    INDEX idx_mypage_hidden_member_time (member_id, hidden_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS brand_kits (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     public_id VARCHAR(36) NOT NULL UNIQUE,

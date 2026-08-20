@@ -43,7 +43,9 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-recraft/recraft-v4-vector}
       LOGO_FINISH: ${LOGO_FINISH:-solid}
-      LOGO_WORDMARK: ${LOGO_WORDMARK:-composer}
+      # 로컬 시연에서는 심볼과 영문 브랜드명을 하나의 워드마크 락업으로 생성한다.
+      # 필요하면 .env의 LOGO_WORDMARK로 composer/model을 다시 선택할 수 있다.
+      LOGO_WORDMARK: ${LOGO_WORDMARK:-model}
       VALUE_KEYWORD_MODEL: ${VALUE_KEYWORD_MODEL:-upstage/solar-pro4}
       VALUE_KEYWORD_TIMEOUT_SECONDS: ${VALUE_KEYWORD_TIMEOUT_SECONDS:-5}
       MOTIF_TRANSLATION_MODEL: ${MOTIF_TRANSLATION_MODEL:-upstage/solar-pro4}

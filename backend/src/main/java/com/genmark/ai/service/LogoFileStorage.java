@@ -287,9 +287,24 @@ public class LogoFileStorage {
      */
     public void deleteQuietly(String storageKey) {
         if (storageKey == null || storageKey.isBlank()) return;
+        deletePathQuietly(root.resolve(storageKey).normalize(), root);
+    }
+
+    /** 브랜드 키트의 공개 이미지와 비공개 원본/인쇄 파일을 함께 정리한다. */
+    public void deleteBrandKitArtifacts(String brandKitPublicId, String primaryStorageKey) {
+        for (String storageKey : brandKitStorageKeys(brandKitPublicId, primaryStorageKey)) {
+            deleteQuietly(storageKey);
+        }
+        deletePathQuietly(brandKitSourcePath(brandKitPublicId), privateRoot);
+        for (int order = 1; order <= 2; order += 1) {
+            deletePathQuietly(brandKitPrintPath(brandKitPublicId, order, "svg"), privateRoot);
+            deletePathQuietly(brandKitPrintPath(brandKitPublicId, order, "pdf"), privateRoot);
+        }
+    }
+
+    private void deletePathQuietly(Path file, Path allowedRoot) {
+        if (!file.startsWith(allowedRoot)) return;
         try {
-            Path file = root.resolve(storageKey).normalize();
-            if (!file.startsWith(root)) return;
             Files.deleteIfExists(file);
         } catch (IOException e) {
             // 파일 삭제 실패가 DB 정리까지 막으면 안 된다. 다음 정리 때 다시 시도된다.
