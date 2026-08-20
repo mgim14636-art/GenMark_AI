@@ -54,6 +54,8 @@ export type LogoGeneration = {
 
 export type LogoCandidate = {
   id: string
+  projectId: string
+  projectType: 'CI' | 'BI'
   order: number
   storageKey: string
   svgUrl: string | null
@@ -540,6 +542,7 @@ export const meApi = {
     body: JSON.stringify(input),
   }),
   getPins: () => apiRequest<PinnedLogo[]>('/me/pins'),
+  getLogoCandidates: () => apiRequest<LogoCandidate[]>('/me/logo-candidates'),
   getHiddenLogoCandidateIds: () => apiRequest<string[]>('/me/assets/hidden-logo-candidates'),
   hideLogoFromMypage: (candidateId: string) => apiRequest<void>(`/me/assets/hidden-logo-candidates/${candidateId}`, {
     method: 'DELETE',

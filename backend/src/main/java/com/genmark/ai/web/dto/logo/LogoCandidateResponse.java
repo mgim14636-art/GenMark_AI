@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
  */
 public record LogoCandidateResponse(
         String id,
+        String projectId,
+        String projectType,
         int order,
         String storageKey,
         String svgUrl,

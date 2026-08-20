@@ -5,12 +5,14 @@ import com.genmark.ai.security.MemberPrincipal;
 import com.genmark.ai.service.BrandKitService;
 import com.genmark.ai.service.CreditService;
 import com.genmark.ai.service.LogoDownloadService;
+import com.genmark.ai.service.LogoGenerationService;
 import com.genmark.ai.service.LogoPinService;
 import com.genmark.ai.service.MypageAssetService;
 import com.genmark.ai.service.SurveyService;
 import com.genmark.ai.web.dto.ApiSuccessResponse;
 import com.genmark.ai.web.dto.brandkit.BrandKitResponse;
 import com.genmark.ai.web.dto.logo.LogoDownloadResponse;
+import com.genmark.ai.web.dto.logo.LogoCandidateResponse;
 import com.genmark.ai.web.dto.logo.PinnedCandidateResponse;
 import com.genmark.ai.web.dto.survey.SurveyResponse;
 import com.genmark.ai.web.dto.survey.SurveySubmitRequest;
@@ -39,6 +41,7 @@ public class MeController {
 
     private final LogoPinService pinService;
     private final LogoDownloadService downloadService;
+    private final LogoGenerationService logoGenerationService;
     private final CreditService creditService;
     private final SurveyService surveyService;
     private final BrandKitService brandKitService;
@@ -66,6 +69,13 @@ public class MeController {
         return ResponseEntity.ok()
                 .contentType(MediaType.IMAGE_PNG)
                 .body(downloadService.readImage(downloadId, principal.id()));
+    }
+
+    /** 로그인 사용자가 만든 모든 완료 로고 후보를 최신순으로 조회한다. */
+    @GetMapping("/logo-candidates")
+    public ResponseEntity<ApiSuccessResponse<List<LogoCandidateResponse>>> logoCandidates(
+            @AuthenticationPrincipal MemberPrincipal principal) {
+        return ResponseEntity.ok(ApiSuccessResponse.of(logoGenerationService.myCandidates(principal.id())));
     }
 
     /** 다운로드 보관 자산 삭제. */

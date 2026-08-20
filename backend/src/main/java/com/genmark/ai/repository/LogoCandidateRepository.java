@@ -1,6 +1,8 @@
 package com.genmark.ai.repository;
 
 import com.genmark.ai.entity.LogoCandidate;
+import com.genmark.ai.entity.LogoGeneration;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDateTime;
@@ -14,6 +16,13 @@ public interface LogoCandidateRepository extends JpaRepository<LogoCandidate, Lo
     Optional<LogoCandidate> findByPublicIdAndGenerationBiProjectMemberId(String publicId, Long memberId);
 
     List<LogoCandidate> findByGenerationIdOrderByCandidateOrder(Long generationId);
+
+    @EntityGraph(attributePaths = {"generation", "generation.ciProject", "generation.biProject"})
+    List<LogoCandidate> findByGenerationCiProjectMemberIdAndGenerationStatusOrderByCreatedAtDesc(
+            Long memberId, LogoGeneration.Status status);
+    @EntityGraph(attributePaths = {"generation", "generation.ciProject", "generation.biProject"})
+    List<LogoCandidate> findByGenerationBiProjectMemberIdAndGenerationStatusOrderByCreatedAtDesc(
+            Long memberId, LogoGeneration.Status status);
 
     Optional<LogoCandidate> findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
             String publicId, Long ciProjectId, Long memberId);

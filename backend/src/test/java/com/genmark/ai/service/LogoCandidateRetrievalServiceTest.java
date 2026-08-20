@@ -1,6 +1,7 @@
 package com.genmark.ai.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.genmark.ai.entity.BiProject;
 import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.LogoCandidate;
 import com.genmark.ai.entity.LogoGeneration;
@@ -140,13 +141,56 @@ class LogoCandidateRetrievalServiceTest {
                         exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.RESOURCE_CONFLICT));
     }
 
+    @Test
+    void returnsAllSucceededCandidatesAcrossCiBiAndRegenerationsNewestFirst() {
+        CiProject ciProject = CiProject.builder().id(PROJECT_ID).publicId("ci-project").build();
+        BiProject biProject = BiProject.builder().id(20L).publicId("bi-project").build();
+        LogoGeneration earlierCi = succeededGeneration(31L, "ci-generation-1", ciProject);
+        LogoGeneration latestCi = succeededGeneration(32L, "ci-generation-2", ciProject);
+        LogoGeneration biGeneration = succeededGeneration(33L, "bi-generation-1", biProject);
+        LogoCandidate earlier = candidate(earlierCi, "ci-earlier", LocalDateTime.of(2026, 8, 20, 9, 0));
+        LogoCandidate latest = candidate(latestCi, "ci-latest", LocalDateTime.of(2026, 8, 20, 11, 0));
+        LogoCandidate bi = candidate(biGeneration, "bi-candidate", LocalDateTime.of(2026, 8, 20, 10, 0));
+
+        when(candidateRepository.findByGenerationCiProjectMemberIdAndGenerationStatusOrderByCreatedAtDesc(
+                MEMBER_ID, LogoGeneration.Status.SUCCEEDED)).thenReturn(List.of(latest, earlier));
+        when(candidateRepository.findByGenerationBiProjectMemberIdAndGenerationStatusOrderByCreatedAtDesc(
+                MEMBER_ID, LogoGeneration.Status.SUCCEEDED)).thenReturn(List.of(bi));
+
+        var result = service.myCandidates(MEMBER_ID);
+
+        assertThat(result).extracting(candidate -> candidate.id())
+                .containsExactly("ci-latest", "bi-candidate", "ci-earlier");
+        assertThat(result).extracting(candidate -> candidate.projectId())
+                .containsExactly("ci-project", "bi-project", "ci-project");
+        assertThat(result).extracting(candidate -> candidate.projectType())
+                .containsExactly("CI", "BI", "CI");
+    }
+
     private LogoGeneration succeededGeneration(Long id, String publicId) {
-        return LogoGeneration.builder()
+        return succeededGeneration(id, publicId, project);
+    }
+
+    private LogoGeneration succeededGeneration(Long id, String publicId, com.genmark.ai.entity.ProjectLike owner) {
+        LogoGeneration generation = LogoGeneration.builder()
                 .id(id)
                 .publicId(publicId)
-                .ciProject(project)
                 .status(LogoGeneration.Status.SUCCEEDED)
                 .completedAt(LocalDateTime.now())
+                .build();
+        generation.setProject(owner);
+        return generation;
+    }
+
+    private LogoCandidate candidate(LogoGeneration generation, String publicId, LocalDateTime createdAt) {
+        return LogoCandidate.builder()
+                .publicId(publicId)
+                .generation(generation)
+                .candidateOrder(1)
+                .storageKey("logos/" + generation.getPublicId() + "/candidate-1.png")
+                .mimeType("image/png")
+                .aiMetadataJson("{\"svgAvailable\":true}")
+                .createdAt(createdAt)
                 .build();
     }
 

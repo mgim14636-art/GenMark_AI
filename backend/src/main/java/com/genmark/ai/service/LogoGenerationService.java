@@ -25,6 +25,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Comparator;
 import java.util.regex.Pattern;
 
 @Service
@@ -134,6 +135,21 @@ public class LogoGenerationService {
         return toResponse(candidate);
     }
 
+    /** 로그인 회원이 만든 모든 완료 로고 후보를 CI/BI 구분 없이 최신순으로 반환한다. */
+    public List<LogoCandidateResponse> myCandidates(Long memberId) {
+        List<LogoCandidate> candidates = new java.util.ArrayList<>();
+        candidates.addAll(candidateRepository
+                .findByGenerationCiProjectMemberIdAndGenerationStatusOrderByCreatedAtDesc(
+                        memberId, LogoGeneration.Status.SUCCEEDED));
+        candidates.addAll(candidateRepository
+                .findByGenerationBiProjectMemberIdAndGenerationStatusOrderByCreatedAtDesc(
+                        memberId, LogoGeneration.Status.SUCCEEDED));
+        return candidates.stream()
+                .sorted(Comparator.comparing(LogoCandidate::getCreatedAt).reversed())
+                .map(this::toResponse)
+                .toList();
+    }
+
     @Transactional
     public LogoCandidateResponse select(String projectId, String candidateId, Long memberId) {
         ProjectLike project = projectLookup.requireOwned(projectId, memberId);
@@ -223,7 +239,10 @@ public class LogoGenerationService {
     }
 
     private LogoCandidateResponse toResponse(LogoCandidate c) {
-        return new LogoCandidateResponse(c.getPublicId(), c.getCandidateOrder(), c.getStorageKey(), svgUrl(c), svgEdited(c), c.getMimeType(),
+        LogoGeneration generation = c.getGeneration();
+        String projectType = generation.getCiProject() != null ? "CI" : "BI";
+        return new LogoCandidateResponse(c.getPublicId(), generation.getProject().getPublicId(), projectType,
+                c.getCandidateOrder(), c.getStorageKey(), svgUrl(c), svgEdited(c), c.getMimeType(),
                 c.getWidth(), c.getHeight(), c.isSelected(), c.getPinnedAt(), c.getCreatedAt());
     }
 

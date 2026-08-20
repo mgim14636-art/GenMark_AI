@@ -31,7 +31,7 @@ type LoginReturnMode = 'hero' | 'home'
 type OnboardingOption = 'online' | 'social' | 'offline'
 type AudienceOption = 'company' | 'owner' | 'hobby' | 'sidejob'
 type IndustryOption = 'beauty' | 'fashion' | 'food' | 'health' | 'tech' | 'other'
-type CoreValue = 'vegan' | 'lowIrritation' | 'derma' | 'cleanBeauty' | 'natural' | 'premium' | 'sustainable' | 'scientific' | 'reasonable'
+type CoreValue = 'vegan' | 'lowIrritation' | 'derma' | 'cleanBeauty' | 'natural' | 'premium' | 'sustainable' | 'scientific'
 type ToneOption = 'friendly' | 'professional' | 'warm' | 'trendy' | 'minimal'
 type RgbColor = { r: number; g: number; b: number }
 type LogoStyle = 'symbol' | 'wordmark' | 'combination' | 'lettermark'
@@ -40,6 +40,7 @@ type FinalEditKind = 'identity' | 'values' | 'tone' | 'color' | 'style' | 'shape
 type FinalToneMode = 'recommended' | 'direct'
 type EditorTarget = string
 type MypageAssetKind = 'logo' | 'business-card' | 'thumbnail'
+type MypageAssetResource = 'downloads' | 'pins' | 'hidden' | 'brandKits' | 'candidates'
 type MypageAssetItem = {
   id: string
   kind: MypageAssetKind
@@ -60,6 +61,14 @@ type MypageAssetGroup = {
   isToday?: boolean
   items: MypageAssetItem[]
 }
+
+const mypageAssetResourceLabels: Array<{ id: MypageAssetResource; label: string }> = [
+  { id: 'downloads', label: '다운로드 목록' },
+  { id: 'pins', label: '찜 목록' },
+  { id: 'hidden', label: '삭제 목록' },
+  { id: 'brandKits', label: '브랜드 키트' },
+  { id: 'candidates', label: '생성 로고' },
+]
 type EditorDraft = {
   scale: number
   rotation: number
@@ -131,7 +140,7 @@ const toneOptions: Array<{ id: ToneOption; label: string; description: string; c
 
 const DEFAULT_MANUAL_COLOR = '#9765e9'
 
-const coreValueIds = new Set<CoreValue>(['vegan', 'lowIrritation', 'derma', 'cleanBeauty', 'natural', 'premium', 'sustainable', 'scientific', 'reasonable'])
+const coreValueIds = new Set<CoreValue>(['vegan', 'lowIrritation', 'derma', 'cleanBeauty', 'natural', 'premium', 'sustainable', 'scientific'])
 const coreValueLabels: Record<CoreValue, string> = {
   vegan: '비건',
   lowIrritation: '저자극',
@@ -141,7 +150,6 @@ const coreValueLabels: Record<CoreValue, string> = {
   premium: '프리미엄',
   sustainable: '지속가능성',
   scientific: '과학적 검증',
-  reasonable: '합리적인 가격',
 }
 
 const industryOptions: Array<{ id: IndustryOption; title: string; description: string; apiValue: string; icon: LucideIcon }> = [
@@ -265,7 +273,7 @@ const getModeFromUrl = (): ViewMode => {
 // TEMP_RESULT_PREVIEW: 결과 후보가 없을 때 결과 화면 레이아웃을 생성 API 없이
 // 검토하기 위한 로컬 목업 데이터입니다. 실제 생성·저장 흐름에는 사용하지 않습니다.
 const resultPreviewCandidates: LogoCandidate[] = [
-  { id: 'preview-candidate-1', order: 1, storageKey: 'preview-candidate-1', svgUrl: null, svgEdited: false, mimeType: 'image/svg+xml', width: 760, height: 760, selected: true, pinnedAt: null, createdAt: '' },
+  { id: 'preview-candidate-1', projectId: 'preview-project', projectType: 'CI', order: 1, storageKey: 'preview-candidate-1', svgUrl: null, svgEdited: false, mimeType: 'image/svg+xml', width: 760, height: 760, selected: true, pinnedAt: null, createdAt: '' },
 ]
 const resultPreviewImageUrl = '/logo-result-preview-bramont.png'
 const GENERATED_LOGO_COUNT = 1
@@ -558,9 +566,18 @@ function CustomerApp() {
   const [generationId, setGenerationId] = useState<string | null>(null)
   const [generationError, setGenerationError] = useState('')
   const [generationLoading, setGenerationLoading] = useState(false)
+  const [finalGenerationLocked, setFinalGenerationLocked] = useState(false)
   const [loadingStep, setLoadingStep] = useState(0)
   const [projectSaving, setProjectSaving] = useState(false)
   const [projectError, setProjectError] = useState('')
+  const [mypageAssetFailures, setMypageAssetFailures] = useState<Set<MypageAssetResource>>(() => new Set())
+  const [mypageAssetRefreshVersion, setMypageAssetRefreshVersion] = useState(0)
+  const failedMypageAssetLabels = mypageAssetResourceLabels
+    .filter((resource) => mypageAssetFailures.has(resource.id))
+    .map((resource) => resource.label)
+  const mypageAssetError = failedMypageAssetLabels.length > 0
+    ? `일부 자산을 불러오지 못했어요: ${failedMypageAssetLabels.join(', ')}. 잠시 후 다시 시도해주세요.`
+    : ''
   const [logoCandidates, setLogoCandidates] = useState<LogoCandidate[]>([])
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null)
   const [downloadHistory, setDownloadHistory] = useState<DownloadRecord[]>([])
@@ -586,10 +603,18 @@ function CustomerApp() {
     name: '', title: '', company: '', phone: '', email: '', address: '',
   })
   const [businessCardInfoErrors, setBusinessCardInfoErrors] = useState<{ name?: string; email?: string }>({})
+  const [businessCardSubmitError, setBusinessCardSubmitError] = useState('')
+  const [brandKitCreating, setBrandKitCreating] = useState(false)
   const [businessCardTarget, setBusinessCardTarget] = useState<{ candidateId: string; projectId: string } | null>(null)
   const [ciProfileLoading, setCiProfileLoading] = useState(false)
   const ciProfileLoaded = useRef(false)
   const assetEpochRef = useRef(0)
+  const mypageAssetLoadEpochRef = useRef(0)
+  const generationLoadingRef = useRef(false)
+  const finalGenerationLockRef = useRef(false)
+  const finalGenerationFrameRef = useRef<number | null>(null)
+  const finalGenerationSecondFrameRef = useRef<number | null>(null)
+  const brandKitCreatingRef = useRef(false)
   const brandKitRequestEpochRef = useRef(0)
   const brandKitSelectionOnlyRef = useRef(false)
   const [analysisId, setAnalysisId] = useState<string | null>(null)
@@ -680,9 +705,12 @@ function CustomerApp() {
         } else if (brandKitPreview) {
           setBrandKitPreview(null)
         } else if (businessCardModalOpen) {
-          setBusinessCardModalOpen(false)
-          setBusinessCardTarget(null)
-          setBusinessCardInfoErrors({})
+          if (!brandKitCreating) {
+            setBusinessCardModalOpen(false)
+            setBusinessCardTarget(null)
+            setBusinessCardInfoErrors({})
+            setBusinessCardSubmitError('')
+          }
         } else if (finalEditModal) {
           setFinalEditModal(null)
         } else if (assetDeleteTarget) {
@@ -725,7 +753,7 @@ function CustomerApp() {
       document.body.style.overflow = previousOverflow
       previouslyFocused?.focus()
     }
-  }, [assetDeleteLoading, assetDeleteTarget, brandKitPreview, businessCardModalOpen, creditModal, finalEditModal, mypageLogoAction, resumePromptProject])
+  }, [assetDeleteLoading, assetDeleteTarget, brandKitCreating, brandKitPreview, businessCardModalOpen, creditModal, finalEditModal, mypageLogoAction, resumePromptProject])
 
   useEffect(() => {
     const handleBackgroundWheel = (event: WheelEvent) => {
@@ -893,6 +921,17 @@ function CustomerApp() {
   }, [mode])
 
   useEffect(() => {
+    if (mode !== 'final') return
+    finalGenerationLockRef.current = false
+    setFinalGenerationLocked(false)
+  }, [mode])
+
+  useEffect(() => () => {
+    if (finalGenerationFrameRef.current !== null) window.cancelAnimationFrame(finalGenerationFrameRef.current)
+    if (finalGenerationSecondFrameRef.current !== null) window.cancelAnimationFrame(finalGenerationSecondFrameRef.current)
+  }, [])
+
+  useEffect(() => {
     if (mode !== 'logo-intro') return undefined
 
     setLogoIntroStage('opening')
@@ -1018,17 +1057,11 @@ function CustomerApp() {
         setSurveySubmitted(result.completed)
         setRemainingCredits(result.creditBalance)
       }),
-      Promise.all([
-        meApi.getDownloads('CI'),
-        meApi.getDownloads('BI'),
-      ]).then(([ciDownloads, biDownloads]) => setDownloadHistory([...ciDownloads, ...biDownloads].sort((a, b) => b.downloadedAt.localeCompare(a.downloadedAt)))),
-      meApi.getPins().then(setPinnedLogos),
-      meApi.getHiddenLogoCandidateIds().then(setHiddenMypageLogoCandidateIds),
     ])
   }, [loggedIn, mode])
 
   useEffect(() => {
-    if (!loggedIn || (mode !== 'brand-kit' && mode !== 'mypage')) return
+    if (!loggedIn || mode !== 'brand-kit') return
     let cancelled = false
     void meApi.getBrandKits()
       .then((kits) => {
@@ -1063,35 +1096,65 @@ function CustomerApp() {
 
   useEffect(() => {
     if (!loggedIn || mode !== 'mypage') {
-      setMypageGeneratedLogoCandidates({})
+      mypageAssetLoadEpochRef.current += 1
+      setMypageAssetFailures(new Set())
+      if (!loggedIn) setMypageGeneratedLogoCandidates({})
       return undefined
     }
 
-    const projectIds = [...new Set([
-      projectId,
-      ...pinnedLogos.map((pin) => pin.projectId),
-      ...downloadHistory.map((download) => download.projectId),
-      ...brandKitHistory.map((kit) => kit.projectId),
-    ].filter((value): value is string => Boolean(value)))]
-    if (projectIds.length === 0) {
-      setMypageGeneratedLogoCandidates({})
-      return undefined
+    const loadEpoch = ++mypageAssetLoadEpochRef.current
+    const isCurrentLoad = () => mypageAssetLoadEpochRef.current === loadEpoch
+    const setResourceFailure = (resource: MypageAssetResource, failed: boolean) => {
+      if (!isCurrentLoad()) return
+      setMypageAssetFailures((current) => {
+        const next = new Set(current)
+        if (failed) next.add(resource)
+        else next.delete(resource)
+        return next
+      })
     }
 
-    let cancelled = false
-    void Promise.all(projectIds.map(async (candidateProjectId) => {
-      try {
-        return await projectsApi.getLatestCandidates(candidateProjectId)
-      } catch {
-        return [] as LogoCandidate[]
-      }
-    })).then((candidateGroups) => {
-      if (cancelled) return
-      setMypageGeneratedLogoCandidates(Object.fromEntries(candidateGroups.flat().map((candidate) => [candidate.id, candidate])))
-    })
+    setMypageAssetFailures(new Set())
+    void Promise.all([meApi.getDownloads('CI'), meApi.getDownloads('BI')])
+      .then(([ciDownloads, biDownloads]) => {
+        if (!isCurrentLoad()) return
+        setDownloadHistory([...ciDownloads, ...biDownloads].sort((a, b) => b.downloadedAt.localeCompare(a.downloadedAt)))
+        setResourceFailure('downloads', false)
+      })
+      .catch(() => setResourceFailure('downloads', true))
+    void meApi.getPins()
+      .then((pins) => {
+        if (!isCurrentLoad()) return
+        setPinnedLogos(pins)
+        setResourceFailure('pins', false)
+      })
+      .catch(() => setResourceFailure('pins', true))
+    void meApi.getHiddenLogoCandidateIds()
+      .then((candidateIds) => {
+        if (!isCurrentLoad()) return
+        setHiddenMypageLogoCandidateIds(candidateIds)
+        setResourceFailure('hidden', false)
+      })
+      .catch(() => setResourceFailure('hidden', true))
+    void meApi.getBrandKits()
+      .then((kits) => {
+        if (!isCurrentLoad()) return
+        setBrandKitHistory(kits)
+        setResourceFailure('brandKits', false)
+      })
+      .catch(() => setResourceFailure('brandKits', true))
+    void meApi.getLogoCandidates()
+      .then((candidates) => {
+        if (!isCurrentLoad()) return
+        setMypageGeneratedLogoCandidates(Object.fromEntries(candidates.map((candidate) => [candidate.id, candidate])))
+        setResourceFailure('candidates', false)
+      })
+      .catch(() => setResourceFailure('candidates', true))
 
-    return () => { cancelled = true }
-  }, [brandKitHistory, downloadHistory, loggedIn, mode, pinnedLogos, projectId])
+    return () => {
+      if (mypageAssetLoadEpochRef.current === loadEpoch) mypageAssetLoadEpochRef.current += 1
+    }
+  }, [loggedIn, mode, mypageAssetRefreshVersion])
 
   useEffect(() => {
     if (!loggedIn || mode !== 'mypage' || downloadHistory.length === 0) {
@@ -1626,6 +1689,19 @@ function CustomerApp() {
     setMode('trademark-selection')
   }
 
+  const queueLogoGenerationFlow = () => {
+    if (finalGenerationLockRef.current || generationLoadingRef.current) return
+    finalGenerationLockRef.current = true
+    setFinalGenerationLocked(true)
+    finalGenerationFrameRef.current = window.requestAnimationFrame(() => {
+      finalGenerationFrameRef.current = null
+      finalGenerationSecondFrameRef.current = window.requestAnimationFrame(() => {
+        finalGenerationSecondFrameRef.current = null
+        openTrademarkSelection('generation')
+      })
+    })
+  }
+
   const toggleOnboardingSelection = (option: OnboardingOption) => {
     setOnboardingSelection((current) => current.includes(option)
       ? current.filter((item) => item !== option)
@@ -1920,7 +1996,8 @@ function CustomerApp() {
   }
 
   const startLogoGeneration = async (analyzeTrademark = trademarkAnalysisRequested) => {
-    if (generationLoading) return
+    if (generationLoadingRef.current) return
+    generationLoadingRef.current = true
     // 결과 화면에서 시작한 재생성은 현재 폼 상태로 프로젝트를 다시 저장하지 않는다.
     // 새로고침 직후에는 폼 상태가 아직 비어 있을 수 있으므로 서버 프로젝트를
     // 먼저 복원한 뒤 같은 프로젝트에 새 generation만 추가한다.
@@ -1979,6 +2056,7 @@ function CustomerApp() {
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : '로고 생성 중 문제가 발생했어요.')
     } finally {
+      generationLoadingRef.current = false
       setGenerationLoading(false)
     }
   }
@@ -2028,6 +2106,7 @@ function CustomerApp() {
       if (shouldStop?.() || requestEpoch !== assetEpochRef.current
           || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return
       setBrandKit(next)
+      setBrandKitHistory((current) => [next, ...current.filter((kit) => kit.id !== next.id)])
       if (next.status === 'SUCCEEDED' || next.status === 'FAILED') return
     }
   }
@@ -2036,10 +2115,17 @@ function CustomerApp() {
     candidateId: string | null = selectedCandidateId,
     targetProjectId: string | null = projectId,
     cardInfo?: BusinessCardInfoInput,
-  ) => {
-    if (!targetProjectId || !candidateId) return
+    callbacks?: { onAccepted?: () => void; onRejected?: (message: string) => void },
+  ): Promise<boolean> => {
+    if (!targetProjectId || !candidateId) {
+      const message = '로고 후보를 선택한 뒤 브랜드 키트를 만들 수 있어요.'
+      setBrandKitError(message)
+      callbacks?.onRejected?.(message)
+      return false
+    }
     const requestEpoch = assetEpochRef.current
     const brandKitRequestEpoch = ++brandKitRequestEpochRef.current
+    let accepted = false
     setBrandKitError('')
     try {
       const requested = await projectsApi.requestBrandKit(
@@ -2048,13 +2134,20 @@ function CustomerApp() {
         { kitType: brandKitType ?? 'THUMBNAIL', ...(cardInfo ? { cardInfo } : {}) },
       )
       if (requestEpoch !== assetEpochRef.current
-          || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return
+          || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return false
+      accepted = true
       setBrandKit(requested)
+      setBrandKitHistory((current) => [requested, ...current.filter((kit) => kit.id !== requested.id)])
+      callbacks?.onAccepted?.()
       await pollBrandKit(requested, brandKitRequestEpoch)
+      return true
     } catch (error) {
       if (requestEpoch !== assetEpochRef.current
-          || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return
-      setBrandKitError(error instanceof Error ? error.message : '브랜드 키트를 요청하지 못했어요.')
+          || brandKitRequestEpoch !== brandKitRequestEpochRef.current) return false
+      const message = error instanceof Error ? error.message : '브랜드 키트를 요청하지 못했어요.'
+      setBrandKitError(message)
+      if (!accepted) callbacks?.onRejected?.(message)
+      return accepted
     }
   }
 
@@ -2143,8 +2236,10 @@ function CustomerApp() {
   }
 
   const openBusinessCardModal = (target: { candidateId: string; projectId: string } | null = null) => {
+    if (brandKitCreatingRef.current) return
     setBusinessCardTarget(target)
     setBusinessCardInfoErrors({})
+    setBusinessCardSubmitError('')
     setBusinessCardInfo((current) => ({
       ...current,
       name: current.name || authUser?.name?.trim() || '',
@@ -2154,25 +2249,39 @@ function CustomerApp() {
     setBusinessCardModalOpen(true)
   }
 
-  const runSelectedBrandKit = async (cardInfo?: BusinessCardInfoInput) => {
-    if (!brandKitType) return
-    if (!projectId) {
-      setBrandKitError('로고 후보를 선택한 뒤 브랜드 키트를 만들 수 있어요.')
-      return
-    }
+  const releaseBrandKitCreation = () => {
+    brandKitCreatingRef.current = false
+    setBrandKitCreating(false)
+  }
 
-    if (logoCandidates.length === 0 && selectedCandidateId) {
-      await requestBrandKit(selectedCandidateId, projectId, cardInfo)
-      return
+  const runSelectedBrandKit = async (
+    cardInfo?: BusinessCardInfoInput,
+    callbacks?: { onAccepted?: () => void; onRejected?: (message: string) => void },
+    lockAlreadyHeld = false,
+  ): Promise<boolean> => {
+    const ownsLock = !lockAlreadyHeld
+    if (ownsLock) {
+      if (brandKitCreatingRef.current) return false
+      brandKitCreatingRef.current = true
+      setBrandKitCreating(true)
     }
-
-    const candidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
-    if (!candidate) {
-      setBrandKitError('로고 후보를 선택한 뒤 브랜드 키트를 만들 수 있어요.')
-      return
-    }
-
     try {
+      if (!brandKitType || !projectId) {
+        const message = '로고 후보를 선택한 뒤 브랜드 키트를 만들 수 있어요.'
+        setBrandKitError(message)
+        callbacks?.onRejected?.(message)
+        return false
+      }
+      if (logoCandidates.length === 0 && selectedCandidateId) {
+        return await requestBrandKit(selectedCandidateId, projectId, cardInfo, callbacks)
+      }
+      const candidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
+      if (!candidate) {
+        const message = '로고 후보를 선택한 뒤 브랜드 키트를 만들 수 있어요.'
+        setBrandKitError(message)
+        callbacks?.onRejected?.(message)
+        return false
+      }
       let candidateId = selectedCandidateId
       if (!candidate.selected || candidate.id !== selectedCandidateId) {
         const selected = await projectsApi.selectCandidate(projectId, candidate.id)
@@ -2180,9 +2289,14 @@ function CustomerApp() {
         setSelectedCandidateId(selected.id)
         setLogoCandidates((current) => current.map((item) => ({ ...item, selected: item.id === selected.id })))
       }
-      await requestBrandKit(candidateId, projectId, cardInfo)
+      return await requestBrandKit(candidateId, projectId, cardInfo, callbacks)
     } catch (error) {
-      setBrandKitError(error instanceof Error ? error.message : '로고 후보를 선택하지 못했어요.')
+      const message = error instanceof Error ? error.message : '로고 후보를 선택하지 못했어요.'
+      setBrandKitError(message)
+      callbacks?.onRejected?.(message)
+      return false
+    } finally {
+      if (ownsLock) releaseBrandKitCreation()
     }
   }
 
@@ -2197,6 +2311,7 @@ function CustomerApp() {
 
   const submitBusinessCardInfo = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (brandKitCreatingRef.current) return
     const normalized: BusinessCardInfoInput = {
       name: businessCardInfo.name.trim(),
       title: businessCardInfo.title?.trim() || undefined,
@@ -2217,11 +2332,23 @@ function CustomerApp() {
 
     setBusinessCardInfo(normalized)
     setBusinessCardInfoErrors({})
-    setBusinessCardModalOpen(false)
+    setBusinessCardSubmitError('')
+    brandKitCreatingRef.current = true
+    setBrandKitCreating(true)
     const target = businessCardTarget
-    setBusinessCardTarget(null)
-    if (target) await requestBrandKit(target.candidateId, target.projectId, normalized)
-    else await runSelectedBrandKit(normalized)
+    const callbacks = {
+      onAccepted: () => {
+        setBusinessCardModalOpen(false)
+        setBusinessCardTarget(null)
+      },
+      onRejected: (message: string) => setBusinessCardSubmitError(message),
+    }
+    try {
+      if (target) await requestBrandKit(target.candidateId, target.projectId, normalized, callbacks)
+      else await runSelectedBrandKit(normalized, callbacks, true)
+    } finally {
+      releaseBrandKitCreation()
+    }
   }
 
   const downloadLogo = async (candidate: { name: string; subtitle?: string; candidateId?: string; storageKey?: string; svgUrl?: string | null }): Promise<boolean> => {
@@ -2477,7 +2604,6 @@ function CustomerApp() {
       { id: 'premium', label: '프리미엄' },
       { id: 'sustainable', label: '지속가능성' },
       { id: 'scientific', label: '과학적 검증' },
-      { id: 'reasonable', label: '합리적인 가격' },
     ]
 
     return (
@@ -3175,7 +3301,7 @@ function CustomerApp() {
             </div>
           </section>
 
-          <button className="logo-style-next" type="button" onClick={() => openTrademarkSelection('generation')} disabled={generationLoading}>
+          <button className="logo-style-next" type="button" onClick={queueLogoGenerationFlow} disabled={finalGenerationLocked || generationLoading} aria-busy={finalGenerationLocked || generationLoading}>
             로고 생성하기 <ChevronRight aria-hidden="true" size={24} strokeWidth={1.8} />
           </button>
           {generationError && <p className="generation-error" role="alert">{generationError}</p>}
@@ -3187,12 +3313,12 @@ function CustomerApp() {
 
   const renderLoadingScreen = () => {
     const loadingSteps = [
-      { number: '1', icon: 'clipboard', text: '브랜드와 제품의 특징을 정리하고 있어요' },
-      { number: '2', icon: 'mood', text: '고객에게 어울리는 분위기를 찾고 있어요' },
-      { number: '3', icon: 'palette', text: '색상과 글씨체를 조합하고 있어요' },
-      { number: '4', icon: 'pen', text: '로고 후보를 생성하고 있어요' },
-      { number: '5', icon: 'folder', text: '결과를 비교하기 쉽게 정리하고 있어요' },
-      ...(trademarkAnalysisRequested ? [{ number: '6', icon: 'search', text: '로고 유사도를 분석하고 있어요' }] : []),
+      { icon: 'clipboard', text: '브랜드와 제품의 특징을 정리하고 있어요' },
+      { icon: 'mood', text: '고객에게 어울리는 분위기를 찾고 있어요' },
+      { icon: 'palette', text: '색상과 글씨체를 조합하고 있어요' },
+      { icon: 'pen', text: '로고 후보를 생성하고 있어요' },
+      { icon: 'folder', text: '결과를 비교하기 쉽게 정리하고 있어요' },
+      ...(trademarkAnalysisRequested ? [{ icon: 'search', text: '로고 유사도를 분석하고 있어요' }] : []),
     ]
 
     return (
@@ -3210,8 +3336,7 @@ function CustomerApp() {
 
           <section className={`logo-loading-steps step-progress-${loadingStep}`} aria-label="로고 생성 단계">
             {loadingSteps.map((step, index) => (
-              <article className={`logo-loading-step ${index < loadingStep ? 'complete' : ''} ${index === loadingStep && !generationError ? 'active' : ''}`} key={step.number}>
-                <span className="logo-loading-step-number">{step.number}</span>
+              <article className={`logo-loading-step ${index < loadingStep ? 'complete' : ''} ${index === loadingStep && !generationError ? 'active' : ''}`} key={`${step.icon}-${step.text}`}>
                 <span className={`logo-loading-step-icon icon-${step.icon}`} aria-hidden="true">
                   {step.icon === 'clipboard' ? <ClipboardCheck size={47} strokeWidth={1.8} />
                     : step.icon === 'mood' ? <Heart size={47} strokeWidth={1.8} fill="currentColor" />
@@ -3758,9 +3883,9 @@ function CustomerApp() {
                 <ChevronRight aria-hidden="true" size={23} strokeWidth={1.9} />
               </button>
             ) : (
-              <button className="brand-kit-create-button" type="button" disabled={!brandKitType} onClick={createSelectedBrandKit}>
-                {selectedOption ? `${selectedOption.title} 키트 만들기` : '브랜드 키트 선택하기'}
-                <ChevronRight aria-hidden="true" size={23} strokeWidth={1.9} />
+              <button className="brand-kit-create-button" type="button" disabled={!brandKitType || brandKitCreating} aria-busy={brandKitCreating} onClick={createSelectedBrandKit}>
+                {brandKitCreating ? '만드는 중...' : selectedOption ? `${selectedOption.title} 키트 만들기` : '브랜드 키트 선택하기'}
+                {!brandKitCreating && <ChevronRight aria-hidden="true" size={23} strokeWidth={1.9} />}
               </button>
             )}
             {brandKit && <p className="brand-kit-status" role="status">{brandKit.status === 'QUEUED' || brandKit.status === 'RUNNING' ? '브랜드 키트를 만들고 있어요.' : brandKit.status === 'SUCCEEDED' ? '브랜드 키트가 준비됐어요.' : '브랜드 키트 생성에 문제가 생겼어요.'}</p>}
@@ -4076,19 +4201,29 @@ function CustomerApp() {
     const target = assetDeleteTarget
     if (!target || assetDeleteLoading) return
 
+    let assetMutationCommitted = false
+    const markAssetMutationCommitted = () => {
+      if (assetMutationCommitted) return
+      assetMutationCommitted = true
+      // A response captured before this mutation must never restore the old item.
+      mypageAssetLoadEpochRef.current += 1
+    }
     setAssetDeleteLoading(true)
     setAssetDeleteError('')
     try {
       const useMypageMock = MYPAGE_MOCK_MODE && !authRestoring && !loggedIn
       if (useMypageMock) {
+        markAssetMutationCommitted()
         setMockDeletedAssetIds((current) => current.includes(target.id) ? current : [...current, target.id])
       } else if (target.brandKit) {
         if (!target.projectId || !target.candidateId) throw new Error('브랜드 키트의 연결 정보를 찾지 못했어요.')
         await projectsApi.deleteBrandKit(target.projectId, target.candidateId, target.brandKit.id)
+        markAssetMutationCommitted()
         setBrandKitHistory((current) => current.filter((kit) => kit.id !== target.brandKit?.id))
         setBrandKit((current) => current?.id === target.brandKit?.id ? null : current)
       } else if (target.kind === 'logo' && target.projectId && target.candidateId) {
         await meApi.hideLogoFromMypage(target.candidateId)
+        markAssetMutationCommitted()
         setHiddenMypageLogoCandidateIds((current) => current.includes(target.candidateId as string) ? current : [...current, target.candidateId as string])
         if (target.downloadId != null) {
           await meApi.deleteDownload(target.downloadId)
@@ -4106,6 +4241,7 @@ function CustomerApp() {
         })
       } else if (target.downloadId != null) {
         await meApi.deleteDownload(target.downloadId)
+        markAssetMutationCommitted()
         setDownloadHistory((current) => current.filter((item) => item.downloadId !== target.downloadId))
         setMypageDownloadImageUrls((current) => {
           const next = { ...current }
@@ -4119,6 +4255,9 @@ function CustomerApp() {
     } catch (error) {
       setAssetDeleteError(error instanceof Error ? error.message : '자산을 삭제하지 못했어요.')
     } finally {
+      // Re-read every resource after a committed mutation. This also fills in
+      // resources whose first request was still pending when deletion started.
+      if (assetMutationCommitted) setMypageAssetRefreshVersion((current) => current + 1)
       setAssetDeleteLoading(false)
     }
   }
@@ -4176,14 +4315,7 @@ function CustomerApp() {
       .filter((candidate) => candidate.storageKey && !hiddenMypageLogoCandidateIds.includes(candidate.id) && !downloadedCandidateIds.has(candidate.id))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((candidate) => {
-        const relatedKit = brandKitHistory.find((kit) => kit.candidateId === candidate.id)
-        const relatedPin = pinnedLogos.find((pin) => pin.candidateId === candidate.id)
-        const relatedDownload = downloadHistory.find((download) => download.candidateId === candidate.id)
-        const projectType = relatedPin?.projectType
-          ?? relatedDownload?.projectType
-          ?? (relatedKit?.kitType === 'THUMBNAIL' ? 'BI' : relatedKit?.kitType === 'BUSINESS_CARD' ? 'CI' : undefined)
-        const assetProjectId = relatedPin?.projectId ?? relatedDownload?.projectId ?? relatedKit?.projectId ?? projectId ?? undefined
-        const projectLabel = projectType ?? '생성'
+        const projectLabel = candidate.projectType
         const imageUrl = getLogoCandidateImageUrl(candidate.storageKey)
         return {
           id: `generated-logo-${candidate.id}`,
@@ -4192,23 +4324,22 @@ function CustomerApp() {
           subtitle: `${new Date(candidate.createdAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성`,
           imageUrl,
           imageUrls: [imageUrl],
-          projectId: assetProjectId,
+          projectId: candidate.projectId,
           candidateId: candidate.id,
-          projectType,
+          projectType: candidate.projectType,
           dateKey: getLocalDateKey(candidate.createdAt),
         }
       })
     const actualAssetItems: MypageAssetItem[] = [
       ...downloadHistory.map((item) => {
         const dateKey = getLocalDateKey(item.downloadedAt)
-        const relatedKit = brandKitHistory.find((kit) => kit.candidateId === item.candidateId)
         return {
           id: `download-${item.downloadId}`,
           kind: 'logo' as const,
           title: `${item.projectType} 로고`,
           subtitle: `${new Date(item.downloadedAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 저장`,
           imageUrl: item.imageUrl,
-          projectId: item.projectId ?? relatedKit?.projectId ?? projectId ?? undefined,
+          projectId: item.projectId,
           candidateId: item.candidateId,
           projectType: item.projectType,
           downloadId: item.downloadId,
@@ -4437,6 +4568,7 @@ function CustomerApp() {
             </div>
           </section>
 
+          {mypageAssetError && <p className="project-error mypage-project-error" role="alert">{mypageAssetError}</p>}
           {projectError && <p className="project-error mypage-project-error" role="alert">{projectError}</p>}
         </section>
       </main>
@@ -4569,9 +4701,11 @@ function CustomerApp() {
   )
 
   const closeBusinessCardModal = () => {
+    if (brandKitCreatingRef.current) return
     setBusinessCardModalOpen(false)
     setBusinessCardTarget(null)
     setBusinessCardInfoErrors({})
+    setBusinessCardSubmitError('')
   }
 
   const updateBusinessCardInfo = (field: keyof BusinessCardInfoInput, value: string) => {
@@ -4591,7 +4725,7 @@ function CustomerApp() {
       onKeyDown={(event) => { if (event.key === 'Escape') closeBusinessCardModal() }}
     >
       <section className="credit-modal business-card-modal" role="dialog" aria-modal="true" aria-labelledby="business-card-modal-title" aria-describedby="business-card-modal-description">
-        <button className="modal-close" type="button" aria-label="명함 정보 입력 닫기" onClick={closeBusinessCardModal}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
+        <button className="modal-close" type="button" aria-label="명함 정보 입력 닫기" onClick={closeBusinessCardModal} disabled={brandKitCreating}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         <header className="business-card-modal-intro">
           <div className="business-card-modal-icon" aria-hidden="true"><CreditCard size={30} strokeWidth={1.7} /></div>
           <div>
@@ -4608,6 +4742,7 @@ function CustomerApp() {
                 required
                 maxLength={40}
                 autoComplete="name"
+                disabled={brandKitCreating}
                 value={businessCardInfo.name}
                 aria-invalid={Boolean(businessCardInfoErrors.name)}
                 aria-describedby={businessCardInfoErrors.name ? 'business-card-name-error' : undefined}
@@ -4618,15 +4753,15 @@ function CustomerApp() {
             </label>
             <label className="business-card-field">
               <span>직책</span>
-              <input maxLength={40} autoComplete="organization-title" value={businessCardInfo.title ?? ''} onChange={(event) => updateBusinessCardInfo('title', event.target.value)} placeholder="대표 / 디자이너" />
+              <input maxLength={40} autoComplete="organization-title" value={businessCardInfo.title ?? ''} onChange={(event) => updateBusinessCardInfo('title', event.target.value)} placeholder="대표 / 디자이너" disabled={brandKitCreating} />
             </label>
             <label className="business-card-field business-card-field-wide">
               <span>회사명</span>
-              <input maxLength={60} autoComplete="organization" value={businessCardInfo.company ?? ''} onChange={(event) => updateBusinessCardInfo('company', event.target.value)} placeholder="회사 또는 브랜드 이름" />
+              <input maxLength={60} autoComplete="organization" value={businessCardInfo.company ?? ''} onChange={(event) => updateBusinessCardInfo('company', event.target.value)} placeholder="회사 또는 브랜드 이름" disabled={brandKitCreating} />
             </label>
             <label className="business-card-field">
               <span>전화번호</span>
-              <input type="tel" inputMode="numeric" maxLength={13} autoComplete="tel" value={businessCardInfo.phone ?? ''} onChange={(event) => updateBusinessCardInfo('phone', event.target.value)} placeholder="010-1234-5678" />
+              <input type="tel" inputMode="numeric" maxLength={13} autoComplete="tel" value={businessCardInfo.phone ?? ''} onChange={(event) => updateBusinessCardInfo('phone', event.target.value)} placeholder="010-1234-5678" disabled={brandKitCreating} />
             </label>
             <label className="business-card-field">
               <span>이메일</span>
@@ -4634,6 +4769,7 @@ function CustomerApp() {
                 type="email"
                 maxLength={80}
                 autoComplete="email"
+                disabled={brandKitCreating}
                 value={businessCardInfo.email ?? ''}
                 aria-invalid={Boolean(businessCardInfoErrors.email)}
                 aria-describedby={businessCardInfoErrors.email ? 'business-card-email-error' : undefined}
@@ -4644,13 +4780,14 @@ function CustomerApp() {
             </label>
             <label className="business-card-field business-card-field-wide">
               <span>주소</span>
-              <input maxLength={120} autoComplete="street-address" value={businessCardInfo.address ?? ''} onChange={(event) => updateBusinessCardInfo('address', event.target.value)} placeholder="명함에 표시할 주소" />
+              <input maxLength={120} autoComplete="street-address" value={businessCardInfo.address ?? ''} onChange={(event) => updateBusinessCardInfo('address', event.target.value)} placeholder="명함에 표시할 주소" disabled={brandKitCreating} />
             </label>
           </div>
           <p className="business-card-form-note"><Info aria-hidden="true" size={16} strokeWidth={1.9} /> 비워 둔 선택 정보는 명함에 표시되지 않아요.</p>
+          {businessCardSubmitError && <p className="business-card-submit-error" role="alert">{businessCardSubmitError}</p>}
           <div className="business-card-form-actions">
-            <button className="modal-secondary-button" type="button" onClick={closeBusinessCardModal}>취소</button>
-            <button className="gradient-button" type="submit">이 정보로 명함 만들기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.9} /></button>
+            <button className="modal-secondary-button" type="button" onClick={closeBusinessCardModal} disabled={brandKitCreating}>취소</button>
+            <button className="gradient-button" type="submit" disabled={brandKitCreating} aria-busy={brandKitCreating}>{brandKitCreating ? '명함 만드는 중...' : '이 정보로 명함 만들기'} {!brandKitCreating && <ChevronRight aria-hidden="true" size={20} strokeWidth={1.9} />}</button>
           </div>
         </form>
       </section>
