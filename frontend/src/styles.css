@@ -11347,3 +11347,68 @@ textarea {
 @media (max-width: 768px) {
   .final-request-heading h1 { font-size: clamp(29px, 8.4vw, 36px); }
 }
+
+/* ============================================================
+   ?view=edit / ?view=trademark-result 정리
+   1) 상단 로고·워드마크 색을 온보딩 화면(#30264e)과 통일
+   2) 상표 결과 상단 로고 위치를 가운데로
+   3) 생성한 로고 / 유사도 점수를 위아래 2칸으로
+   4) KIPRIS 등록 상표 이미지 숨김
+   ============================================================ */
+
+/* 1) 워드마크 색 — 온보딩과 동일 */
+.logo-editor-brand,
+.logo-editor-brand strong,
+.logo-editor-brand span,
+.trademark-result-brand,
+.trademark-result-brand strong,
+.trademark-result-brand span {
+  color: #30264e;
+}
+
+/* 2) 상단 로고 가운데 정렬 (뒤로가기 버튼과 균형 맞추기) */
+.trademark-result-header-redesign {
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  gap: 8px;
+}
+
+.trademark-result-header-redesign .trademark-result-brand {
+  justify-content: center;
+  gap: 7px;
+}
+
+/* 3) 생성한 로고(위) / 유사도 점수(아래) 2단 세로 배치 */
+.trademark-compare-board {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.trademark-compare-board .trademark-generated-card {
+  padding: 18px 18px 20px;
+}
+
+.trademark-compare-board .trademark-score-card {
+  min-height: 0;
+  padding: 22px 20px 24px;
+}
+
+.trademark-compare-board .trademark-score-card > strong {
+  margin-top: 10px;
+  font-size: 62px;
+}
+
+/* 4) KIPRIS 등록 상표 이미지 숨김 */
+.trademark-analysis-copy-visual {
+  display: none !important;
+}
+
+.trademark-analysis-copy {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  padding: 18px 20px;
+}
+
+.trademark-analysis-copy > div:last-child {
+  transform: none;
+}

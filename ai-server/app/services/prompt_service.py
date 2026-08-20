@@ -819,6 +819,23 @@ BRIEF_TONE = {
 # 잎 모티프에 가려짐, 재시도해도 다른 글자가 또 깨짐). 항상 심볼만 받아
 # logo_composer/svg_composer가 폰트로 정확하게 합성한다(model_draws_wordmark가
 # 항상 False인 이유와 같다).
+# 모델이 브랜드명까지 그리는 모드에서 쓰는 문장.
+# 잘 나올 때는 심볼과 글자가 같은 무게로 붙은 하나의 락업이 나와 완성도가
+# 확실히 높다. 다만 긴 이름에서 글자가 심볼에 가려지는 사고가 있어(실측:
+# "GlowLab"의 o/a) 기본값으로는 쓰지 않는다. 시안을 여러 장 뽑아 고를 수 있는
+# 상황(시연 촬영 등)에서만 LOGO_WORDMARK=model 로 켠다.
+BRIEF_STYLE_MODEL_TEXT = {
+    "혼합형": "The symbol and the brand name are designed together as one lockup.",
+    "워드마크": "A wordmark built from the brand name itself.",
+    "레터마크": "A monogram built from the brand initial.",
+    "심볼": "A standalone symbol with no letters.",
+}
+
+# on(=model) 이면 모델이 워드마크까지 그린다. 기본은 off — 안정성 우선.
+WORDMARK_BY_MODEL = os.environ.get("LOGO_WORDMARK", "composer").strip().lower() in (
+    "model", "on", "1", "true", "yes",
+)
+
 BRIEF_STYLE_NO_TEXT = {
     "혼합형": "A standalone symbol designed to pair cleanly with a separately typeset brand name, with no letters.",
     "워드마크": "An abstract symbol inspired by the brand's wordmark shape, with no readable letters.",
@@ -839,14 +856,25 @@ BRIEF_ANGLES = (
 def model_draws_wordmark(survey: dict) -> bool:
     """모델이 브랜드명까지 직접 그리는가.
 
-    항상 False다. 예전에는 영문 브랜드명 + 텍스트 포함 스타일일 때 모델에게
-    워드마크까지 맡겼는데, 아이콘과 겹치거나 글자가 깨지는 사고가 반복
-    확인되어(실측: "GlowLab"에서 o/a가 잎 모티프에 가려짐) 브랜드명은 언어와
-    무관하게 항상 이 서버가 폰트로 합성하기로 했다 — build_prompt_brief도
-    이제 브랜드명 문자열을 프롬프트에 절대 넣지 않는다. 호출부(logo_composer,
-    brand_kit_service)와 판단을 한 곳에서 맞추기 위해 함수는 그대로 남긴다.
+    기본은 False다. 브랜드명을 모델에 맡기면 아이콘과 겹치거나 글자가 깨지는
+    사고가 반복 확인됐다(실측: "GlowLab"에서 o/a가 잎 모티프에 가려짐). 그래서
+    평상시에는 언제나 이 서버가 폰트로 합성한다.
+
+    LOGO_WORDMARK=model 이면 예전 방식으로 돌아간다. 잘 나올 때는 심볼과 글자가
+    한 덩어리로 붙은 락업이 나와 완성도가 높지만, 실패율이 있어 시안을 여러 장
+    뽑아 고를 수 있는 상황에서만 쓴다. 한글은 Recraft가 글자를 못 그리므로
+    이 모드에서도 제외한다.
+
+    호출부(logo_composer, brand_kit_service)가 브랜드명을 또 얹을지 여부를
+    이 함수 하나로 판단한다 — 세 곳이 어긋나면 이름이 두 번 찍힌다.
     """
-    return False
+    if not WORDMARK_BY_MODEL:
+        return False
+    survey = _normalize_survey(survey)
+    if survey.get("style", "혼합형") not in ("혼합형", "워드마크", "레터마크"):
+        return False
+    brand = " ".join((survey.get("brand_name") or "").split())
+    return bool(brand) and not _HANGUL.search(brand)
 
 
 # 번역 실패 시 motif_translation_service가 넣는 자리표시자. 그 자체로는 무엇을
@@ -868,9 +896,18 @@ def build_prompt_brief(survey: dict, variant_index: int = 0) -> str:
 
     industry = INDUSTRY_MAP.get(survey.get("industry", ""), INDUSTRY_MAP["기타"])
     style_key = survey.get("style", "혼합형")
-    style_line = BRIEF_STYLE_NO_TEXT.get(style_key, BRIEF_STYLE_NO_TEXT["혼합형"])
+    brand = " ".join((survey.get("brand_name") or "").split())
 
-    lines = [f"A logo for {industry}.", style_line]
+    # 브랜드명을 프롬프트에 넣을지, 스타일 문장을 어느 쪽으로 쓸지는
+    # model_draws_wordmark 하나로 결정한다.
+    if model_draws_wordmark(survey):
+        style_line = BRIEF_STYLE_MODEL_TEXT.get(style_key, BRIEF_STYLE_MODEL_TEXT["혼합형"])
+        opening = f'A logo for {industry} called "{brand}".'
+    else:
+        style_line = BRIEF_STYLE_NO_TEXT.get(style_key, BRIEF_STYLE_NO_TEXT["혼합형"])
+        opening = f"A logo for {industry}."
+
+    lines = [opening, style_line]
 
     named = _manual_color_names(survey)
     if named:

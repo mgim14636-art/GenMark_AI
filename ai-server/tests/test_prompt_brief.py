@@ -186,3 +186,70 @@ def test_values_capped_at_five():
     prompt = _p(value_keywords_en=[f"v{i}" for i in range(8)])
     line = [l for l in prompt.splitlines() if "brand values" in l][0]
     assert line.count(",") == 4
+
+
+# --- 워드마크를 누가 그리는가 -------------------------------------------------
+# 기본은 이 서버가 폰트로 합성한다(안정적). LOGO_WORDMARK=model 이면 모델이
+# 심볼과 워드마크를 한 덩어리로 그린다 - 잘 나올 때 완성도가 확실히 높지만
+# 긴 이름에서 글자가 심볼에 가려지는 사고가 있어 기본값으로는 쓰지 않는다.
+def _reload(mode=None):
+    import importlib
+    import os
+
+    from app.services import logo_composer, prompt_service
+
+    if mode is None:
+        os.environ.pop("LOGO_WORDMARK", None)
+    else:
+        os.environ["LOGO_WORDMARK"] = mode
+    importlib.reload(prompt_service)
+    importlib.reload(logo_composer)
+    return prompt_service, logo_composer
+
+
+def test_default_keeps_brand_name_out_of_prompt():
+    ps, _ = _reload()
+    try:
+        assert '"Tree"' not in ps.build_prompt_brief(BASE, 0)
+        assert ps.model_draws_wordmark(BASE) is False
+    finally:
+        _reload()
+
+
+def test_model_mode_puts_brand_name_in_prompt():
+    ps, _ = _reload("model")
+    try:
+        prompt = ps.build_prompt_brief(BASE, 0)
+        assert '"Tree"' in prompt
+        assert "one lockup" in prompt
+    finally:
+        _reload()
+
+
+def test_only_one_side_draws_the_name():
+    """둘 다 켜지면 이름이 두 번 찍힌다. 정확히 한쪽만 담당해야 한다."""
+    for mode in (None, "model"):
+        ps, lc = _reload(mode)
+        try:
+            by_model = ps.model_draws_wordmark(BASE)
+            by_font = lc._wants_text_overlay(BASE, "혼합형", "Tree")
+            assert by_model != by_font, mode
+        finally:
+            _reload()
+
+
+def test_korean_never_goes_to_the_model():
+    """Recraft는 한글 글자를 그리지 못한다. 모드와 무관하게 제외."""
+    ps, _ = _reload("model")
+    try:
+        assert ps.model_draws_wordmark({**BASE, "company_name": "코스메틱"}) is False
+    finally:
+        _reload()
+
+
+def test_symbol_style_never_goes_to_the_model():
+    ps, _ = _reload("model")
+    try:
+        assert ps.model_draws_wordmark({**BASE, "style": "symbol"}) is False
+    finally:
+        _reload()
