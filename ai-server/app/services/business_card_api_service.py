@@ -46,6 +46,20 @@ def _parse_rgb(rgb_str: str) -> tuple:
     return tuple(int(v) for v in rgb_str.split(","))
 
 
+def _showcase_backdrop(front_rgb: tuple) -> tuple:
+    """쇼케이스 대각선 배경 두 톤을 카드 앞면 색에서 만든다.
+
+    compose_card_showcase의 기본값(짙은 초록 + 회색)은 브랜드 색과 무관해서,
+    카드가 배경과 따로 노는 것처럼 보였다(실측 확인됨 — 남색 카드 + 초록/회색
+    배경). 앞면 배경색을 그대로 어둡게/밝게 눌러써서 카드와 한 색 계열로
+    묶는다.
+    """
+    r, g, b = front_rgb
+    darker = tuple(max(0, round(c * 0.72)) for c in (r, g, b))
+    lighter = tuple(min(255, round(c * 0.55 + 255 * 0.45)) for c in (r, g, b))
+    return darker, lighter
+
+
 class BusinessCardService:
     @staticmethod
     def generate(req) -> dict:
@@ -79,6 +93,7 @@ class BusinessCardService:
             "showcase_image_base64": None,
         }
         if req.include_showcase:
-            showcase = compose_card_showcase(front, back)
+            bg_left, bg_right = _showcase_backdrop(_parse_rgb(req.bg_front))
+            showcase = compose_card_showcase(front, back, bg_color_left=bg_left, bg_color_right=bg_right)
             result["showcase_image_base64"] = _image_to_base64(showcase)
         return result

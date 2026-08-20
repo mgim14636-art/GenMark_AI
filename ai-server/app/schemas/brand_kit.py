@@ -33,8 +33,10 @@ CATEGORY_LABEL = {
     "LIP": "립", "ETC": "기타",
 }
 
-# 배경 연출. 제품 사진 없이 로고만으로 만들 수 있는 범위로 한정한다.
-# 제형 텍스처·원료 그래픽 연출은 제품 누끼컷 업로드가 선행되어야 해서 제외했다.
+# 배경 연출. TONE_GRADIENT(기본)는 실제 화장품 목업 사진(고정 템플릿)에 로고를
+# 원근 합성해 용기에 인쇄된 느낌을 낸다 — brand_kit_service._compose_container_print
+# 참고. 합성이 실패하면(에셋 로드 실패 등) 강조색 그라데이션으로 대체한다.
+# SOLID_LIGHT·SOFT_SHADOW는 용기 사진 없이 로고만 얹는 명시적 선택지다.
 BackgroundStyle = Literal["SOLID_LIGHT", "TONE_GRADIENT", "SOFT_SHADOW"]
 
 # 판매 채널 가이드라인 대응.

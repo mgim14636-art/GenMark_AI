@@ -7,6 +7,7 @@ import base64
 from io import BytesIO
 import xml.etree.ElementTree as ET
 
+import numpy as np
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -173,7 +174,11 @@ def test_backend_minimal_request_shape_is_accepted():
     assert response.json()["images"][0]["width"] == 1000
 
 
-def test_product_thumbnail_is_1000x1000_and_flagged_preliminary():
+def test_product_thumbnail_prints_logo_on_container():
+    """기본 배경(TONE_GRADIENT)은 실제 화장품 목업 사진에 로고를 원근 합성한다.
+
+    외부 API 호출이 없으므로 합성이 성공하면 임시 결과 표시 없이 1000x1000을 낸다.
+    """
     response = client.post(
         "/api/v1/generation/brand-kit",
         json={
@@ -188,9 +193,40 @@ def test_product_thumbnail_is_1000x1000_and_flagged_preliminary():
     assert response.status_code == 200
     body = response.json()
     assert body["kitType"] == "PRODUCT_THUMBNAIL"
-    # AI 연출 배경이 붙기 전까지는 임시 결과임을 백엔드가 구분할 수 있어야 한다
+    assert body["preliminary"] is False
+    assert body["warnings"] == []
+    image = body["images"][0]
+    assert (image["width"], image["height"]) == (1000, 1000)
+
+    # 매끈한 단색·그라데이션이 아니라 질감 있는 실제 목업 사진이 쓰였는지 확인한다.
+    decoded = np.asarray(_decode(image).convert("RGB"), dtype=np.float64)
+    assert decoded.std() > 20
+
+
+def test_product_thumbnail_falls_back_to_gradient_when_container_composite_fails(monkeypatch):
+    """용기 합성이 실패해도(에셋 로드 실패 등) 200으로 응답하고 preliminary=True로 알린다."""
+    from app.services import brand_kit_service
+
+    def failing_compose(logo, size, accent):
+        raise RuntimeError("템플릿 이미지 로드 실패: boom")
+
+    monkeypatch.setattr(brand_kit_service, "_compose_container_print", failing_compose)
+
+    response = client.post(
+        "/api/v1/generation/brand-kit",
+        json={
+            "kit_type": "PRODUCT_THUMBNAIL",
+            "logo_image_base64": _logo_b64(),
+            "ci_bi": "BI",
+            "survey": {"brand_name": "젠마크", "colors": ["#EC4899"]},
+            "product_name": "수분 세럼",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
     assert body["preliminary"] is True
-    assert any("AI 연출 배경" in w for w in body["warnings"])
+    assert any("제품 용기 합성" in w for w in body["warnings"])
     image = body["images"][0]
     assert (image["width"], image["height"]) == (1000, 1000)
 
