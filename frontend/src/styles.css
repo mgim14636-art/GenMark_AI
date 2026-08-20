@@ -482,15 +482,13 @@
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  font-size: clamp(39px, 5.2vw, 58px);
+  font-size: clamp(34px, 4.8vw, 52px);
   font-weight: 800;
-  /* 줄 높이가 1.18로 너무 빠듯해서, 그라데이션 글자(-webkit-background-clip: text)를
-     칠하는 영역이 "?" 같은 위로 튀어나온 글자를 못 담고 위쪽을 잘라 먹었다.
-     줄 높이를 넉넉하게 늘려서 글자가 온전히 다 칠해지게 한다. */
-  line-height: 1.32;
-  letter-spacing: -.11em;
+  line-height: 1.22;
+  letter-spacing: -.035em;
+  padding: .06em .18em .1em;
 }
-.brand-kit-selection-header > span { margin-top: 17px; color: #6d758a; font-size: clamp(17px, 2vw, 22px); letter-spacing: -.07em; }
+.brand-kit-title-question { display: inline-block; margin-inline-start: .02em; padding-inline-end: .14em; letter-spacing: 0; }
 .brand-kit-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .brand-kit-choice { display: grid; grid-template-rows: 176px auto; position: relative; min-height: 338px; overflow: hidden; border: 1px solid #e5dff2; border-radius: 24px; padding: 0; color: #202943; background: rgb(255 255 255 / .82); box-shadow: 0 12px 26px rgb(91 63 146 / .08); text-align: left; transition: transform 180ms cubic-bezier(.2, .7, .25, 1), border-color 180ms ease, box-shadow 180ms ease, background 180ms ease; }
 .brand-kit-choice::before { position: absolute; inset: 0; border: 1px solid transparent; border-radius: inherit; content: ''; pointer-events: none; transition: border-color 180ms ease; }
@@ -514,7 +512,8 @@
 .brand-kit-choice-copy small { margin-top: 3px; color: #687188; font-size: 15px; line-height: 1.5; letter-spacing: -.06em; }
 .brand-kit-choice-radio { display: grid; place-items: center; position: absolute; top: 18px; right: 18px; width: 32px; height: 32px; border: 1.5px solid #c7b3ed; border-radius: 50%; color: #fff; background: rgb(255 255 255 / .8); }
 .brand-kit-choice.selected .brand-kit-choice-radio { border-color: #9b5bea; background: linear-gradient(135deg, #a46df0, #df69c3); box-shadow: 0 5px 12px rgb(147 80 222 / .22); }
-.brand-kit-result-preview { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(240px, .55fr); gap: 28px; align-items: center; border: 1px solid #e3d9f3; border-radius: 26px; padding: 24px; background: rgb(255 255 255 / .9); box-shadow: 0 18px 42px rgb(97 63 157 / .12); }
+.brand-kit-result-preview { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, .75fr); gap: 28px; align-items: center; border: 1px solid #e3d9f3; border-radius: 26px; padding: 24px; background: rgb(255 255 255 / .9); box-shadow: 0 18px 42px rgb(97 63 157 / .12); }
+.brand-kit-result-preview.business-card-result-preview { grid-template-columns: 1fr; gap: 16px; align-items: start; min-height: 0; padding: 14px; }
 .brand-kit-result-images { display: grid; gap: 16px; min-width: 0; }
 .brand-kit-result-images.business-card-result-images { grid-template-columns: 1fr; align-items: start; gap: 14px; }
 .brand-kit-result-image { display: grid; margin: 0; overflow: hidden; border: 1px solid #e9e1f5; border-radius: 19px; background: linear-gradient(145deg, #f5efff, #fff3f9); }
@@ -533,15 +532,21 @@
 .business-card-result-images .brand-kit-result-image { border-radius: 15px; }
 .business-card-result-images .brand-kit-result-image figcaption { min-height: 38px; padding: 7px 10px; }
 .business-card-result-images .brand-kit-result-image figcaption strong { font-size: 13px; }
-.business-card-result-images .brand-kit-result-image-button img { height: auto; min-height: 0; padding: 8px; }
+.business-card-result-images .brand-kit-result-image-button { aspect-ratio: 1.7; }
+.business-card-result-images .brand-kit-result-image-button img { width: 100%; height: 100%; min-height: 0; padding: 8px; object-fit: contain; }
 .brand-kit-result-copy { display: grid; align-content: center; justify-items: start; }
-.brand-kit-result-copy > span { color: #8650df; font-size: 14px; font-weight: 800; }
-.brand-kit-result-copy .brand-kit-preliminary-badge { display: inline-flex; align-items: center; min-height: 24px; margin-top: 9px; border: 1px solid #d8c7ff; border-radius: 999px; padding: 0 9px; color: #7543d4; background: #f7f2ff; font-size: 11px; font-weight: 800; }
-.brand-kit-result-copy h2 { margin: 10px 0 0; color: #202943; font-size: clamp(25px, 3vw, 34px); line-height: 1.25; letter-spacing: -.08em; }
-.brand-kit-result-copy p { margin: 14px 0 0; color: #687188; font-size: 15px; line-height: 1.6; letter-spacing: -.04em; }
+.brand-kit-result-copy .brand-kit-preliminary-badge { display: inline-flex; align-items: center; min-height: 24px; margin-top: 0; border: 1px solid #d8c7ff; border-radius: 999px; padding: 0 9px; color: #7543d4; background: #f7f2ff; font-size: 11px; font-weight: 800; }
+.brand-kit-result-copy h2 { margin: 0; color: #202943; font-size: clamp(23px, 2.6vw, 31px); line-height: 1.24; letter-spacing: -.03em; text-wrap: balance; word-break: keep-all; }
+.brand-kit-result-copy .brand-kit-preliminary-badge + h2 { margin-top: 10px; }
+.brand-kit-result-copy p { margin: 14px 0 0; color: #687188; font-size: 15px; line-height: 1.65; letter-spacing: -.01em; overflow-wrap: break-word; word-break: keep-all; }
+.business-card-result-preview .brand-kit-result-copy { align-content: start; justify-items: center; padding: 14px 10px 10px; text-align: center; }
+.business-card-result-preview .brand-kit-result-copy h2 { font-size: clamp(23px, 6.4vw, 26px); }
+.business-card-result-preview .brand-kit-result-copy p { max-width: 34ch; margin-top: 10px; }
 .brand-kit-warnings { display: grid; gap: 5px; margin: 14px 0 0; padding: 0 0 0 18px; color: #8a5f18; font-size: 12px; line-height: 1.5; }
 .brand-kit-regenerate-button,
-.brand-kit-download-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; margin-top: 22px; border: 0; border-radius: 14px; padding: 0 17px; color: #fff; background: #7543d4; box-shadow: 0 10px 22px rgb(117 67 212 / .22); font-size: 14px; font-weight: 800; }
+.brand-kit-download-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; margin-top: 22px; border: 0; border-radius: 14px; padding: 0 17px; color: #fff; background: #7543d4; box-shadow: 0 10px 22px rgb(117 67 212 / .22); font-size: 14px; font-weight: 800; white-space: nowrap; }
+.business-card-result-preview .brand-kit-regenerate-button,
+.business-card-result-preview .brand-kit-download-button { width: min(100%, 300px); min-height: 50px; margin-top: 16px; }
 .brand-kit-regenerate-button:hover,
 .brand-kit-download-button:hover { background: #6937ca; transform: translateY(-1px); }
 .brand-kit-regenerate-button:focus-visible,
@@ -584,8 +589,7 @@
   .brand-kit-selection-mark { width: 52px; height: 52px; border-radius: 19px; }
   .brand-kit-selection-mark .brand-emblem { width: 28px; height: 28px; }
   .brand-kit-selection-header > p { margin-top: 14px; font-size: 15px; }
-  .brand-kit-selection-header h1 { margin-top: 0; font-size: clamp(32px, 9.2vw, 43px); }
-  .brand-kit-selection-header > span { margin-top: 13px; font-size: 15px; }
+  .brand-kit-selection-header h1 { margin-top: 0; font-size: clamp(30px, 8vw, 38px); line-height: 1.2; }
   .brand-kit-choice-grid { grid-template-columns: 1fr; gap: 12px; }
   .brand-kit-choice { grid-template-columns: 108px minmax(0, 1fr); grid-template-rows: 1fr; min-height: 143px; border-radius: 18px; }
   .brand-kit-choice-visual { min-height: 105px; margin: 18px 0 18px 18px; border-radius: 15px; }
@@ -598,14 +602,14 @@
   .brand-kit-choice-radio { top: 15px; right: 15px; width: 27px; height: 27px; }
   .brand-kit-choice-radio svg { width: 15px; height: 15px; }
   .brand-kit-result-preview { grid-template-columns: 1fr; gap: 18px; border-radius: 20px; padding: 16px; }
-  .brand-kit-result-images.business-card-result-images { grid-template-columns: 1fr; gap: 10px; }
+  .brand-kit-result-images.business-card-result-images { grid-template-columns: 1fr; gap: 12px; }
   .business-card-result-images .brand-kit-result-image figcaption { padding: 6px 8px; }
   .business-card-result-images .brand-kit-result-image figcaption strong { font-size: 12px; }
-  .business-card-result-images .brand-kit-result-image-button img { height: auto; padding: 6px; }
+  .business-card-result-images .brand-kit-result-image-button img { padding: 6px; }
   .brand-kit-result-image-zoom { right: 6px; bottom: 6px; padding: 5px 6px; font-size: 10px; }
   .brand-kit-result-image { border-radius: 15px; }
   .brand-kit-result-copy { padding: 2px 4px 8px; }
-  .brand-kit-result-copy h2 { font-size: 25px; }
+  .brand-kit-result-copy h2 { font-size: 24px; }
   .brand-kit-preview-backdrop { align-items: center; padding: 12px; }
   .brand-kit-preview-modal { max-height: calc(100dvh - 24px); border-radius: 20px; padding: 16px; }
   .brand-kit-preview-modal-header { padding-bottom: 13px; }
@@ -1703,6 +1707,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
      창 전체(1280px) 기준이라, 좁은 프레임 안에서도 최대값 66px이 그대로 걸려
      글자가 칸을 꽉 채웠다(양옆 여백 1px). 프레임 폭에 맞춰 다시 잡는다. */
   .app-shell .login-content h1 { font-size: 44px; letter-spacing: -.05em; }
+
+  /* 브랜드 키트는 데스크톱에서도 520px 앱 프레임 안에 표시된다.
+     뷰포트 기준 크기와 거터가 프레임 폭을 잘못 읽지 않게 맞춘다. */
+  .app-shell .brand-kit-selection-content { width: min(calc(100% - 28px), 560px); padding: 35px 0 122px; }
+  .app-shell .brand-kit-selection-header { margin-bottom: 27px; }
+  .app-shell .brand-kit-selection-header h1 { font-size: 38px; line-height: 1.2; }
 
   /* 상표 확인 안내 카드도 데스크탑 기본값(아이콘 90px·제목 31px)이 그대로 걸려
      520px 프레임 안에서 과하게 컸다. 자간이 -0.09em까지 좁아 단어 중간에서

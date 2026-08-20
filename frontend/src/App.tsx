@@ -3671,12 +3671,17 @@ function CustomerApp() {
         <ScreenBackButton label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')} />
         <section className="brand-kit-selection-content">
           <header className="brand-kit-selection-header">
-            <h1 id="brand-kit-selection-title">로고를 어디에<br />먼저 써볼까요?</h1>
-            <span>필요한 활용처를 골라 주세요.</span>
+            <h1 id="brand-kit-selection-title">
+              {completedBrandKit
+                ? completedBrandKit.kitType === 'BUSINESS_CARD'
+                  ? <>완성된 명함을<br />확인해 보세요.</>
+                  : <>완성된 썸네일을<br />확인해 보세요.</>
+                : <>로고를 어디에<br />먼저 써볼까요<span className="brand-kit-title-question">?</span></>}
+            </h1>
           </header>
 
           {completedBrandKit && brandKitImageUrls.length > 0 ? (
-            <section className="brand-kit-result-preview" aria-labelledby="brand-kit-result-title">
+            <section className={completedBrandKit.kitType === 'BUSINESS_CARD' ? 'brand-kit-result-preview business-card-result-preview' : 'brand-kit-result-preview'} aria-labelledby="brand-kit-result-title">
               <div className={completedBrandKit.kitType === 'BUSINESS_CARD' ? 'brand-kit-result-images business-card-result-images' : 'brand-kit-result-images'}>
                 {brandKitImageUrls.map((imageUrl, index) => {
                   const sideLabel = completedBrandKit.kitType === 'BUSINESS_CARD'
@@ -3701,7 +3706,6 @@ function CustomerApp() {
                 })}
               </div>
               <div className="brand-kit-result-copy">
-                <span>브랜드 키트 완성</span>
                 {completedBrandKit.preliminary && <span className="brand-kit-preliminary-badge">임시 결과</span>}
                 <h2 id="brand-kit-result-title">{completedBrandKit.kitType === 'BUSINESS_CARD' ? '명함' : '제품 썸네일'} 시안이 준비됐어요.</h2>
                 <p>{missingBusinessCardBack ? '이 결과는 이전 방식으로 만든 앞면만 있어요. 아래 버튼으로 뒷면까지 바로 만들 수 있어요.' : completedBrandKit.kitType === 'BUSINESS_CARD' ? '앞면과 뒷면을 확인한 뒤 ZIP 파일 하나로 함께 받을 수 있어요.' : '선택한 로고가 실제 활용 이미지에 적용된 결과예요.'}</p>
