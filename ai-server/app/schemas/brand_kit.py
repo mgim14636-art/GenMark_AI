@@ -33,10 +33,10 @@ CATEGORY_LABEL = {
     "LIP": "립", "ETC": "기타",
 }
 
-# 배경 연출. TONE_GRADIENT(기본)는 AI(사진풍 생성 모델)가 브랜드명이 적힌 제품
-# 사진을 직접 그린다 — brand_kit_service._generate_ai_product_scene 참고. 호출이
-# 실패하면(키 미설정·네트워크 오류 등) 강조색 그라데이션으로 대체한다.
-# SOLID_LIGHT·SOFT_SHADOW는 AI 없이 로고만 얹는 명시적 선택지다.
+# 배경 연출. TONE_GRADIENT(기본)는 실제 화장품 목업 사진(고정 템플릿)에 로고를
+# 원근 합성해 용기에 인쇄된 느낌을 낸다 — brand_kit_service._compose_container_print
+# 참고. 합성이 실패하면(에셋 로드 실패 등) 강조색 그라데이션으로 대체한다.
+# SOLID_LIGHT·SOFT_SHADOW는 용기 사진 없이 로고만 얹는 명시적 선택지다.
 BackgroundStyle = Literal["SOLID_LIGHT", "TONE_GRADIENT", "SOFT_SHADOW"]
 
 # 판매 채널 가이드라인 대응.

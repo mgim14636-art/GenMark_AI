@@ -437,32 +437,27 @@ def _single_manual_color(survey: dict):
     return colors[0] if len(colors) == 1 else None
 
 
-def _call_image_api(prompt: str, seed: int | None = None, model: str | None = None):
-    """반환: (PIL 이미지, SVG 문자열 또는 None)
-
-    model을 넘기면 그 모델로 호출한다(예: 브랜드킷 제품 사진은 벡터 로고 모델이
-    아닌 사진풍 모델을 쓴다). 생략하면 기존처럼 OPENROUTER_MODEL(로고용)을 쓴다.
-    """
+def _call_image_api(prompt: str, seed: int | None = None):
+    """반환: (PIL 이미지, SVG 문자열 또는 None)"""
     if not OPENROUTER_API_KEY:
         raise RuntimeError(
             "OPENROUTER_API_KEY가 설정되지 않았습니다. .env 파일에 OPENROUTER_API_KEY를 추가하세요."
         )
-    model = model or OPENROUTER_MODEL
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
     }
     payload = {
-        "model": model,
+        "model": OPENROUTER_MODEL,
         "prompt": prompt,
         "aspect_ratio": "1:1",
     }
-    if not is_vector(model):
+    if not is_vector():
         payload["output_format"] = "png"
     # 시드를 지원하는 모델에만 싣는다. 지원 모델에서는 같은 프롬프트를 재현하거나
     # 마음에 든 시안을 다시 뽑을 때 쓰이며, 백엔드 ai_metadata_json에 저장된다.
-    if seed is not None and supports_seed(model):
+    if seed is not None and supports_seed():
         payload["seed"] = seed
 
     last_error = None
@@ -492,7 +487,7 @@ def _call_image_api(prompt: str, seed: int | None = None, model: str | None = No
         print(f"[logo_gen_service]   단일 이미지 {time.monotonic() - call_started:.1f}s")
 
         raw = base64.b64decode(data[0]["b64_json"])
-        if is_vector(model) or raw.lstrip()[:5] in (b"<?xml", b"<svg "):
+        if is_vector() or raw.lstrip()[:5] in (b"<?xml", b"<svg "):
             svg = strip_background(raw.decode("utf-8"))
             svg = strip_stray_specks(svg)
             return rasterize_svg(svg), svg

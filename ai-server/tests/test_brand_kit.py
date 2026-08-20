@@ -7,24 +7,13 @@ import base64
 from io import BytesIO
 import xml.etree.ElementTree as ET
 
-import pytest
+import numpy as np
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.main import app
 
 client = TestClient(app, raise_server_exceptions=False)
-
-
-@pytest.fixture(autouse=True)
-def _stub_ai_product_scene(monkeypatch):
-    """제품 썸네일의 AI 제품 사진 호출이 실제 OpenRouter 네트워크를 타지 않게 한다."""
-    from app.services import logo_gen_service
-
-    def fake_call_image_api(prompt, seed=None, model=None):
-        return Image.new("RGB", (1024, 1024), (210, 220, 230)), None
-
-    monkeypatch.setattr(logo_gen_service, "_call_image_api", fake_call_image_api)
 
 
 def _logo_b64(size=(400, 400)) -> str:
@@ -185,8 +174,11 @@ def test_backend_minimal_request_shape_is_accepted():
     assert response.json()["images"][0]["width"] == 1000
 
 
-def test_product_thumbnail_is_1000x1000_and_uses_ai_product_scene():
-    """AI 제품 사진 생성이 성공하면 임시 결과 표시 없이 1000x1000 이미지를 낸다."""
+def test_product_thumbnail_prints_logo_on_container():
+    """기본 배경(TONE_GRADIENT)은 실제 화장품 목업 사진에 로고를 원근 합성한다.
+
+    외부 API 호출이 없으므로 합성이 성공하면 임시 결과 표시 없이 1000x1000을 낸다.
+    """
     response = client.post(
         "/api/v1/generation/brand-kit",
         json={
@@ -206,16 +198,19 @@ def test_product_thumbnail_is_1000x1000_and_uses_ai_product_scene():
     image = body["images"][0]
     assert (image["width"], image["height"]) == (1000, 1000)
 
+    # 매끈한 단색·그라데이션이 아니라 질감 있는 실제 목업 사진이 쓰였는지 확인한다.
+    decoded = np.asarray(_decode(image).convert("RGB"), dtype=np.float64)
+    assert decoded.std() > 20
 
-def test_product_thumbnail_falls_back_to_gradient_when_ai_generation_fails(monkeypatch):
-    """AI 배경 생성이 실패해도(키 미설정·네트워크 오류 등) 200으로 응답하고
-    preliminary=True로 대체 사실을 알린다."""
-    from app.services import logo_gen_service
 
-    def failing_call(prompt, seed=None, model=None):
-        raise RuntimeError("OpenRouter API 오류 (500): boom")
+def test_product_thumbnail_falls_back_to_gradient_when_container_composite_fails(monkeypatch):
+    """용기 합성이 실패해도(에셋 로드 실패 등) 200으로 응답하고 preliminary=True로 알린다."""
+    from app.services import brand_kit_service
 
-    monkeypatch.setattr(logo_gen_service, "_call_image_api", failing_call)
+    def failing_compose(logo, size, accent):
+        raise RuntimeError("템플릿 이미지 로드 실패: boom")
+
+    monkeypatch.setattr(brand_kit_service, "_compose_container_print", failing_compose)
 
     response = client.post(
         "/api/v1/generation/brand-kit",
@@ -231,7 +226,7 @@ def test_product_thumbnail_falls_back_to_gradient_when_ai_generation_fails(monke
     assert response.status_code == 200
     body = response.json()
     assert body["preliminary"] is True
-    assert any("AI 제품 사진" in w for w in body["warnings"])
+    assert any("제품 용기 합성" in w for w in body["warnings"])
     image = body["images"][0]
     assert (image["width"], image["height"]) == (1000, 1000)
 
