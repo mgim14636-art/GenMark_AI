@@ -1,23 +1,26 @@
 """브랜드킷(F14) 합성 서비스.
 
-설계 전제 — 로고를 이미지 생성 모델에 통째로 넣지 않는다.
-현재 이미지 생성 호출부(logo_gen_service._call_image_api)는 프롬프트만 보내는 text-to-image
-경로다. OpenRouter Image API에 input_references(image-to-image)가 있긴 하지만,
-디퓨전 모델은 입력 로고를 그대로 재현하지 못한다. 브랜드 아이덴티티 산출물에서 사용자의 로고가 변형돼 나오면
-기능 자체가 무의미해지므로, 배경만 생성하고 로고는 PIL로 정확히 얹는다.
-이 방침은 기획서 (7) 수행방법의 'CI 명함: 정보 정확도 확보를 위해 이미지 생성 모델
-미사용' 항목과 동일하다.
+설계 전제(BUSINESS_CARD 한정) — 로고를 이미지 생성 모델에 통째로 넣지 않는다.
+디퓨전 모델은 입력 로고를 그대로 재현하지 못한다. 브랜드 아이덴티티 산출물에서
+사용자의 로고가 변형돼 나오면 기능 자체가 무의미해지므로, 명함은 배경만 생성하고
+로고는 PIL로 정확히 얹는다. 이 방침은 기획서 (7) 수행방법의 'CI 명함: 정보 정확도
+확보를 위해 이미지 생성 모델 미사용' 항목과 동일하다.
+
+PRODUCT_THUMBNAIL은 다르다 — 고정 목업 사진 위에 로고를 정확히 합성하는 방식도
+써봤지만 사진이 하나뿐이라 카테고리·브랜드 색이 뭐든 항상 같은 장면이 나왔다.
+사용자 요청으로 AI(사진풍 생성 모델)가 제품 용기와 브랜드명을 함께 그리는
+방식으로 되돌렸다 — 로고 재현 정확도보다 "제품과 브랜드가 자연스럽게 담긴 장면"을
+우선한 트레이드오프다. 제품명·헤드라인 카피는 정확도가 필요해 PIL로 따로 얹는다.
 
 현재 구현 상태:
     BUSINESS_CARD      템플릿 합성으로 최종 품질까지 구현 (외부 API 불필요)
-    PRODUCT_THUMBNAIL  고정 제품 목업 사진에 로고를 원근 합성(용기에 인쇄된
-                       느낌)해 최종 품질까지 구현 (외부 API 불필요). 합성이
-                       실패하면 톤 기반 그라데이션으로 대체하고 응답에
-                       preliminary=True로 표시한다.
+    PRODUCT_THUMBNAIL  AI가 브랜드명이 적힌 제품 사진을 생성 + 제품명/헤드라인은
+                       PIL로 합성. AI 호출이 실패하면 톤 기반 그라데이션 +
+                       중앙 로고로 대체하고 응답에 preliminary=True로 표시한다.
 """
 import base64
 import binascii
-import colorsys
+import os
 import re
 import time
 from io import BytesIO
@@ -326,76 +329,65 @@ def _compose_business_card(logo: Image.Image, info: Optional[CardInfo], survey: 
 
 
 # --------------------------------------------------------------------------- 제품 썸네일
-# 실제 화장품 선물세트 사진(민트톤 드롭퍼 병 + 자 2개 + 병) 위에 로고를 원근
-# 합성해 "용기에 인쇄된" 느낌을 낸다.
+# AI(사진풍 생성 모델)가 제품 용기와 그 위의 브랜드명을 한 번에 그린다.
 #
-# 처음엔 FLUX(사진풍 생성 모델)로 배경 자체를 새로 그리고 그 위에 로고를 가운데
-# 얹었었다. 그러면 두 가지가 어긋난다 — (1) 모델이 "no bottles" 지시를 무시하고
-# 브랜드와 무관한 병을 배경에 그려 넣어 "이게 우리 제품인가?" 하는 혼동을 주고,
-# (2) 로고가 그 병들과 아무 관계 없이 화면 가운데 평평한 스티커처럼 떠 있어
-# 실제로 용기에 인쇄된 것처럼 보이지 않는다(실측 확인됨). 로고를 AI에게 다시
-# 그리게 하지 않는 이 파일의 원래 원칙과 같은 이유로, 사진은 고정 템플릿을 쓰고
-# product_mockup._warp_to_quad로 라벨 영역에 원근 보정해 정확히 끼워 넣는다
-# (app/services/brand_kit.py, app/services/cosmetic_gift_set_template.py).
-# 목업 사진 트레이/캡의 기준 민트색(에셋 고정값 — 트레이 바닥의 옅은 부분에서 측정).
-_TRAY_REFERENCE_COLOR = (213, 230, 219)
+# 고정 목업 사진(민트톤 선물세트) 위에 로고를 원근 합성하는 방식도 써봤지만,
+# 사진이 하나뿐이라 카테고리·브랜드 색이 뭐든 항상 같은 병 사진이 나왔다.
+# 사용자 요청으로 목업 파일 의존을 없애고 AI 생성으로 되돌렸다.
+#
+# [트레이드오프] 이 파일 상단에 적은 원래 방침("로고는 AI가 아니라 PIL로 정확히
+# 얹는다")과는 다른 선택이다 — 여기서는 모델이 브랜드명 텍스트까지 직접 그린다.
+# 디퓨전 모델은 입력 로고를 그대로 재현하지 못하므로 실제 로고와 미묘하게 다른
+# 형태가 나올 수 있고, 한글 브랜드명은 특히 철자가 흔들릴 수 있다. 정확도보다
+# "제품과 브랜드가 한 장면에 자연스럽게 담긴" 결과를 우선한 것이다. 제품명·
+# 헤드라인 카피는 정확도가 중요해 지금처럼 PIL로 따로 얹는다.
+_PRODUCT_SCENE_MODEL = os.environ.get("OPENROUTER_BACKGROUND_MODEL", "black-forest-labs/flux.2-pro")
+
+# 카테고리별 용기 형태 + 연출 힌트.
+_CATEGORY_SCENE = {
+    "CREAM": "a glass jar with a screw-top lid",
+    "SERUM": "a glass dropper bottle",
+    "TONER": "a tall glass toner bottle with a cap",
+    "CLEANSER": "a pump-top bottle",
+    "MASK": "a sealed sheet mask sachet",
+    "SUNCARE": "a squeeze tube",
+    "LIP": "a lipstick tube",
+    "ETC": "a glass cosmetic bottle",
+}
 
 
-def _tint_scene_to_accent(scene: Image.Image, accent: Tuple[int, int, int]) -> Image.Image:
-    """트레이·캡의 민트색을 브랜드 강조색 쪽으로 물들인다.
-
-    고정 목업 사진의 트레이는 항상 같은 민트색이라, 브랜드 색이 다르면 로고만
-    용기와 겉도는 것처럼 보인다(실측 확인됨 — 남색 로고 + 민트 박스가 서로
-    무관해 보임). 트레이와 같은 색상대(hue)인 픽셀만 강조색 쪽으로 돌리고
-    명암(HSV의 V)은 그대로 둬 입체감을 유지한다. 채도가 낮을수록(거의 흰색·
-    회색일수록) 이동량도 줄어들어, 크림색 박스 외피·나무 바닥·돌처럼 색상대가
-    다른 부분은 거의 영향받지 않는다.
-    """
-    hsv = np.asarray(scene.convert("RGB").convert("HSV"), dtype=np.float64)
-    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-
-    ref_h = colorsys.rgb_to_hsv(*(c / 255 for c in _TRAY_REFERENCE_COLOR))[0] * 255
-    hue_dist = np.minimum(np.abs(h - ref_h), 255 - np.abs(h - ref_h))
-    # 채도 게이트는 거의 순백색(유리 하이라이트, S<20)만 걸러내는 용도로 약하게 둔다.
-    # 트레이 대부분이 원래 옅은 파스텔이라, 여기를 세게 걸면 색이 거의 안 바뀐다.
-    mask = np.clip(1.0 - hue_dist / 40.0, 0.0, 1.0) * np.clip(s / 20.0, 0.0, 1.0)
-    # 옅은 파스텔 영역은 색상(hue)이 노이즈에 민감해 마스크가 픽셀 단위로 들쭉날쭉
-    # 해진다(실측 확인됨 — 얼룩덜룩한 전환). 살짝 블러해 매끈하게 이어지게 한다.
-    mask = np.asarray(
-        Image.fromarray((mask * 255).astype("uint8"), "L").filter(ImageFilter.GaussianBlur(3)),
-        dtype=np.float64,
-    ) / 255.0
-
-    accent_h, accent_s, _ = colorsys.rgb_to_hsv(*(c / 255 for c in accent))
-    accent_h *= 255
-    # 채도도 함께 끌어올려야 옅은 파스텔 영역에서 색상 변화가 실제로 보인다
-    # (색상만 바꾸면 채도가 낮은 픽셀은 여전히 거의 흰색으로 남아 눈에 안 띈다).
-    target_s = max(accent_s * 255 * 0.6, 70.0)
-    new_h = (h * (1 - mask) + accent_h * mask) % 255
-    new_s = s * (1 - mask) + target_s * mask
-
-    out_hsv = np.stack([new_h, new_s, v], axis=-1).clip(0, 255).astype("uint8")
-    return Image.fromarray(out_hsv, mode="HSV").convert("RGB")
+def _ai_product_scene_prompt(
+    category: Optional[str], product_name: Optional[str], survey: dict, accent: Tuple[int, int, int]
+) -> str:
+    hex_accent = "#%02x%02x%02x" % accent
+    container = _CATEGORY_SCENE.get(category or "", _CATEGORY_SCENE["ETC"])
+    brand = _brand_name(survey) or (product_name or "")
+    tone = _tone(survey) or "modern minimal"
+    return (
+        f"Photorealistic product photography of a single premium cosmetic container "
+        f"({container}), centered, front-facing. The label reads \"{brand}\" in clean, "
+        f"elegant typography. Primary brand color {hex_accent}, {tone} mood. "
+        "Professional studio lighting, soft shadow beneath the container, plain "
+        "uncluttered backdrop, sharp focus, high-end editorial commercial photography, "
+        "square 1:1 composition, only one container in frame, no hands, no extra props."
+    )
 
 
-def _compose_container_print(logo: Image.Image, size: Tuple[int, int], accent: Tuple[int, int, int]) -> Image.Image:
-    from app.services.brand_kit import compose_brand_kit
-    from app.services.cosmetic_gift_set_template import COSMETIC_GIFT_SET_TEMPLATE
+def _generate_ai_product_scene(
+    size: Tuple[int, int], category: Optional[str], product_name: Optional[str], survey: dict, accent: Tuple[int, int, int]
+) -> Image.Image:
+    from app.services import logo_gen_service
 
-    template = COSMETIC_GIFT_SET_TEMPLATE
-    background = Image.open(template.image_path)
-    tinted_rgb = _tint_scene_to_accent(background, accent)
-    background = Image.merge("RGBA", (*tinted_rgb.convert("RGB").split(), background.convert("RGBA").split()[-1]))
-
-    scene = compose_brand_kit(logo, template, background=background)
-    return _fit_cover(scene, size)
+    prompt = _ai_product_scene_prompt(category, product_name, survey, accent)
+    image, _svg = logo_gen_service._call_image_api(prompt, model=_PRODUCT_SCENE_MODEL)
+    return _fit_cover(image.convert("RGB"), size)
 
 
 def _fit_cover(img: Image.Image, size: Tuple[int, int]) -> Image.Image:
     """잘라내는 대신 빈틈없이 채우도록 리사이즈한다(가운데 크롭).
 
-    템플릿 사진(592x1024)은 1000x1000 캔버스와 비율이 달라, 규격에 맞춰
-    여백 없이 덮는다.
+    AI가 돌려주는 이미지는 요청한 1:1 비율과 정확히 같은 픽셀 수가 아닐 수 있어,
+    캔버스 규격(1000x1000)에 맞춰 여백 없이 덮는다.
     """
     W, H = size
     ratio = max(W / img.width, H / img.height)
@@ -417,8 +409,8 @@ def _sample_text_zone_color(img: Image.Image) -> Tuple[int, int, int]:
 def _draw_background(canvas: Image.Image, style: str, accent: tuple) -> tuple:
     """단색/그라데이션 배경을 그리고 그 위에 올릴 글자색 판단용 바탕색을 돌려준다.
 
-    SOLID_LIGHT·SOFT_SHADOW 전용이다. 기본값(TONE_GRADIENT)은 이제 실제 용기
-    사진(_compose_container_print)을 먼저 쓰고, 그게 실패할 때만 이 함수의
+    SOLID_LIGHT·SOFT_SHADOW 전용이다. 기본값(TONE_GRADIENT)은 이제 AI 제품 사진
+    (_generate_ai_product_scene)을 먼저 쓰고, 그게 실패할 때만 이 함수의
     그라데이션으로 대체한다 — _compose_product_thumbnail 참고.
     """
     W, H = canvas.size
@@ -477,20 +469,19 @@ def _compose_product_thumbnail(
     background_style: str = "TONE_GRADIENT",
     headline: Optional[str] = None,
 ) -> Tuple[Image.Image, float, Optional[str]]:
-    """스마트스토어 규격(1000x1000) 제품 썸네일, 텍스트 면적 비율, 용기 합성 실패 사유를 돌려준다."""
+    """스마트스토어 규격(1000x1000) 제품 썸네일, 텍스트 면적 비율, AI 생성 실패 사유를 돌려준다."""
     W, H = KIT_SIZE["PRODUCT_THUMBNAIL"]
     accent = _pick_accent(survey)
 
-    container_error = None
+    ai_error = None
     if background_style == "TONE_GRADIENT":
-        # 기본값 — 로고를 실제 용기 사진에 원근 합성한다(로고가 화면에 따로 떠
-        # 있지 않고 병에 인쇄되어 보인다). 에셋 로드 실패 등 예상 밖의 이유로
-        # 실패하면 예전처럼 그라데이션 배경 + 중앙 로고로 대체한다.
+        # 기본값 — AI가 브랜드명이 적힌 제품 용기 사진을 직접 그린다. 호출이
+        # 실패하면(키 미설정·네트워크 오류 등) 그라데이션 배경 + 중앙 로고로 대체한다.
         try:
-            canvas = _compose_container_print(logo, (W, H), accent)
+            canvas = _generate_ai_product_scene((W, H), category, product_name, survey, accent)
             base = _sample_text_zone_color(canvas)
         except Exception as e:
-            container_error = str(e)
+            ai_error = str(e)
             canvas = Image.new("RGB", (W, H))
             base = _draw_background(canvas, background_style, accent)
             logo_img = _fit(_trim(_logo_rgba(logo)), int(W * 0.54), int(H * 0.38))
@@ -501,7 +492,7 @@ def _compose_product_thumbnail(
                 logo_img,
             )
     else:
-        # SOLID_LIGHT·SOFT_SHADOW — 용기 사진 없이 로고만 가운데 얹는 명시적 선택지.
+        # SOLID_LIGHT·SOFT_SHADOW — AI 없이 실제 로고만 가운데 얹는 명시적 선택지.
         canvas = Image.new("RGB", (W, H))
         base = _draw_background(canvas, background_style, accent)
         logo_img = _fit(_trim(_logo_rgba(logo)), int(W * 0.54), int(H * 0.38))
@@ -539,7 +530,7 @@ def _compose_product_thumbnail(
             font=_resolve_font(34, weight="regular"), fill=text_color, anchor="ma",
         )
 
-    return canvas, _text_area_ratio(before, canvas), container_error
+    return canvas, _text_area_ratio(before, canvas), ai_error
 
 
 # --------------------------------------------------------------------------- 진입점
@@ -573,7 +564,7 @@ def create_brand_kit(req: BrandKitRequest) -> BrandKitResponse:
                 "이름·직함·연락처를 보내면 명함 뒷면이 완성됩니다."
             )
     else:
-        thumb, text_ratio, container_error = _compose_product_thumbnail(
+        thumb, text_ratio, ai_error = _compose_product_thumbnail(
             logo, req.product_name, req.survey,
             category=req.category,
             background_style=req.background_style,
@@ -589,8 +580,8 @@ def create_brand_kit(req: BrandKitRequest) -> BrandKitResponse:
                 f"텍스트가 이미지의 {text_ratio:.0%}를 차지합니다 "
                 f"(권장 {TEXT_AREA_LIMIT:.0%} 이하). 카피를 줄이면 채널 심사에 안전합니다."
             )
-        if container_error:
-            warnings.append(f"제품 용기 합성 실패 — 톤 기반 그라데이션으로 대체했습니다: {container_error}")
+        if ai_error:
+            warnings.append(f"AI 제품 사진 생성 실패 — 톤 기반 그라데이션으로 대체했습니다: {ai_error}")
 
     encoded = [_to_base64(img) for img in images]
     return BrandKitResponse(
