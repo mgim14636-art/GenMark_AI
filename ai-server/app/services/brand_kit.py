@@ -1,7 +1,7 @@
 """브랜드킷(여러 제품이 한 장면에 함께 배치된 목업)에 로고를 합성하는 모듈."""
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from PIL import Image
 
@@ -24,16 +24,9 @@ class BrandKitTemplate:
     apply_lighting: bool = True
 
 
-def compose_brand_kit(
-    logo: Image.Image, template: BrandKitTemplate, background: Optional[Image.Image] = None
-) -> Image.Image:
-    """로고 하나를 템플릿의 모든 라벨 영역에 합성한 이미지 1장을 만든다.
-
-    background를 넘기면 template.image_path 대신 그 이미지를 배경으로 쓴다 —
-    호출부가 원본 사진을 브랜드 색에 맞게 보정한 뒤 넘기는 용도(예:
-    brand_kit_service._tint_scene_to_accent).
-    """
-    scene = (background if background is not None else Image.open(template.image_path)).convert("RGBA")
+def compose_brand_kit(logo: Image.Image, template: BrandKitTemplate) -> Image.Image:
+    """로고 하나를 템플릿의 모든 라벨 영역에 합성한 이미지 1장을 만든다."""
+    scene = Image.open(template.image_path).convert("RGBA")
     transparent_logo = _remove_flat_background(logo)
     for _item_name, region in template.regions:
         fitted = _fit_logo_with_padding(transparent_logo, region, template.padding_ratio)
