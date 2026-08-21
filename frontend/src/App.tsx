@@ -5040,13 +5040,12 @@ function CustomerApp() {
       onMouseDown={(event) => { if (event.target === event.currentTarget) closeBusinessCardModal() }}
       onKeyDown={(event) => { if (event.key === 'Escape') closeBusinessCardModal() }}
     >
-      <section className="credit-modal business-card-modal" role="dialog" aria-modal="true" aria-labelledby="business-card-modal-title" aria-describedby="business-card-modal-description">
+      <section className="credit-modal business-card-modal" role="dialog" aria-modal="true" aria-labelledby="business-card-modal-title">
         <button className="modal-close" type="button" aria-label="명함 정보 입력 닫기" onClick={closeBusinessCardModal} disabled={brandKitCreating}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
         <header className="business-card-modal-intro">
           <div className="business-card-modal-icon" aria-hidden="true"><CreditCard size={30} strokeWidth={1.7} /></div>
           <div>
             <h2 id="business-card-modal-title">명함에 들어갈 정보를 알려주세요</h2>
-            <p id="business-card-modal-description">입력한 정보는 이번 명함 결과에 연결해 저장합니다.</p>
           </div>
         </header>
         <form className="business-card-form" noValidate onSubmit={submitBusinessCardInfo}>

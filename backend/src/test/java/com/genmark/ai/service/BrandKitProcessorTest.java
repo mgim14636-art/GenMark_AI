@@ -17,6 +17,49 @@ class BrandKitProcessorTest {
     private static final String SVG_REVISION = "a".repeat(64);
 
     @Test
+    void sendsSelectedLogoAndStoresExactlyOneThumbnail() {
+        BrandKitRepository repository = mock(BrandKitRepository.class);
+        BrandKitAiClient aiClient = mock(BrandKitAiClient.class);
+        LogoFileStorage storage = mock(LogoFileStorage.class);
+        BiProject project = BiProject.builder().brandName("젠마크").build();
+        LogoGeneration generation = LogoGeneration.builder().publicId("generation-bi")
+                .biProject(project).build();
+        LogoCandidate candidate = LogoCandidate.builder().candidateOrder(1)
+                .storageKey("logos/selected.png").generation(generation).build();
+        BrandKit kit = BrandKit.builder().id(8L).publicId("kit-thumbnail").candidate(candidate)
+                .kitType(BrandKit.KitType.THUMBNAIL)
+                .renderSpecJson("""
+                        {"survey":{"brand_name":"젠마크","color_manual":["#4F46E5"]}}
+                        """)
+                .status(BrandKit.Status.QUEUED).build();
+        when(repository.findById(8L)).thenReturn(Optional.of(kit));
+        when(storage.read("logos/selected.png")).thenReturn(new byte[]{1, 2, 3});
+        when(aiClient.generate(argThat(request -> {
+            Object rawSurvey = request.get("survey");
+            if (!(rawSurvey instanceof java.util.Map<?, ?> survey)) return false;
+            return "THUMBNAIL".equals(request.get("kit_type"))
+                    && "BI".equals(request.get("ci_bi"))
+                    && Base64.getEncoder().encodeToString(new byte[]{1, 2, 3})
+                    .equals(request.get("logo_image_base64"))
+                    && "젠마크".equals(survey.get("brand_name"));
+        }))).thenReturn(new BrandKitAiClient.Result(
+                List.of("thumbnail-png"), false, List.of()));
+        when(storage.store("brand-kits/kit-thumbnail", 1, "thumbnail-png"))
+                .thenReturn(new LogoFileStorage.StoredImage(
+                        "logos/brand-kits/kit-thumbnail/candidate-1.png", 1000, 1000));
+
+        new BrandKitProcessor(repository, aiClient, storage).process(8L);
+
+        assertThat(kit.getStatus()).isEqualTo(BrandKit.Status.SUCCEEDED);
+        assertThat(kit.getStorageKey())
+                .isEqualTo("logos/brand-kits/kit-thumbnail/candidate-1.png");
+        assertThat(kit.isPreliminary()).isFalse();
+        verify(storage).store("brand-kits/kit-thumbnail", 1, "thumbnail-png");
+        verify(storage, never()).store(anyString(), eq(2), anyString());
+        verify(storage).storeBrandKitSourceKey("kit-thumbnail", "logos/selected.png");
+    }
+
+    @Test
     void usesCandidateStorageKeyAndRecordsItForSuccessfulKit() {
         BrandKitRepository repository = mock(BrandKitRepository.class);
         BrandKitAiClient aiClient = mock(BrandKitAiClient.class);

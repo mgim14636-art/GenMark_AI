@@ -55,7 +55,9 @@ class BrandKitServiceTest {
         assertThat(response.kitType()).isEqualTo("THUMBNAIL");
         verify(brandKitRepository).save(argThat(kit -> kit.getKitType() == BrandKit.KitType.THUMBNAIL
                 && kit.getBusinessCardInfo() == null
-                && kit.getRenderSpecJson().contains("\"kit_type\":\"THUMBNAIL\"")));
+                && kit.getRenderSpecJson().contains("\"kit_type\":\"THUMBNAIL\"")
+                && kit.getRenderSpecJson().contains(
+                "\"renderer_version\":\"product-mockup-single-v1\"")));
         verify(worker).execute(any());
     }
 
@@ -157,6 +159,41 @@ class BrandKitServiceTest {
         assertThat(response.id()).isEqualTo("kit-1");
         verify(brandKitRepository, never()).save(any());
         verifyNoInteractions(worker);
+    }
+
+    @Test
+    void createsNewThumbnailWhenPreviousResultWasPreliminary() {
+        ProjectLookupService projectLookup = mock(ProjectLookupService.class);
+        LogoCandidateRepository candidateRepository = mock(LogoCandidateRepository.class);
+        BrandKitRepository brandKitRepository = mock(BrandKitRepository.class);
+        BrandKitWorker worker = mock(BrandKitWorker.class);
+        LogoFileStorage storage = mock(LogoFileStorage.class);
+        BrandKitService service = new BrandKitService(projectLookup, candidateRepository,
+                brandKitRepository, worker, storage);
+        Member member = Member.builder().id(7L).build();
+        CiProject project = CiProject.builder().id(3L).publicId("project-1").member(member).build();
+        LogoCandidate candidate = LogoCandidate.builder().id(4L).publicId("candidate-1")
+                .generation(LogoGeneration.builder().ciProject(project).build())
+                .storageKey("logos/current-revision.png").build();
+        BrandKit preliminary = BrandKit.builder().publicId("kit-preliminary").candidate(candidate)
+                .kitType(BrandKit.KitType.THUMBNAIL).status(BrandKit.Status.SUCCEEDED)
+                .preliminary(true).build();
+        when(projectLookup.requireOwned("project-1", 7L)).thenReturn(project);
+        when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
+                "candidate-1", 3L, 7L)).thenReturn(Optional.of(candidate));
+        when(brandKitRepository.findFirstByCandidateIdAndKitTypeAndRenderSpecHashAndStatusOrderByCompletedAtDesc(
+                any(), any(), anyString(), any())).thenReturn(Optional.of(preliminary));
+        when(storage.brandKitSourceKeyMatches("kit-preliminary", "logos/current-revision.png"))
+                .thenReturn(true);
+        when(storage.brandKitHasExpectedImageCount("kit-preliminary", 1)).thenReturn(true);
+        when(brandKitRepository.save(any(BrandKit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.create("project-1", "candidate-1", 7L,
+                new BrandKitCreateRequest("THUMBNAIL", null));
+
+        assertThat(response.status()).isEqualTo("QUEUED");
+        verify(brandKitRepository).save(argThat(kit -> kit != preliminary));
+        verify(worker).execute(any());
     }
 
     @Test

@@ -6,16 +6,14 @@
 로고는 PIL로 정확히 얹는다. 이 방침은 기획서 (7) 수행방법의 'CI 명함: 정보 정확도
 확보를 위해 이미지 생성 모델 미사용' 항목과 동일하다.
 
-PRODUCT_THUMBNAIL은 다르다 — 고정 목업 사진 위에 로고를 정확히 합성하는 방식도
-써봤지만 사진이 하나뿐이라 카테고리·브랜드 색이 뭐든 항상 같은 장면이 나왔다.
-사용자 요청으로 AI(사진풍 생성 모델)가 제품 용기와 브랜드명을 함께 그리는
-방식으로 되돌렸다 — 로고 재현 정확도보다 "제품과 브랜드가 자연스럽게 담긴 장면"을
-우선한 트레이드오프다. 제품명·헤드라인 카피는 정확도가 필요해 PIL로 따로 얹는다.
+PRODUCT_THUMBNAIL은 준비된 제품 목업 사진 한 장과 실제 로고, 크기·위치 가이드를
+AI 이미지 편집 모델에 함께 전달한다. 요청 한 번에 목업 한 장만 생성하며, 제품명과
+헤드라인 카피는 정확도가 필요해 PIL로 따로 얹는다.
 
 현재 구현 상태:
     BUSINESS_CARD      템플릿 합성으로 최종 품질까지 구현 (외부 API 불필요)
-    PRODUCT_THUMBNAIL  AI가 브랜드명이 적힌 제품 사진을 생성 + 제품명/헤드라인은
-                       PIL로 합성. AI 호출이 실패하면 톤 기반 그라데이션 +
+    PRODUCT_THUMBNAIL  실제 로고를 제품 목업 한 장에 AI 편집으로 합성 + 제품명/
+                       헤드라인은 PIL로 합성. AI 호출이 실패하면 톤 기반 그라데이션 +
                        중앙 로고로 대체하고 응답에 preliminary=True로 표시한다.
 """
 import base64
@@ -329,57 +327,23 @@ def _compose_business_card(logo: Image.Image, info: Optional[CardInfo], survey: 
 
 
 # --------------------------------------------------------------------------- 제품 썸네일
-# AI(사진풍 생성 모델)가 제품 용기와 그 위의 브랜드명을 한 번에 그린다.
-#
-# 고정 목업 사진(민트톤 선물세트) 위에 로고를 원근 합성하는 방식도 써봤지만,
-# 사진이 하나뿐이라 카테고리·브랜드 색이 뭐든 항상 같은 병 사진이 나왔다.
-# 사용자 요청으로 목업 파일 의존을 없애고 AI 생성으로 되돌렸다.
-#
-# [트레이드오프] 이 파일 상단에 적은 원래 방침("로고는 AI가 아니라 PIL로 정확히
-# 얹는다")과는 다른 선택이다 — 여기서는 모델이 브랜드명 텍스트까지 직접 그린다.
-# 디퓨전 모델은 입력 로고를 그대로 재현하지 못하므로 실제 로고와 미묘하게 다른
-# 형태가 나올 수 있고, 한글 브랜드명은 특히 철자가 흔들릴 수 있다. 정확도보다
-# "제품과 브랜드가 한 장면에 자연스럽게 담긴" 결과를 우선한 것이다. 제품명·
-# 헤드라인 카피는 정확도가 중요해 지금처럼 PIL로 따로 얹는다.
-_PRODUCT_SCENE_MODEL = os.environ.get("OPENROUTER_BACKGROUND_MODEL", "black-forest-labs/flux.2-pro")
-
-# 카테고리별 용기 형태 + 연출 힌트.
-_CATEGORY_SCENE = {
-    "CREAM": "a glass jar with a screw-top lid",
-    "SERUM": "a glass dropper bottle",
-    "TONER": "a tall glass toner bottle with a cap",
-    "CLEANSER": "a pump-top bottle",
-    "MASK": "a sealed sheet mask sachet",
-    "SUNCARE": "a squeeze tube",
-    "LIP": "a lipstick tube",
-    "ETC": "a glass cosmetic bottle",
-}
+# AI팀이 준비한 세 목업 중 top_left 한 장만 사용한다. 한 요청에서 세 템플릿을 모두
+# 호출하면 지연시간과 비용이 세 배가 되므로, 현재 제품 썸네일 계약(images 한 장)에
+# 맞춰 단일 편집 호출로 고정한다.
+_PRODUCT_MOCKUP_TEMPLATE = "top_left"
 
 
-def _ai_product_scene_prompt(
-    category: Optional[str], product_name: Optional[str], survey: dict, accent: Tuple[int, int, int]
-) -> str:
-    hex_accent = "#%02x%02x%02x" % accent
-    container = _CATEGORY_SCENE.get(category or "", _CATEGORY_SCENE["ETC"])
-    brand = _brand_name(survey) or (product_name or "")
-    tone = _tone(survey) or "modern minimal"
-    return (
-        f"Photorealistic product photography of a single premium cosmetic container "
-        f"({container}), centered, front-facing. The label reads \"{brand}\" in clean, "
-        f"elegant typography. Primary brand color {hex_accent}, {tone} mood. "
-        "Professional studio lighting, soft shadow beneath the container, plain "
-        "uncluttered backdrop, sharp focus, high-end editorial commercial photography, "
-        "square 1:1 composition, only one container in frame, no hands, no extra props."
-    )
-
-
-def _generate_ai_product_scene(
-    size: Tuple[int, int], category: Optional[str], product_name: Optional[str], survey: dict, accent: Tuple[int, int, int]
+def _generate_ai_product_mockup(
+    size: Tuple[int, int], logo: Image.Image, product_name: Optional[str], survey: dict
 ) -> Image.Image:
-    from app.services import logo_gen_service
+    from app.services import product_mockup_ai_service
 
-    prompt = _ai_product_scene_prompt(category, product_name, survey, accent)
-    image, _svg = logo_gen_service._call_image_api(prompt, model=_PRODUCT_SCENE_MODEL)
+    brand_name = _brand_name(survey) or (product_name or "")
+    image = product_mockup_ai_service.composite_logo_onto_mockup(
+        logo,
+        template=_PRODUCT_MOCKUP_TEMPLATE,
+        brand_name=brand_name,
+    )
     return _fit_cover(image.convert("RGB"), size)
 
 
@@ -475,10 +439,10 @@ def _compose_product_thumbnail(
 
     ai_error = None
     if background_style == "TONE_GRADIENT":
-        # 기본값 — AI가 브랜드명이 적힌 제품 용기 사진을 직접 그린다. 호출이
+        # 기본값 — 실제 로고를 준비된 제품 목업 한 장에 AI로 합성한다. 호출이
         # 실패하면(키 미설정·네트워크 오류 등) 그라데이션 배경 + 중앙 로고로 대체한다.
         try:
-            canvas = _generate_ai_product_scene((W, H), category, product_name, survey, accent)
+            canvas = _generate_ai_product_mockup((W, H), logo, product_name, survey)
             base = _sample_text_zone_color(canvas)
         except Exception as e:
             ai_error = str(e)

@@ -18,13 +18,21 @@ client = TestClient(app, raise_server_exceptions=False)
 
 @pytest.fixture(autouse=True)
 def _stub_ai_product_scene(monkeypatch):
-    """제품 썸네일의 AI 제품 사진 호출이 실제 OpenRouter 네트워크를 타지 않게 한다."""
-    from app.services import logo_gen_service
+    """제품 썸네일 테스트가 실제 OpenRouter 네트워크를 타지 않게 한다."""
+    from app.services import logo_gen_service, product_mockup_ai_service
 
-    def fake_call_image_api(prompt, seed=None, model=None):
+    def fake_call_image_api(prompt, seed=None, model=None, **kwargs):
         return Image.new("RGB", (1024, 1024), (210, 220, 230)), None
 
+    def fake_composite_logo_onto_mockup(logo, template="top_left", brand_name=""):
+        return Image.new("RGB", (1600, 900), (210, 220, 230))
+
     monkeypatch.setattr(logo_gen_service, "_call_image_api", fake_call_image_api)
+    monkeypatch.setattr(
+        product_mockup_ai_service,
+        "composite_logo_onto_mockup",
+        fake_composite_logo_onto_mockup,
+    )
 
 
 def _logo_b64(size=(400, 400)) -> str:
@@ -185,8 +193,22 @@ def test_backend_minimal_request_shape_is_accepted():
     assert response.json()["images"][0]["width"] == 1000
 
 
-def test_product_thumbnail_is_1000x1000_and_uses_ai_product_scene():
-    """AI 제품 사진 생성이 성공하면 임시 결과 표시 없이 1000x1000 이미지를 낸다."""
+def test_product_thumbnail_uses_selected_logo_to_create_exactly_one_mockup(monkeypatch):
+    """선택한 실제 로고를 한 목업에만 합성해 1000x1000 이미지 한 장을 반환한다."""
+    from app.services import product_mockup_ai_service
+
+    calls = []
+
+    def fake_composite(logo, template="top_left", brand_name=""):
+        calls.append({
+            "template": template,
+            "brand_name": brand_name,
+            "center_pixel": logo.convert("RGB").getpixel((logo.width // 2, logo.height // 2)),
+        })
+        return Image.new("RGB", (1600, 900), (210, 220, 230))
+
+    monkeypatch.setattr(product_mockup_ai_service, "composite_logo_onto_mockup", fake_composite)
+
     response = client.post(
         "/api/v1/generation/brand-kit",
         json={
@@ -203,19 +225,25 @@ def test_product_thumbnail_is_1000x1000_and_uses_ai_product_scene():
     assert body["kitType"] == "PRODUCT_THUMBNAIL"
     assert body["preliminary"] is False
     assert body["warnings"] == []
+    assert len(body["images"]) == 1
     image = body["images"][0]
     assert (image["width"], image["height"]) == (1000, 1000)
+    assert calls == [{
+        "template": "top_left",
+        "brand_name": "젠마크",
+        "center_pixel": (79, 70, 229),
+    }]
 
 
 def test_product_thumbnail_falls_back_to_gradient_when_ai_generation_fails(monkeypatch):
     """AI 배경 생성이 실패해도(키 미설정·네트워크 오류 등) 200으로 응답하고
     preliminary=True로 대체 사실을 알린다."""
-    from app.services import logo_gen_service
+    from app.services import product_mockup_ai_service
 
-    def failing_call(prompt, seed=None, model=None):
+    def failing_call(logo, template="top_left", brand_name=""):
         raise RuntimeError("OpenRouter API 오류 (500): boom")
 
-    monkeypatch.setattr(logo_gen_service, "_call_image_api", failing_call)
+    monkeypatch.setattr(product_mockup_ai_service, "composite_logo_onto_mockup", failing_call)
 
     response = client.post(
         "/api/v1/generation/brand-kit",
