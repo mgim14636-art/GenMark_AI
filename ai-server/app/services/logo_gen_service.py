@@ -437,11 +437,30 @@ def _single_manual_color(survey: dict):
     return colors[0] if len(colors) == 1 else None
 
 
-def _call_image_api(prompt: str, seed: int | None = None, model: str | None = None):
+def _to_data_url(img: Image.Image) -> str:
+    """이미지 편집 API의 input_references에 실을 base64 data URL로 인코딩한다."""
+    buf = BytesIO()
+    img.convert("RGBA").save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def _call_image_api(
+    prompt: str,
+    seed: int | None = None,
+    model: str | None = None,
+    input_references: list | None = None,
+    aspect_ratio: str = "1:1",
+):
     """반환: (PIL 이미지, SVG 문자열 또는 None)
 
     model을 넘기면 그 모델로 호출한다(예: 브랜드킷 제품 사진은 벡터 로고 모델이
     아닌 사진풍 모델을 쓴다). 생략하면 기존처럼 OPENROUTER_MODEL(로고용)을 쓴다.
+
+    input_references: PIL 이미지 목록을 넘기면 텍스트만으로 그리는 대신 이 이미지들을
+    참조해 편집하도록 요청한다(OpenRouter Unified Image API의 image-to-image 편집).
+    예: [목업 사진, 로고] 순으로 넘기면 "레퍼런스 1의 라벨에 레퍼런스 2를 합성하라"는
+    식의 프롬프트가 성립한다. 편집을 지원하지 않는 모델에 넘기면 API가 무시하거나
+    오류를 반환할 수 있다 — FLUX.2 Pro 등 편집 지원이 확인된 모델에서만 쓴다.
     """
     if not OPENROUTER_API_KEY:
         raise RuntimeError(
@@ -456,7 +475,7 @@ def _call_image_api(prompt: str, seed: int | None = None, model: str | None = No
     payload = {
         "model": model,
         "prompt": prompt,
-        "aspect_ratio": "1:1",
+        "aspect_ratio": aspect_ratio,
     }
     if not is_vector(model):
         payload["output_format"] = "png"
@@ -464,6 +483,11 @@ def _call_image_api(prompt: str, seed: int | None = None, model: str | None = No
     # 마음에 든 시안을 다시 뽑을 때 쓰이며, 백엔드 ai_metadata_json에 저장된다.
     if seed is not None and supports_seed(model):
         payload["seed"] = seed
+    if input_references:
+        payload["input_references"] = [
+            {"type": "image_url", "image_url": {"url": _to_data_url(img)}}
+            for img in input_references
+        ]
 
     last_error = None
     for attempt in range(MAX_RETRIES + 1):
