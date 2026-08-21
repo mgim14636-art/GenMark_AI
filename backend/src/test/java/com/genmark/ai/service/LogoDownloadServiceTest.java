@@ -27,7 +27,8 @@ class LogoDownloadServiceTest {
                 .build();
         when(downloads.findById(42L)).thenReturn(Optional.of(download));
         LogoDownloadService service = new LogoDownloadService(mock(ProjectLookupService.class),
-                mock(LogoCandidateRepository.class), downloads, mock(MemberRepository.class), storage, 20);
+                mock(LogoCandidateRepository.class), downloads, mock(MemberRepository.class), storage,
+                new com.fasterxml.jackson.databind.ObjectMapper(), 20);
 
         service.delete(42L, 7L);
 
@@ -46,7 +47,8 @@ class LogoDownloadServiceTest {
         when(downloads.findById(42L)).thenReturn(Optional.of(download));
         LogoFileStorage storage = mock(LogoFileStorage.class);
         LogoDownloadService service = new LogoDownloadService(mock(ProjectLookupService.class),
-                mock(LogoCandidateRepository.class), downloads, mock(MemberRepository.class), storage, 20);
+                mock(LogoCandidateRepository.class), downloads, mock(MemberRepository.class), storage,
+                new com.fasterxml.jackson.databind.ObjectMapper(), 20);
 
         assertThatThrownBy(() -> service.delete(42L, 9L))
                 .isInstanceOfSatisfying(ApiException.class,

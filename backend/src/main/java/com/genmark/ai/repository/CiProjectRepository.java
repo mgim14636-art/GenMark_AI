@@ -4,6 +4,7 @@ import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.ProjectStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -11,6 +12,9 @@ public interface CiProjectRepository extends JpaRepository<CiProject, Long> {
     List<CiProject> findByMemberId(Long memberId);
     Optional<CiProject> findByPublicIdAndMemberId(String publicId, Long memberId);
     Optional<CiProject> findFirstByMemberIdAndStatusNotOrderByUpdatedAtDesc(Long memberId, ProjectStatus status);
+
+    /** 오래 방치된 미완성(DRAFT/BRIEF_READY) 초안을 자동 정리할 때 쓴다. */
+    List<CiProject> findByStatusInAndUpdatedAtBefore(List<ProjectStatus> statuses, LocalDateTime threshold);
 
     /**
      * 두 번째 CI부터 회사명·핵심가치를 자동으로 채워주기 위해 가장 최근 CI 한 건을 찾는다.

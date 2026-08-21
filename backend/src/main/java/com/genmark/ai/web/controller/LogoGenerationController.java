@@ -88,4 +88,14 @@ public class LogoGenerationController {
         svgService.saveEdited(projectId, candidateId, principal.id(), request.svg());
         return ResponseEntity.noContent().build();
     }
+
+    /** 편집본을 버리고 AI가 처음 만든 원본 로고로 되돌린다 (편집본 파일 자체는 남는다). */
+    @PostMapping("/logo-candidates/{candidateId}/svg/restore-original")
+    public ResponseEntity<ApiSuccessResponse<LogoCandidateResponse>> restoreOriginalSvg(
+            @AuthenticationPrincipal MemberPrincipal principal, @PathVariable String projectId,
+            @PathVariable String candidateId) {
+        svgService.restoreOriginal(projectId, candidateId, principal.id());
+        return ResponseEntity.ok(ApiSuccessResponse.of(
+                service.candidate(projectId, candidateId, principal.id())));
+    }
 }

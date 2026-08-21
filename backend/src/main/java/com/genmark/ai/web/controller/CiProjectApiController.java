@@ -48,6 +48,16 @@ public class CiProjectApiController {
         return ResponseEntity.ok(ApiSuccessResponse.of(ciProjectService.latestProfile(principal.id())));
     }
 
+    /**
+     * 마이페이지 프로필 화면에서 회사명·회사 모토를 고칠 때 쓴다. latestProfile()이 읽는
+     * "가장 최근 CI 한 건"을 그대로 수정 대상으로 삼는다.
+     */
+    @PatchMapping("/latest-profile")
+    public ResponseEntity<ApiSuccessResponse<CiLatestProfileResponse>> updateLatestProfile(
+            @AuthenticationPrincipal MemberPrincipal principal, @Valid @RequestBody CiProjectUpsertRequest request) {
+        return ResponseEntity.ok(ApiSuccessResponse.of(ciProjectService.updateLatestProfile(principal.id(), request)));
+    }
+
     @GetMapping("/{projectId}")
     public ResponseEntity<ApiSuccessResponse<CiProjectResponse>> get(
             @AuthenticationPrincipal MemberPrincipal principal, @PathVariable String projectId) {

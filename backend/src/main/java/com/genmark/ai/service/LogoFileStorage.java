@@ -166,6 +166,42 @@ public class LogoFileStorage {
         }
     }
 
+    /**
+     * 편집본을 버리고 "AI가 처음 만든" 원본 자산으로 돌아갈 때 쓴다.
+     *
+     * <p>원본 SVG/PNG는 생성 시점 이후 한 번도 덮어쓰지 않으므로(storeOriginalSvg는 덮어쓰기를
+     * 막고, 편집본은 리비전 파일로 따로 쌓인다) 지금도 그대로 남아 있다. 여기서는 아무것도
+     * 새로 쓰지 않고, 그 원본 PNG를 다시 가리키는 데 필요한 정보만 돌려준다.
+     */
+    public StoredImage originalAsset(String generationPublicId, int order) {
+        Path originalSvg = svgPath(generationPublicId, order, false);
+        if (!Files.exists(originalSvg)) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "이 로고에는 되돌릴 원본 SVG가 없습니다.");
+        }
+        Path originalPng = originalPngPath(generationPublicId, order);
+        if (!Files.exists(originalPng)) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "이 로고에는 되돌릴 원본 이미지가 없습니다.");
+        }
+        try {
+            BufferedImage image = ImageIO.read(originalPng.toFile());
+            if (image == null) throw new ApiException(ErrorCode.STORAGE_ERROR);
+            return new StoredImage(publicStorageKey(originalPng), image.getWidth(), image.getHeight());
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
+    private Path originalPngPath(String generationPublicId, int order) {
+        if (generationPublicId == null || !SAFE_PATH_SEGMENT.matcher(generationPublicId).matches() || order < 1) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+        Path directory = root.resolve("logos").resolve(generationPublicId).normalize();
+        if (!directory.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+        Path file = directory.resolve("candidate-" + order + ".png").normalize();
+        if (!file.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+        return file;
+    }
+
     public byte[] readPreferredSvg(String generationPublicId, int order) {
         Path edited = svgPath(generationPublicId, order, true);
         Path original = svgPath(generationPublicId, order, false);
@@ -263,7 +299,11 @@ public class LogoFileStorage {
      *
      * @return 보관본의 storageKey
      */
-    public String archiveForDownload(Long memberId, String candidatePublicId, String sourceStorageKey) {
+    public String archiveForDownload(Long memberId, String candidatePublicId, String assetRevision,
+                                     String sourceStorageKey) {
+        if (assetRevision == null || !SAFE_PATH_SEGMENT.matcher(assetRevision).matches()) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
         try {
             Path source = root.resolve(sourceStorageKey).normalize();
             if (!source.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
@@ -272,7 +312,8 @@ public class LogoFileStorage {
             if (!directory.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
             Files.createDirectories(directory);
 
-            Path target = directory.resolve(candidatePublicId + ".png");
+            // 파일명에 리비전을 넣어야 수정 전에 받아둔 보관본을 덮어쓰지 않는다.
+            Path target = directory.resolve(candidatePublicId + "-" + assetRevision + ".png");
             Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
             return root.relativize(target).toString().replace('\\', '/');
         } catch (IOException e) {

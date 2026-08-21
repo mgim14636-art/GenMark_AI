@@ -36,7 +36,7 @@ type ToneOption = 'friendly' | 'professional' | 'warm' | 'trendy' | 'minimal'
 type RgbColor = { r: number; g: number; b: number }
 type LogoStyle = 'symbol' | 'wordmark' | 'combination' | 'lettermark'
 type TrademarkMatchImage = { rank: number; src: string }
-type FinalEditKind = 'identity' | 'values' | 'tone' | 'color' | 'style' | 'shape'
+type FinalEditKind = 'identity' | 'audience' | 'values' | 'tone' | 'color' | 'style' | 'shape'
 type FinalToneMode = 'recommended' | 'direct'
 type EditorTarget = string
 type MypageAssetKind = 'logo' | 'business-card' | 'thumbnail'
@@ -104,7 +104,7 @@ const createEditorDraft = (color = '#7B5CDF'): EditorDraft => ({
 
 const createEditorDrafts = (color = '#7B5CDF'): EditorDrafts => ({})
 
-const EDITOR_TEST_MODE = true
+const EDITOR_TEST_MODE = import.meta.env.DEV
 const EDITOR_TEST_SVG_URL = '/genmark_logo.svg'
 
 const uniqueColors = (colors: string[]) => Array.from(new Map(
@@ -273,7 +273,7 @@ const getModeFromUrl = (): ViewMode => {
 // TEMP_RESULT_PREVIEW: 결과 후보가 없을 때 결과 화면 레이아웃을 생성 API 없이
 // 검토하기 위한 로컬 목업 데이터입니다. 실제 생성·저장 흐름에는 사용하지 않습니다.
 const resultPreviewCandidates: LogoCandidate[] = [
-  { id: 'preview-candidate-1', projectId: 'preview-project', projectType: 'CI', order: 1, storageKey: 'preview-candidate-1', svgUrl: null, svgEdited: false, mimeType: 'image/svg+xml', width: 760, height: 760, selected: true, pinnedAt: null, createdAt: '' },
+  { id: 'preview-candidate-1', projectId: 'preview-project', projectType: 'CI', order: 1, storageKey: 'preview-candidate-1', svgUrl: null, svgEdited: false, svgRevision: 'original', mimeType: 'image/svg+xml', width: 760, height: 760, selected: true, pinnedAt: null, createdAt: '' },
 ]
 const resultPreviewImageUrl = '/logo-result-preview-bramont.png'
 const GENERATED_LOGO_COUNT = 1
@@ -520,6 +520,13 @@ function CustomerApp() {
   const [profileEditing, setProfileEditing] = useState(false)
   const [profileCompanyNameDraft, setProfileCompanyNameDraft] = useState('')
   const [profileCompanyMottoDraft, setProfileCompanyMottoDraft] = useState('')
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaveError, setProfileSaveError] = useState('')
+  // 마이페이지 상단 프로필에 보여줄 회사명·모토는 companyName/companyMotto(지금 진행
+  // 중인 초안 — CI일 수도 BI일 수도 있다)와는 별개로, 항상 "이 회원의 가장 최근 CI"에서만
+  // 가져온다. BI의 브랜드명·핵심가치는 자주 바뀌는 값이라 프로필에 섞이면 안 되기 때문이다.
+  const [mypageCiCompanyName, setMypageCiCompanyName] = useState('')
+  const [mypageCiCompanyMotto, setMypageCiCompanyMotto] = useState('')
   const [openMypageAssetDate, setOpenMypageAssetDate] = useState('2026-08-18')
   const [coreValues, setCoreValues] = useState<CoreValue[]>([])
   const [coreValueInputMode, setCoreValueInputMode] = useState<'category' | 'direct'>('category')
@@ -553,6 +560,10 @@ function CustomerApp() {
   const [editorDirty, setEditorDirty] = useState(false)
   const [editorSaved, setEditorSaved] = useState(false)
   const [editorSvgSource, setEditorSvgSource] = useState<string | null>(null)
+  // The SVG exactly as it was loaded when this edit screen opened. "초기화" restores this,
+  // so a reset undoes the whole image — including edits already baked into editorSvgSource
+  // by an earlier "변경 사항 적용하기" in the same visit — not just the pending drafts.
+  const [editorBaseSvgSource, setEditorBaseSvgSource] = useState<string | null>(null)
   const [editorSvgPreviewSource, setEditorSvgPreviewSource] = useState<string | null>(null)
   const [editorSvgPreviewUrl, setEditorSvgPreviewUrl] = useState<string | null>(null)
   const [editorLoading, setEditorLoading] = useState(false)
@@ -562,6 +573,20 @@ function CustomerApp() {
   const [trademarkEntry, setTrademarkEntry] = useState<'generation' | 'result'>('generation')
   const [trademarkAnalysisCompleted, setTrademarkAnalysisCompleted] = useState(false)
   const [projectId, setProjectId] = useState<string | null>(() => window.localStorage.getItem('genmark-project-id'))
+  // projectId는 "지금 화면이 다루는 프로젝트"(마이페이지에서 완성 로고를 열 때도 바뀜)이고,
+  // activeDraftProjectId는 "만들다 만 CI/BI 초안" 전용이다. 예전엔 이 둘을 projectId 하나로
+  // 같이 썼는데, 그래서 마이페이지에서 완성 로고로 명함을 만들면 만들던 초안을 "이어서
+  // 작성하시겠습니까?"로 물어볼 대상 자체가 사라지는 버그가 있었다.
+  const [activeDraftProjectId, setActiveDraftProjectId] = useState<string | null>(() =>
+    window.localStorage.getItem('genmark-draft-project-id')
+    // 이 키가 생기기 전에는 genmark-project-id가 이 역할까지 겸했다. 그 값이 남아있다면
+    // 마이그레이션 삼아 그대로 이어받는다.
+    ?? window.localStorage.getItem('genmark-project-id'))
+  const persistActiveDraftProjectId = (id: string | null) => {
+    setActiveDraftProjectId(id)
+    if (id) window.localStorage.setItem('genmark-draft-project-id', id)
+    else window.localStorage.removeItem('genmark-draft-project-id')
+  }
   const [projectColors, setProjectColors] = useState<string[]>([])
   const [generationId, setGenerationId] = useState<string | null>(null)
   const [generationError, setGenerationError] = useState('')
@@ -597,6 +622,9 @@ function CustomerApp() {
   const [assetDeleteTarget, setAssetDeleteTarget] = useState<MypageAssetItem | null>(null)
   const [assetDeleteLoading, setAssetDeleteLoading] = useState(false)
   const [assetDeleteError, setAssetDeleteError] = useState('')
+  const [restoreOriginalOpen, setRestoreOriginalOpen] = useState(false)
+  const [restoreOriginalLoading, setRestoreOriginalLoading] = useState(false)
+  const [restoreOriginalError, setRestoreOriginalError] = useState('')
   const [mockDeletedAssetIds, setMockDeletedAssetIds] = useState<string[]>([])
   const [businessCardModalOpen, setBusinessCardModalOpen] = useState(false)
   const [businessCardInfo, setBusinessCardInfo] = useState<BusinessCardInfoInput>({
@@ -635,6 +663,8 @@ function CustomerApp() {
   const resultHydrationProjectRef = useRef<string | null>(null)
   const [finalEditToneMode, setFinalEditToneMode] = useState<FinalToneMode>('recommended')
   const [finalEditDraft, setFinalEditDraft] = useState({ companyName: '', companyMotto: '', brandName: '', targetAge: '', valuesText: '', tone: '', colors: [] as string[], logoStyle: '' as LogoStyle | '', logoShape: '' })
+  const [finalEditSaving, setFinalEditSaving] = useState(false)
+  const [finalEditError, setFinalEditError] = useState('')
   const activeModalRef = useRef<HTMLDivElement>(null)
   const editorDragRef = useRef<EditorDragState | null>(null)
 
@@ -667,9 +697,59 @@ function CustomerApp() {
     }))
   }
 
-  const updateEditorOffsets = (offsetX: number, offsetY: number) => {
-    const nextOffsetX = Math.round(Math.max(-700, Math.min(700, offsetX)))
-    const nextOffsetY = Math.round(Math.max(-500, Math.min(500, offsetY)))
+  const getEditorOffsetBounds = (svg: SVGSVGElement, targetId: string) => {
+    const targetEl = svg.querySelector<SVGGraphicsElement>(`[data-genmark-editor-element="${targetId}"]`)
+    // .editor-uploaded-logo-svg is deliberately rendered at ~110% of the visible white
+    // card (a bleed effect, see styles.css), so the SVG's own viewBox edges do NOT line up
+    // with the card's visible edges. Bounds must be measured against the card's actual
+    // screen rect, not the viewBox — same screen<->svg unit conversion getEditorSvgPoint uses.
+    const container = svg.closest<HTMLElement>('.editor-uploaded-logo-target')
+    const svgScreenCtm = svg.getScreenCTM()
+    const targetScreenCtm = targetEl?.getScreenCTM()
+    if (!targetEl || !container || !svgScreenCtm || !targetScreenCtm) return null
+
+    // Read the offset actually baked into the live DOM right now, instead of trusting
+    // React state — state updates and the SVG's dangerouslySetInnerHTML re-render can land
+    // one render apart during a fast drag, so cross-referencing them causes drift.
+    const wrapperTransform = svg.querySelector(`[data-genmark-editor="${targetId}"]`)?.getAttribute('transform') ?? ''
+    const offsetMatch = wrapperTransform.match(/^translate\(\s*([-\d.eE]+)[\s,]+([-\d.eE]+)/)
+    const currentOffsetX = offsetMatch ? Number(offsetMatch[1]) : 0
+    const currentOffsetY = offsetMatch ? Number(offsetMatch[2]) : 0
+
+    const bbox = targetEl.getBBox()
+    const point = svg.createSVGPoint()
+    const corners = [
+      [bbox.x, bbox.y], [bbox.x + bbox.width, bbox.y],
+      [bbox.x, bbox.y + bbox.height], [bbox.x + bbox.width, bbox.y + bbox.height],
+    ].map(([x, y]) => {
+      point.x = x
+      point.y = y
+      return point.matrixTransform(targetScreenCtm)
+    })
+    const boxMinX = Math.min(...corners.map((corner) => corner.x))
+    const boxMaxX = Math.max(...corners.map((corner) => corner.x))
+    const boxMinY = Math.min(...corners.map((corner) => corner.y))
+    const boxMaxY = Math.max(...corners.map((corner) => corner.y))
+
+    const rect = container.getBoundingClientRect()
+    const scaleX = svgScreenCtm.a || 1
+    const scaleY = svgScreenCtm.d || 1
+    const minX = currentOffsetX + (rect.left - boxMinX) / scaleX
+    const maxX = currentOffsetX + (rect.right - boxMaxX) / scaleX
+    const minY = currentOffsetY + (rect.top - boxMinY) / scaleY
+    const maxY = currentOffsetY + (rect.bottom - boxMaxY) / scaleY
+    return {
+      minX: Math.min(minX, maxX),
+      maxX: Math.max(minX, maxX),
+      minY: Math.min(minY, maxY),
+      maxY: Math.max(minY, maxY),
+    }
+  }
+
+  const updateEditorOffsets = (offsetX: number, offsetY: number, bounds?: { minX: number; maxX: number; minY: number; maxY: number } | null) => {
+    const boundsX = bounds ?? { minX: -700, maxX: 700, minY: -500, maxY: 500 }
+    const nextOffsetX = Math.round(Math.max(boundsX.minX, Math.min(boundsX.maxX, offsetX)))
+    const nextOffsetY = Math.round(Math.max(boundsX.minY, Math.min(boundsX.maxY, offsetY)))
     setEditorOffsetX(nextOffsetX)
     setEditorOffsetY(nextOffsetY)
     updateCurrentEditorDraft({ offsetX: nextOffsetX, offsetY: nextOffsetY })
@@ -677,7 +757,7 @@ function CustomerApp() {
   }
 
   useEffect(() => {
-    if (!creditModal && !businessCardModalOpen && !resumePromptProject && !finalEditModal && !brandKitPreview && !mypageLogoAction && !assetDeleteTarget) return
+    if (!creditModal && !businessCardModalOpen && !resumePromptProject && !finalEditModal && !brandKitPreview && !mypageLogoAction && !assetDeleteTarget && !restoreOriginalOpen) return
 
     const modalRoot = activeModalRef.current
     if (!modalRoot) return
@@ -718,6 +798,11 @@ function CustomerApp() {
             setAssetDeleteTarget(null)
             setAssetDeleteError('')
           }
+        } else if (restoreOriginalOpen) {
+          if (!restoreOriginalLoading) {
+            setRestoreOriginalOpen(false)
+            setRestoreOriginalError('')
+          }
         } else if (creditModal) {
           setCreditModal(null)
         } else {
@@ -753,7 +838,7 @@ function CustomerApp() {
       document.body.style.overflow = previousOverflow
       previouslyFocused?.focus()
     }
-  }, [assetDeleteLoading, assetDeleteTarget, brandKitCreating, brandKitPreview, businessCardModalOpen, creditModal, finalEditModal, mypageLogoAction, resumePromptProject])
+  }, [assetDeleteLoading, assetDeleteTarget, brandKitCreating, brandKitPreview, businessCardModalOpen, creditModal, finalEditModal, mypageLogoAction, restoreOriginalLoading, restoreOriginalOpen, resumePromptProject])
 
   useEffect(() => {
     const handleBackgroundWheel = (event: WheelEvent) => {
@@ -802,6 +887,7 @@ function CustomerApp() {
     }
     setEditorError('')
     setEditorSvgSource(null)
+    setEditorBaseSvgSource(null)
     setEditorSvgPreviewSource(null)
     if (mode === 'edit' && EDITOR_TEST_MODE && editorTestMode) {
       setEditorLoading(true)
@@ -811,7 +897,10 @@ function CustomerApp() {
           return response.text()
         })
         .then((svg) => {
-          if (!disposed) setEditorSvgSource(svg)
+          if (!disposed) {
+            setEditorSvgSource(svg)
+            setEditorBaseSvgSource(svg)
+          }
         })
         .catch((error) => {
           if (!disposed) setEditorError(error instanceof Error ? error.message : '테스트용 SVG를 불러오지 못했어요.')
@@ -829,7 +918,10 @@ function CustomerApp() {
     setEditorLoading(true)
     void projectsApi.getCandidateSvg(candidate.svgUrl)
       .then((svg) => {
-        if (!disposed) setEditorSvgSource(svg)
+        if (!disposed) {
+          setEditorSvgSource(svg)
+          setEditorBaseSvgSource(svg)
+        }
       })
       .catch((error) => {
         if (!disposed) setEditorError(error instanceof Error ? error.message : 'SVG를 불러오지 못했어요.')
@@ -984,12 +1076,43 @@ function CustomerApp() {
         }
 
         if (cancelled) return
+
+        // 서버의 resumeProjectId는 CI/BI 통틀어 "가장 최근에 수정된 것" 딱 하나만
+        // 돌려준다. CI와 BI를 동시에 진행 중이면, 다른 쪽을 나중에 만졌다는 이유만으로
+        // 지금 이 화면(브라우저 탭)이 보던 프로젝트가 아닌 쪽으로 새로고침 때마다
+        // 바뀌어버렸다. localStorage의 genmark-draft-project-id("만들다 만 초안" 전용,
+        // 마이페이지에서 완성 로고를 열어도 안 바뀜)가 있으면 그걸 우선 복원한다.
+        const flowModes: ViewMode[] = ['brand-details', 'company-details', 'tone', 'style', 'final']
+        const initialMode = getModeFromUrl()
+        const localDraftId = window.localStorage.getItem('genmark-draft-project-id')
+            ?? window.localStorage.getItem('genmark-project-id')
+
+        if (localDraftId) {
+          try {
+            const restoredMode = await restoreProjectState(localDraftId)
+            if (cancelled) return
+            persistActiveDraftProjectId(localDraftId)
+            // 진행 화면(brand-details~final)에 있을 때만 실제로 그 단계로 옮겨준다.
+            // 홈이나 마이페이지 등에서 새로고침했는데 갑자기 미완성 초안 화면으로
+            // 튕기면 안 되니까, 그런 화면에서는 회사명 등 데이터만 조용히 채워둔다
+            // (마이페이지 상단의 회사명·모토가 새로고침 후 비어 보이던 문제가 이것).
+            if (flowModes.includes(initialMode) && restoredMode && restoredMode !== initialMode) setMode(restoredMode)
+            return
+          } catch {
+            // localStorage에 남은 프로젝트가 이미 지워졌거나 더 이상 내 것이 아니면
+            // 아래의 서버 값(resumeProjectId)으로 대체 복원을 시도한다.
+            persistActiveDraftProjectId(null)
+          }
+        }
+
         if (session.resumeProjectId) {
           setProjectId(session.resumeProjectId)
           window.localStorage.setItem('genmark-project-id', session.resumeProjectId)
+          persistActiveDraftProjectId(session.resumeProjectId)
         } else {
           setProjectId(null)
           window.localStorage.removeItem('genmark-project-id')
+          persistActiveDraftProjectId(null)
         }
       } catch {
         if (!cancelled) {
@@ -1048,6 +1171,30 @@ function CustomerApp() {
 
     return () => { cancelled = true }
   }, [brandKind, companyMotto, companyName, loggedIn, mode])
+
+  // 마이페이지 상단 프로필 전용 — companyName/companyMotto(지금 활성 초안, CI/BI 무관)를
+  // 안 쓰고 이 회원의 가장 최근 CI 프로젝트를 서버에서 따로 불러온다. BI 초안을 만들다가
+  // 마이페이지에 와도 이 값은 그 영향을 받지 않는다.
+  useEffect(() => {
+    // renderMypageScreen의 useMypageMock은 "로그인 안 한 상태"에서만 켜지는 데모 모드라,
+    // 로그인 상태(loggedIn)를 이미 확인한 이 effect에서는 항상 꺼져 있는 것과 같다.
+    if (mode !== 'mypage' || !loggedIn) return undefined
+    let cancelled = false
+    void ciProjectsApi.latestProfile()
+      .then((profile) => {
+        if (cancelled) return
+        setMypageCiCompanyName(profile.hasPrevious ? profile.companyName ?? '' : '')
+        setMypageCiCompanyMotto(profile.hasPrevious ? profile.coreValues ?? '' : '')
+      })
+      .catch((error) => {
+        if (cancelled) return
+        // 아직 CI를 한 번도 안 만든 회원이면 404 — 빈 값으로 둔다.
+        if (!(error instanceof AuthError) || error.status !== 404) return
+        setMypageCiCompanyName('')
+        setMypageCiCompanyMotto('')
+      })
+    return () => { cancelled = true }
+  }, [loggedIn, mode])
 
   useEffect(() => {
     if (!loggedIn || (mode !== 'mypage' && mode !== 'survey')) return
@@ -1398,9 +1545,11 @@ function CustomerApp() {
       if (project.logoStyle && logoStyleOptions.some((option) => option.id === project.logoStyle)) setLogoStyle(project.logoStyle as LogoStyle)
 
       const step = typeof project.currentStep === 'number' ? project.currentStep : Number(project.currentStep)
-      const hasResult = project.brandType === 'BI'
-        ? step >= 6 || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED'
-        : step >= 5 || project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED'
+      // BI는 예전에 target-age를 별도 단계로 세어(브랜드 정보 화면과 실제로는 안 겹치는
+      // 죽은 스텝) current_step이 CI보다 한 칸씩 밀려 있었다. 백엔드 BiProjectService의
+      // STEP_ORDER를 CI와 같은 번호 체계(brand-brief=1/tone=2/logo-style=3/final-review=4)로
+      // 맞췄으므로, 여기서도 같은 임계값을 쓴다.
+      const hasResult = project.status === 'GENERATING' || project.status === 'RESULT_READY' || project.status === 'COMPLETED' || step >= 5
       if (hasResult) {
         try {
           await applyLogoCandidateState(project.id, await projectsApi.getLatestCandidates(project.id))
@@ -1414,9 +1563,9 @@ function CustomerApp() {
       }
 
       if (project.brandType === 'BI') {
-        if (step >= 5) return 'final'
-        if (step >= 4) return 'style'
-        if (step >= 3) return 'tone'
+        if (step >= 4) return 'final'
+        if (step >= 3) return 'style'
+        if (step >= 2) return 'tone'
         return 'brand-details'
       }
       if (step >= 4) return 'final'
@@ -1427,6 +1576,10 @@ function CustomerApp() {
       if (error instanceof AuthError && error.status === 404) {
         setProjectId(null)
         window.localStorage.removeItem('genmark-project-id')
+        // 지금 없어졌다고 확인된 프로젝트가 추적 중이던 초안이었다면 그 추적도 같이 지운다.
+        // (마이페이지의 완성 로고를 보다가 404가 났을 때처럼, 추적 중인 초안과 무관한
+        // 호출이면 건드리지 않는다.)
+        if (activeDraftProjectId === resumeId) persistActiveDraftProjectId(null)
         return null
       }
       throw error
@@ -1437,7 +1590,10 @@ function CustomerApp() {
   // 결과 화면을 URL로 바로 열거나 새로고침한 경우에도 서버에 저장된
   // 프로젝트 조건을 먼저 복원해 재생성 전후의 요약 정보가 비어 보이지 않게 한다.
   useEffect(() => {
-    if (!loggedIn || mode !== 'result' || !projectId || resultHydrationProjectRef.current === projectId) return
+    // 'edit' needs the same hydration as 'result': opening /?view=edit directly (or just
+    // refreshing it) otherwise leaves logoCandidates empty, so no SVG loads and
+    // "변경 사항 적용하기" stays disabled — the button looks dead with no explanation.
+    if (!loggedIn || (mode !== 'result' && mode !== 'edit') || !projectId || resultHydrationProjectRef.current === projectId) return
 
     resultHydrationProjectRef.current = projectId
     void restoreProjectState(projectId).catch(() => {
@@ -1454,6 +1610,7 @@ function CustomerApp() {
         // — 새로고침 없이도 새 프로젝트를 시작할 수 있게 비워준다.
         setProjectId(null)
         window.localStorage.removeItem('genmark-project-id')
+        persistActiveDraftProjectId(null)
         fallback()
         return
       }
@@ -1471,6 +1628,7 @@ function CustomerApp() {
       if (error instanceof AuthError && error.status === 404) {
         setProjectId(null)
         window.localStorage.removeItem('genmark-project-id')
+        if (activeDraftProjectId === resumeId) persistActiveDraftProjectId(null)
         fallback()
         return
       }
@@ -1484,6 +1642,7 @@ function CustomerApp() {
     setResumePromptError('')
     try {
       const next = await restoreProjectState(resumePromptProject.id)
+      persistActiveDraftProjectId(resumePromptProject.id)
       setResumePromptProject(null)
       setMode(next ?? 'industry')
     } catch {
@@ -1501,6 +1660,7 @@ function CustomerApp() {
       await projectsApi.discard(resumePromptProject.id, resumePromptProject.brandType)
       setProjectId(null)
       window.localStorage.removeItem('genmark-project-id')
+      persistActiveDraftProjectId(null)
       setResumePromptProject(null)
       setIndustryBackMode('home')
       setMode('industry')
@@ -1523,9 +1683,11 @@ function CustomerApp() {
       if (session.resumeProjectId) {
         setProjectId(session.resumeProjectId)
         window.localStorage.setItem('genmark-project-id', session.resumeProjectId)
+        persistActiveDraftProjectId(session.resumeProjectId)
       } else {
         setProjectId(null)
         window.localStorage.removeItem('genmark-project-id')
+        persistActiveDraftProjectId(null)
       }
        setOnboardingCompleted(session.user.onboardingCompleted)
        setOnboardingStep(1)
@@ -1585,10 +1747,15 @@ function CustomerApp() {
       setMode('onboarding')
       return
     }
-    if (projectId) {
-      await presentResumePrompt(projectId, () => { setIndustryBackMode('home'); setMode('industry') }, { skipSilentResume: true })
+    if (activeDraftProjectId) {
+      await presentResumePrompt(activeDraftProjectId, () => { setIndustryBackMode('home'); setMode('industry') }, { skipSilentResume: true })
       return
     }
+    // 이어쓸 초안이 없는 새 시작이다. projectId가 마이페이지에서 보던 완성 프로젝트를
+    // 여전히 가리키고 있을 수 있으니 비워서, 새로 입력하는 내용이 그 프로젝트를
+    // 실수로 덮어쓰지 않게 한다.
+    setProjectId(null)
+    window.localStorage.removeItem('genmark-project-id')
     setIndustryBackMode('home')
     setMode('industry')
   }
@@ -1605,10 +1772,14 @@ function CustomerApp() {
       setMode('login')
       return
     }
-    if (projectId) {
-      await presentResumePrompt(projectId, () => setMode('industry'), { skipSilentResume: true })
+    if (activeDraftProjectId) {
+      await presentResumePrompt(activeDraftProjectId, () => setMode('industry'), { skipSilentResume: true })
       return
     }
+    // startOnboarding과 같은 이유로, 마이페이지에서 보던 완성 프로젝트의 projectId가
+    // 남아있지 않도록 비운다.
+    setProjectId(null)
+    window.localStorage.removeItem('genmark-project-id')
     setMode('industry')
   }
 
@@ -1816,9 +1987,14 @@ function CustomerApp() {
         setProjectColors(project.colors?.slice(0, 4) ?? (input.colors?.slice(0, 4) ?? []))
         return projectId
       } catch (error) {
-        if (!(error instanceof AuthError) || error.status !== 404) throw error
-        setProjectId(null)
-        window.localStorage.removeItem('genmark-project-id')
+        // AuthError는 인증 실패뿐 아니라 백엔드의 모든 HTTP 에러(404 포함)를 감싸는
+        // 범용 클래스라서, 예전에는 updateStep이 어떤 이유로든 404를 반환하면 그걸
+        // "프로젝트가 사라졌다"로 보고 조용히 새 프로젝트를 만들었다. 그 결과 진짜
+        // 원인(권한 문제, 일시적 오류 등)은 숨겨지고 사용자가 편집하던 프로젝트와
+        // 별개로 새 행이 계속 쌓이는 버그가 있었다. 이제는 원인을 숨기지 않고 그대로
+        // 올려서 화면에 저장 실패 메시지가 뜨게 한다.
+        console.error(`[ensureProject] updateStep 실패 (projectId=${projectId}, step=${step})`, error)
+        throw error
       }
     }
 
@@ -1826,6 +2002,7 @@ function CustomerApp() {
     setProjectId(project.id)
     setProjectColors(project.colors?.slice(0, 4) ?? [])
     window.localStorage.setItem('genmark-project-id', project.id)
+    persistActiveDraftProjectId(project.id)
     const updatedProject = await projectsApi.updateStep(project.id, step, input)
     setProjectColors(updatedProject.colors?.slice(0, 4) ?? (input.colors?.slice(0, 4) ?? []))
     return project.id
@@ -1855,7 +2032,6 @@ function CustomerApp() {
   }
 
   const resetEditorControls = () => {
-    if (!editTarget) return
     const baseColor = projectColors[0] ?? '#7B5CDF'
     setEditorScale(100)
     setEditorRotation(0)
@@ -1865,19 +2041,11 @@ function CustomerApp() {
     setEditorColor(baseColor)
     setEditorColorPickerOpen(false)
     setEditorColorChanged(false)
-    setEditorDrafts((current) => ({
-      ...current,
-      [editTarget]: {
-        scale: 100,
-        rotation: 0,
-        opacity: 100,
-        offsetX: 0,
-        offsetY: 0,
-        color: baseColor,
-        colorChanged: false,
-        dirty: true,
-      },
-    }))
+    setEditorDrafts(createEditorDrafts())
+    setEditTarget(null)
+    // Clearing the drafts alone only undoes edits that are still pending. Anything already
+    // applied got baked into editorSvgSource, so the baseline has to be restored too.
+    if (editorBaseSvgSource) setEditorSvgSource(editorBaseSvgSource)
     markEditorDirty()
   }
 
@@ -1913,7 +2081,8 @@ function CustomerApp() {
 
   const saveEditorChanges = async (): Promise<boolean> => {
     const candidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
-    if (!editorSvgSource || (!EDITOR_TEST_MODE && (!projectId || !candidate?.svgUrl))) {
+    const isEditorTestMode = EDITOR_TEST_MODE && editorTestMode
+    if (!editorSvgSource || (!isEditorTestMode && (!projectId || !candidate?.svgUrl))) {
       setEditorError('저장할 SVG 로고를 불러오지 못했어요.')
       setEditorSaved(false)
       return false
@@ -1923,9 +2092,9 @@ function CustomerApp() {
     setEditorError('')
     try {
       const editedSvg = editorDirty ? buildEditorDraftSvg(editorSvgSource, editorDrafts) : editorSvgSource
-      if (!EDITOR_TEST_MODE && candidate?.svgUrl) await projectsApi.saveCandidateSvg(candidate.svgUrl, editedSvg)
+      if (!isEditorTestMode && candidate?.svgUrl) await projectsApi.saveCandidateSvg(candidate.svgUrl, editedSvg)
       const changedColorDraft = Object.values(editorDrafts).find((draft) => draft.dirty && draft.colorChanged)
-      if (!EDITOR_TEST_MODE && changedColorDraft && projectId) {
+      if (!isEditorTestMode && changedColorDraft && projectId) {
         const currentPalette = projectColors.length > 0 ? projectColors : getSelectedColors()
         const nextPalette = [...currentPalette]
         if (nextPalette.length === 0) nextPalette.push(changedColorDraft.color)
@@ -1943,9 +2112,18 @@ function CustomerApp() {
       setEditorColorChanged(false)
       setEditorDrafts((current) => Object.fromEntries(Object.entries(current).map(([target, draft]) => [target, { ...draft, dirty: false }])))
       setEditorSaved(true)
-      if (candidate) setLogoCandidates((current) => current.map((item) => item.id === candidate.id
-          ? { ...item, svgEdited: true }
-          : item))
+      if (candidate) {
+        // The PUT that saves the edited SVG returns no body, and the server assigns a fresh
+        // storageKey (new revisioned PNG) rather than overwriting the old one — so the result
+        // screen's <img> keeps showing the pre-edit thumbnail unless we re-fetch the candidate
+        // here and replace it wholesale (a local svgEdited:true flag alone leaves storageKey stale).
+        const refreshedCandidate = !isEditorTestMode && projectId
+          ? await projectsApi.getCandidate(projectId, candidate.id).catch(() => null)
+          : null
+        setLogoCandidates((current) => current.map((item) => item.id === candidate.id
+            ? (refreshedCandidate ?? { ...item, svgEdited: true })
+            : item))
+      }
       setAnalysisId(null)
       setAnalysisError('')
       setTrademarkAnalysisCompleted(false)
@@ -3125,7 +3303,7 @@ function CustomerApp() {
             >
               <button className="brand-choice-info" type="button" aria-label="CI 설명 보기" onClick={(event) => { event.stopPropagation(); setChoiceInfoModal('ci') }}><Info aria-hidden="true" size={19} strokeWidth={2} /></button>
               <div className="brand-choice-copy">
-                <h2>기업 · 회사 로고<br /><span className="brand-choice-kind">(CI)</span></h2>
+                <h2>기업 · 회사 로고<span className="brand-choice-kind">(CI)</span></h2>
                 <p>기업의 신뢰와 정체성을 담은 대표 로고예요.</p>
               </div>
               <span className="brand-choice-start">이 스타일로 시작하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={2.2} /></span>
@@ -3140,7 +3318,7 @@ function CustomerApp() {
             >
               <button className="brand-choice-info" type="button" aria-label="BI 설명 보기" onClick={(event) => { event.stopPropagation(); setChoiceInfoModal('bi') }}><Info aria-hidden="true" size={19} strokeWidth={2} /></button>
               <div className="brand-choice-copy">
-                <h2>제품 · 브랜드 로고<br /><span className="brand-choice-kind">(BI)</span></h2>
+                <h2>제품 · 브랜드 로고<span className="brand-choice-kind">(BI)</span></h2>
                 <p>특정 제품이나 서비스의 매력을 보여주는 로고예요.</p>
               </div>
               <span className="brand-choice-start">이 스타일로 시작하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={2.2} /></span>
@@ -3187,6 +3365,7 @@ function CustomerApp() {
       logoStyle: logoStyle ?? '', logoShape: logoShapePrompt,
     })
     setFinalEditToneMode(initialToneMode)
+    setFinalEditError('')
     setFinalEditModal(kind)
   }
 
@@ -3194,42 +3373,88 @@ function CustomerApp() {
     void startLogoGeneration()
   }
 
-  const saveFinalEditModal = () => {
+  const saveFinalEditModal = async () => {
     if (!finalEditModal) return
-    if (finalEditModal === 'identity') {
-      setCompanyName(finalEditDraft.companyName)
-      setBrandName(finalEditDraft.brandName)
+    const kind = finalEditModal
+    // 서버에 보낼 값은 finalEditDraft(모달에서 방금 확정한 값)에서 직접 계산한다.
+    // setXxx는 비동기라 이 함수 안에서 바로 읽으면 갱신 전 값(스테일)이 잡히기 때문이다.
+    // input.brandType으로 projectsApi가 CI/BI 중 어느 엔드포인트로 보낼지 정한다.
+    // 빠뜨리면 BI 프로젝트를 수정해도 항상 CI 엔드포인트로 보내져서 조용히 실패한다.
+    const input: ProjectInput = { brandType: brandKind === 'ci' ? 'CI' : 'BI' }
+    let nextColorMode: 'tone' | 'manual' | null = null
+    let nextColors: string[] = []
+
+    if (kind === 'identity') {
+      if (brandKind === 'ci') {
+        setCompanyName(finalEditDraft.companyName)
+        input.companyName = finalEditDraft.companyName.trim() || undefined
+      } else {
+        setBrandName(finalEditDraft.brandName)
+        input.brandName = finalEditDraft.brandName.trim() || undefined
+      }
+    } else if (kind === 'audience') {
       setTargetAge(finalEditDraft.targetAge)
-    } else if (finalEditModal === 'values') {
+      input.targetAge = toTargetAgeApiValue(finalEditDraft.targetAge || '전 연령층')
+    } else if (kind === 'values') {
       setCompanyMotto(finalEditDraft.companyMotto)
       setBrandValueDescription(finalEditDraft.valuesText)
       if (brandKind === 'bi') { setCoreValueInputMode('direct'); setCoreValues([]) }
-    } else if (finalEditModal === 'tone') {
+      if (brandKind === 'ci') input.companyMotto = finalEditDraft.companyMotto.trim() || undefined
+      else {
+        input.brandValues = []
+        input.brandValuesText = finalEditDraft.valuesText.trim() || undefined
+      }
+    } else if (kind === 'tone') {
       if (finalEditToneMode === 'direct') {
         setDirectTone(finalEditDraft.tone.trim())
         setToneMode('direct')
+        input.tone = finalEditDraft.tone.trim() || undefined
       } else {
         const selectedTone = toneOptions.some((option) => option.id === finalEditDraft.tone)
           ? finalEditDraft.tone as ToneOption
           : toneOptions[0].id
         setToneSelection(selectedTone)
         setToneMode('recommended')
+        input.tone = selectedTone
       }
-    } else if (finalEditModal === 'color') {
+    } else if (kind === 'color') {
       const colors = uniqueColors(finalEditDraft.colors).slice(0, 1)
       if (toneMode === 'recommended' && toneSelection) {
         setCustomToneColors((current) => ({ ...current, [toneSelection]: colors }))
         setManualColors(colors)
         setColorSelectionMode('tone')
+        nextColorMode = 'tone'
       } else {
         setManualColors(colors)
         setColorSelectionMode('manual')
+        nextColorMode = 'manual'
       }
+      nextColors = colors
+      input.colors = nextColors
+      input.colorMode = nextColorMode === 'tone' ? 'TONE' : 'MANUAL'
+      input.paletteReplace = true
     } else {
       setLogoStyle(finalEditDraft.logoStyle || null)
       setLogoShapePrompt(finalEditDraft.logoShape)
+      input.logoStyle = finalEditDraft.logoStyle || undefined
+      input.logoShape = finalEditDraft.logoShape
     }
-    setFinalEditModal(null)
+
+    if (!projectId) {
+      setFinalEditModal(null)
+      return
+    }
+
+    setFinalEditSaving(true)
+    setFinalEditError('')
+    try {
+      await projectsApi.patch(projectId, input)
+      setFinalEditModal(null)
+    } catch (error) {
+      setFinalEditError(error instanceof Error ? error.message : '저장하지 못했어요. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setFinalEditSaving(false)
+    }
   }
 
   const renderFinalRequestScreen = () => {
@@ -3249,7 +3474,7 @@ function CustomerApp() {
         ]
       : [
           { key: 'brand-name', label: '브랜드명', value: displayValue(brandName), icon: 'name', editKind: 'identity' as FinalEditKind },
-          { key: 'audience', label: '주요 고객', value: displayValue(targetAgeOptions.find((option) => option.id === targetAge)?.label), icon: 'audience', editKind: 'identity' as FinalEditKind },
+          { key: 'audience', label: '주요 고객', value: displayValue(targetAgeOptions.find((option) => option.id === targetAge)?.label), icon: 'audience', editKind: 'audience' as FinalEditKind },
           { key: 'value', label: '핵심 가치', value: selectedBrandValues, icon: 'value', editKind: 'values' as FinalEditKind },
           { key: 'mood', label: '분위기', value: selectedToneLabel, icon: 'mood', editKind: 'tone' as FinalEditKind },
         ]
@@ -3325,7 +3550,7 @@ function CustomerApp() {
       <main className="logo-loading-screen" aria-labelledby="logo-loading-title">
         <section className="logo-loading-content">
           <header className="logo-loading-heading">
-            <h1 id="logo-loading-title">입력 정보를 바탕으로<br />로고를 생성하고 있습니다.</h1>
+            <h1 id="logo-loading-title">입력 정보를 바탕으로<br />로고를 생성하고 있습니다</h1>
           </header>
 
           <div className="logo-loading-orb" aria-label="로고 생성 진행 중">
@@ -3674,7 +3899,7 @@ function CustomerApp() {
     return (
       <main className="logo-result-screen" aria-labelledby="logo-result-title">
         <section className="logo-result-content">
-          <h1 id="logo-result-title">로고 생성이 완료되었어요.</h1>
+          <h1 id="logo-result-title">로고 생성이 완료되었어요</h1>
           <section className="logo-candidate-panel" aria-label="로고 후보 미리보기">
             {candidates.length > 1 && <button className="logo-candidate-arrow previous" type="button" aria-label="이전 후보" onClick={() => { const next = (resultCandidate + candidates.length - 1) % candidates.length; if (isResultPreview) setResultCandidate(next); else void selectLogoCandidate(candidates[next], next) }}><ChevronLeft aria-hidden="true" size={26} strokeWidth={1.8} /></button>}
             <div className="logo-candidate-art">
@@ -3761,6 +3986,11 @@ function CustomerApp() {
 
           <div className="logo-result-actions">
             <button className="logo-result-edit" type="button" onClick={() => { setEditorTestMode(false); setMode('edit') }}><Pencil aria-hidden="true" size={23} strokeWidth={1.8} />로고 수정<ChevronRight aria-hidden="true" size={25} strokeWidth={1.8} /></button>
+            {!isResultPreview && (candidate.svgEdited || editorSaved) && (
+              <button className="logo-result-restore" type="button" onClick={() => { setRestoreOriginalError(''); setRestoreOriginalOpen(true) }}>
+                <RefreshCw aria-hidden="true" size={20} strokeWidth={1.8} />처음 만든 로고로 되돌리기
+              </button>
+            )}
           </div>
 
           <div className="logo-result-utility-grid">
@@ -3799,8 +4029,8 @@ function CustomerApp() {
             <h1 id="brand-kit-selection-title">
               {completedBrandKit
                 ? completedBrandKit.kitType === 'BUSINESS_CARD'
-                  ? <>완성된 명함을<br />확인해 보세요.</>
-                  : <>완성된 썸네일을<br />확인해 보세요.</>
+                  ? <>완성된 명함을<br />확인해 보세요</>
+                  : <>완성된 썸네일을<br />확인해 보세요</>
                 : <>로고를 어디에<br />먼저 써볼까요<span className="brand-kit-title-question">?</span></>}
             </h1>
           </header>
@@ -3954,6 +4184,35 @@ function CustomerApp() {
     )
   }
 
+  const renderRestoreOriginalModal = () => {
+    if (!restoreOriginalOpen) return null
+    const closeModal = () => { if (!restoreOriginalLoading) { setRestoreOriginalOpen(false); setRestoreOriginalError('') } }
+    return (
+      <div
+        ref={activeModalRef}
+        className="modal-backdrop asset-delete-backdrop"
+        role="presentation"
+        onMouseDown={(event) => { if (event.target === event.currentTarget) closeModal() }}
+      >
+        <section className="credit-modal asset-delete-modal" role="dialog" aria-modal="true" aria-labelledby="restore-original-title">
+          <button className="modal-close" type="button" aria-label="되돌리기 취소" disabled={restoreOriginalLoading} onClick={closeModal}>
+            <X aria-hidden="true" size={22} strokeWidth={1.9} />
+          </button>
+          <div className="asset-delete-icon" aria-hidden="true"><RefreshCw size={27} strokeWidth={1.8} /></div>
+          <h2 id="restore-original-title">처음 만든 로고로 되돌릴까요?</h2>
+          <p>AI가 <strong>맨 처음 생성한 로고</strong>로 돌아가요. 지금까지 저장한 수정 내용은 더 이상 표시되지 않아요.</p>
+          {restoreOriginalError && <p className="project-error" role="alert">{restoreOriginalError}</p>}
+          <div className="asset-delete-actions">
+            <button className="gradient-button asset-delete-confirm" type="button" disabled={restoreOriginalLoading} onClick={() => void restoreCandidateOriginal()}>
+              {restoreOriginalLoading ? '되돌리는 중…' : '원본으로 되돌리기'}
+            </button>
+            <button className="modal-secondary-button" type="button" disabled={restoreOriginalLoading} onClick={closeModal}>취소</button>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
   const renderAssetDeleteModal = () => {
     if (!assetDeleteTarget) return null
     return (
@@ -4069,7 +4328,8 @@ function CustomerApp() {
       const svg = event.currentTarget.querySelector<SVGSVGElement>('svg')
       const point = svg ? getEditorSvgPoint(svg, event.clientX, event.clientY) : null
       if (!point) return
-      updateEditorOffsets(drag.startOffsetX + point.x - drag.startSvgX, drag.startOffsetY + point.y - drag.startSvgY)
+      const bounds = svg ? getEditorOffsetBounds(svg, drag.target) : null
+      updateEditorOffsets(drag.startOffsetX + point.x - drag.startSvgX, drag.startOffsetY + point.y - drag.startSvgY, bounds)
     }
 
     const handleEditorSvgPointerUp = (event: PointerEvent<HTMLDivElement>) => {
@@ -4089,7 +4349,9 @@ function CustomerApp() {
       const nextX = editorOffsetX + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0)
       const nextY = editorOffsetY + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0)
       event.preventDefault()
-      updateEditorOffsets(nextX, nextY)
+      const svg = event.currentTarget.querySelector<SVGSVGElement>('svg')
+      const bounds = svg ? getEditorOffsetBounds(svg, editTarget) : null
+      updateEditorOffsets(nextX, nextY, bounds)
     }
 
     const moveEditorCandidate = (offset: number) => {
@@ -4147,17 +4409,12 @@ function CustomerApp() {
 
     return (
       <main className="logo-editor-screen" aria-labelledby="logo-editor-title">
-        <header className="logo-editor-header">
-          <button className="logo-editor-back" type="button" aria-label="결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={24} strokeWidth={1.8} /></button>
-          <div className="logo-editor-brand"><BrandLogo /><strong><span className="brand-mark-accent">GenMark AI</span></strong></div>
-          <button className="logo-editor-save" type="button" disabled={editorLoading || editorSaving || !editorSvgSource} onClick={() => void saveEditorChanges()}>{editorSaving ? '저장 중' : editorSaved ? '저장됨' : '저장'}<ChevronDown aria-hidden="true" size={16} strokeWidth={1.8} /></button>
-        </header>
+        <ScreenBackButton label="결과 화면으로 돌아가기" onClick={() => setMode('result')} />
 
         <section className="logo-editor-content">
           <section className="logo-editor-preview-card" aria-label="로고 편집 캔버스">
             <div className="logo-editor-artboard">
               <div className="editor-uploaded-logo-target" role="button" tabIndex={0} aria-label="수정할 로고 요소 선택" aria-describedby="editor-move-help" onClick={(event) => { if (event.target === event.currentTarget) selectEditorTarget(''); else handleEditorSvgClick(event) }} onKeyDown={handleEditorCanvasKeyDown}>
-                <span className="editor-safe-area-guide" aria-hidden="true" />
                 {editorSvgPreviewSource ? <div className="editor-uploaded-logo-svg" aria-label="SVG 로고 편집 미리보기" onClick={handleEditorSvgClick} onPointerDown={handleEditorSvgPointerDown} onPointerMove={handleEditorSvgPointerMove} onPointerUp={handleEditorSvgPointerUp} onPointerCancel={handleEditorSvgPointerUp} dangerouslySetInnerHTML={{ __html: editorSvgPreviewSource }} /> : <img className="editor-uploaded-logo" src={editorImageUrl} alt="선택한 AI 생성 로고" style={editorSvgPreviewUrl ? { objectFit: 'contain' } : { objectFit: 'contain', transform: `scale(${editorScale / 100}) rotate(${editorRotation}deg)`, opacity: editorOpacity / 100 }} />}
               </div>
               <p id="editor-move-help" className="editor-move-hint">요소를 선택한 뒤 드래그하거나 방향키로 이동할 수 있어요.</p>
@@ -4167,7 +4424,7 @@ function CustomerApp() {
           <section className="logo-editor-panel" aria-labelledby="logo-editor-title">
             <h1 id="logo-editor-title" className="sr-only">로고 수정</h1>
             <div className="editor-control-section element-controls">
-              <div className="editor-control-heading"><strong>{editTarget ? '선택한 요소 설정' : '요소를 선택해 주세요'}</strong><button type="button" aria-label="선택한 요소 설정 초기화" disabled={!editTarget} onClick={resetEditorControls}><RefreshCw aria-hidden="true" size={14} strokeWidth={2} />초기화</button></div>
+              <div className="editor-control-heading"><strong>{editTarget ? '선택한 요소 설정' : '요소를 선택해 주세요'}</strong><button type="button" aria-label="전체 이미지 초기화" onClick={resetEditorControls}><RefreshCw aria-hidden="true" size={14} strokeWidth={2} />초기화</button></div>
               <label className="editor-slider-row"><span>크기</span><input disabled={!editTarget} type="range" min="70" max="140" value={editorScale} onChange={(event) => { const value = Number(event.target.value); setEditorScale(value); updateCurrentEditorDraft({ scale: value }); markEditorDirty() }} /></label>
               <label className="editor-slider-row"><span>회전</span><input disabled={!editTarget} type="range" min="-180" max="180" value={editorRotation} onChange={(event) => { const value = Number(event.target.value); setEditorRotation(value); updateCurrentEditorDraft({ rotation: value }); markEditorDirty() }} /></label>
               <label className="editor-slider-row"><span>투명도</span><input disabled={!editTarget} type="range" min="30" max="100" value={editorOpacity} onChange={(event) => { const value = Number(event.target.value); setEditorOpacity(value); updateCurrentEditorDraft({ opacity: value }); markEditorDirty() }} /></label>
@@ -4176,9 +4433,12 @@ function CustomerApp() {
           </section>
 
           <div className="logo-editor-actions">
-            <button className="logo-editor-apply" type="button" disabled={editorLoading || editorSaving || !editorSvgSource} onClick={() => void saveEditorChanges().then((saved) => { if (saved && !EDITOR_TEST_MODE) setMode('result') })}>{editorSaving ? '저장 중...' : '적용하기'}</button>
+            <button className="logo-editor-apply" type="button" disabled={editorLoading || editorSaving || !editorSvgSource} onClick={() => void saveEditorChanges().then((saved) => { if (saved && !(EDITOR_TEST_MODE && editorTestMode)) setMode('result') })}>{editorSaving ? '저장 중...' : '변경 사항 적용하기'}</button>
           </div>
           {editorLoading && <p className="project-error" role="status">SVG 로고를 불러오고 있어요.</p>}
+          {!editorLoading && !editorSvgSource && !editorError && (
+            <p className="project-error" role="status">수정할 SVG 로고가 없어 저장할 수 없어요. 결과 화면에서 로고를 고른 뒤 다시 시도해 주세요.</p>
+          )}
           {editorError && <p className="project-error" role="alert">{editorError}</p>}
           <p className="logo-editor-note">· 로고의 형태나 배치를 변경하면 상표 이미지 유사도에 영향을 줄 수 있어요.</p>
         </section>
@@ -4195,6 +4455,34 @@ function CustomerApp() {
     if (assetDeleteLoading) return
     setAssetDeleteTarget(null)
     setAssetDeleteError('')
+  }
+
+  const restoreCandidateOriginal = async () => {
+    const candidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
+    if (!candidate || !projectId || restoreOriginalLoading) return
+
+    setRestoreOriginalLoading(true)
+    setRestoreOriginalError('')
+    try {
+      const restored = await projectsApi.restoreCandidateOriginalSvg(projectId, candidate.id)
+      setLogoCandidates((current) => current.map((item) => item.id === candidate.id ? restored : item))
+      // The result screen prefers the locally rendered edit preview over the server image
+      // (see candidateImageUrl), so the restored original stays hidden until this is cleared.
+      setEditorSvgSource(null)
+      setEditorBaseSvgSource(null)
+      setEditorSvgPreviewSource(null)
+      setEditorSvgPreviewUrl(null)
+      setEditorDrafts(createEditorDrafts())
+      setEditorDirty(false)
+      setEditorSaved(false)
+      setEditTarget(null)
+      assetEpochRef.current += 1
+      setRestoreOriginalOpen(false)
+    } catch (error) {
+      setRestoreOriginalError(error instanceof Error ? error.message : '원본 로고로 되돌리지 못했어요.')
+    } finally {
+      setRestoreOriginalLoading(false)
+    }
   }
 
   const deleteMypageAsset = async () => {
@@ -4288,8 +4576,8 @@ function CustomerApp() {
     const todayDateKey = getLocalDateKey()
     const displayUserName = useMypageMock ? '김명은' : authUser?.name?.trim() || '사용자'
     const displayEmail = useMypageMock ? '연결된 이메일 정보가 없어요. tkss1217@gmail.com' : authUser?.email?.trim() || '연결된 이메일 정보가 없어요.'
-    const displayCompanyName = useMypageMock ? '육하원칙' : companyName.trim() || '아직 입력된 회사명이 없어요.'
-    const displayCompanyMotto = useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : companyMotto.trim() || '브랜드 프로젝트에서 회사 모토를 입력해보세요.'
+    const displayCompanyName = useMypageMock ? '육하원칙' : mypageCiCompanyName.trim() || '아직 입력된 회사명이 없어요.'
+    const displayCompanyMotto = useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : mypageCiCompanyMotto.trim() || '브랜드 프로젝트에서 회사 모토를 입력해보세요.'
     const mockAssetGroups: MypageAssetGroup[] = [
       {
         dateKey: '2026-08-18',
@@ -4310,9 +4598,12 @@ function CustomerApp() {
         ],
       },
     ]
-    const downloadedCandidateIds = new Set(downloadHistory.map((item) => item.candidateId))
+    // 버전까지 묶어서 비교한다. 후보 id만 보면, 로고를 받은 뒤 수정한 경우
+    // "지금 모습"을 보여줄 카드가 사라져서 마이페이지가 과거 버전만 보여주게 된다.
+    const downloadedRevisions = new Set(downloadHistory.map((item) => `${item.candidateId}:${item.assetRevision}`))
     const generatedLogoAssets: MypageAssetItem[] = Object.values(mypageGeneratedLogoCandidates)
-      .filter((candidate) => candidate.storageKey && !hiddenMypageLogoCandidateIds.includes(candidate.id) && !downloadedCandidateIds.has(candidate.id))
+      .filter((candidate) => candidate.storageKey && !hiddenMypageLogoCandidateIds.includes(candidate.id)
+        && !downloadedRevisions.has(`${candidate.id}:${candidate.svgRevision}`))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((candidate) => {
         const projectLabel = candidate.projectType
@@ -4321,7 +4612,7 @@ function CustomerApp() {
           id: `generated-logo-${candidate.id}`,
           kind: 'logo',
           title: `${projectLabel} 로고`,
-          subtitle: `${new Date(candidate.createdAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성`,
+          subtitle: `${new Date(candidate.createdAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성${candidate.svgEdited ? ' · 수정본' : ''}`,
           imageUrl,
           imageUrls: [imageUrl],
           projectId: candidate.projectId,
@@ -4333,6 +4624,10 @@ function CustomerApp() {
     const actualAssetItems: MypageAssetItem[] = [
       ...downloadHistory.map((item) => {
         const dateKey = getLocalDateKey(item.downloadedAt)
+        // item.imageUrl is the copy archived at download time. Each edited version now gets
+        // its own download record and its own archived copy, so this already shows the exact
+        // version that was downloaded — showing the candidate's current image instead would
+        // render every record of the same logo identically.
         return {
           id: `download-${item.downloadId}`,
           kind: 'logo' as const,
@@ -4396,15 +4691,33 @@ function CustomerApp() {
       : actualAssetGroups
     const assetKindLabel: Record<MypageAssetKind, string> = { logo: '로고', 'business-card': '명함', thumbnail: '썸네일' }
     const beginProfileEdit = () => {
-      setProfileCompanyNameDraft(useMypageMock ? '육하원칙' : companyName)
-      setProfileCompanyMottoDraft(useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : companyMotto)
+      setProfileCompanyNameDraft(useMypageMock ? '육하원칙' : mypageCiCompanyName)
+      setProfileCompanyMottoDraft(useMypageMock ? '브랜드 프로젝트를 위한 회사 모토를 입력해보세요.' : mypageCiCompanyMotto)
       setProfileEditing(true)
     }
-    const saveProfileEdit = (event: FormEvent<HTMLFormElement>) => {
+    const saveProfileEdit = async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault()
-      setCompanyName(profileCompanyNameDraft.trim())
-      setCompanyMotto(profileCompanyMottoDraft.trim())
-      setProfileEditing(false)
+      const nextName = profileCompanyNameDraft.trim()
+      const nextMotto = profileCompanyMottoDraft.trim()
+      if (useMypageMock) {
+        // 데모(비로그인) 모드는 저장할 실제 계정이 없으니 화면에만 반영한다.
+        setMypageCiCompanyName(nextName)
+        setMypageCiCompanyMotto(nextMotto)
+        setProfileEditing(false)
+        return
+      }
+      setProfileSaving(true)
+      setProfileSaveError('')
+      try {
+        const profile = await ciProjectsApi.updateLatestProfile({ companyName: nextName, coreValues: nextMotto })
+        setMypageCiCompanyName(profile.companyName ?? '')
+        setMypageCiCompanyMotto(profile.coreValues ?? '')
+        setProfileEditing(false)
+      } catch (error) {
+        setProfileSaveError(error instanceof Error ? error.message : '저장하지 못했어요. 잠시 후 다시 시도해주세요.')
+      } finally {
+        setProfileSaving(false)
+      }
     }
     const resolveMypageAssetImageUrls = (item: MypageAssetItem) => {
       const sourceUrls = item.imageUrls?.length ? item.imageUrls : [item.imageUrl]
@@ -4482,7 +4795,7 @@ function CustomerApp() {
             <form className="profile-details" onSubmit={saveProfileEdit}>
               <div className="profile-edit-actions">
                 {profileEditing ? (
-                  <><button type="button" onClick={() => setProfileEditing(false)}>취소</button><button className="save" type="submit">저장</button></>
+                  <><button type="button" disabled={profileSaving} onClick={() => { setProfileEditing(false); setProfileSaveError('') }}>취소</button><button className="save" type="submit" disabled={profileSaving}>{profileSaving ? '저장 중...' : '저장'}</button></>
                 ) : (
                   <button type="button" onClick={beginProfileEdit}><Pencil aria-hidden="true" size={13} strokeWidth={2} />수정</button>
                 )}
@@ -4490,13 +4803,14 @@ function CustomerApp() {
               <dl className="profile-detail-list">
                 <div>
                   <dt><Building2 size={17} strokeWidth={1.8} />회사명</dt>
-                  <dd>{profileEditing ? <input aria-label="회사명 수정" maxLength={80} value={profileCompanyNameDraft} onChange={(event) => setProfileCompanyNameDraft(event.target.value)} placeholder="회사명을 입력해주세요." /> : displayCompanyName}</dd>
+                  <dd>{profileEditing ? <input aria-label="회사명 수정" maxLength={80} value={profileCompanyNameDraft} disabled={profileSaving} onChange={(event) => setProfileCompanyNameDraft(event.target.value)} placeholder="회사명을 입력해주세요." /> : displayCompanyName}</dd>
                 </div>
                 <div>
                   <dt><Sparkles size={17} strokeWidth={1.8} />회사 모토</dt>
-                  <dd>{profileEditing ? <textarea aria-label="회사 모토 수정" maxLength={300} rows={2} value={profileCompanyMottoDraft} onChange={(event) => setProfileCompanyMottoDraft(event.target.value)} placeholder="회사 모토를 입력해주세요." /> : displayCompanyMotto}</dd>
+                  <dd>{profileEditing ? <textarea aria-label="회사 모토 수정" maxLength={300} rows={2} value={profileCompanyMottoDraft} disabled={profileSaving} onChange={(event) => setProfileCompanyMottoDraft(event.target.value)} placeholder="회사 모토를 입력해주세요." /> : displayCompanyMotto}</dd>
                 </div>
               </dl>
+              {profileEditing && profileSaveError && <p className="project-error" role="alert">{profileSaveError}</p>}
             </form>
           </section>
 
@@ -4606,12 +4920,13 @@ function CustomerApp() {
 
   const renderFinalEditModal = () => {
     if (!finalEditModal) return null
-    const title = finalEditModal === 'identity' ? '기본 정보를 수정하세요' : finalEditModal === 'values' ? '핵심 가치를 수정하세요' : finalEditModal === 'tone' ? '분위기를 수정하세요' : finalEditModal === 'color' ? '색상을 수정하세요' : finalEditModal === 'style' ? '로고 타입을 수정하세요' : '원하는 로고 모양을 수정하세요'
+    const title = finalEditModal === 'identity' ? (brandKind === 'ci' ? '회사명을 수정하세요' : '브랜드명을 수정하세요') : finalEditModal === 'audience' ? '주요 고객을 수정하세요' : finalEditModal === 'values' ? '핵심 가치를 수정하세요' : finalEditModal === 'tone' ? '분위기를 수정하세요' : finalEditModal === 'color' ? '색상을 수정하세요' : finalEditModal === 'style' ? '로고 타입을 수정하세요' : '원하는 로고 모양을 수정하세요'
     return <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFinalEditModal(null) }}>
       <section className="credit-modal final-edit-modal" role="dialog" aria-modal="true" aria-labelledby="final-edit-title">
         <button className="modal-close" type="button" aria-label="수정 닫기" onClick={() => setFinalEditModal(null)}><X size={22} /></button>
         <h2 id="final-edit-title">{title}</h2>
-        {finalEditModal === 'identity' && (brandKind === 'ci' ? <label>회사명<input autoFocus value={finalEditDraft.companyName} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, companyName: event.target.value }))} /></label> : <><label>브랜드명<input autoFocus value={finalEditDraft.brandName} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, brandName: event.target.value }))} /></label><label>주요 고객<select value={finalEditDraft.targetAge} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, targetAge: event.target.value }))}>{targetAgeOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label></>)}
+        {finalEditModal === 'identity' && (brandKind === 'ci' ? <label>회사명<input autoFocus value={finalEditDraft.companyName} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, companyName: event.target.value }))} /></label> : <label>브랜드명<input autoFocus value={finalEditDraft.brandName} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, brandName: event.target.value }))} /></label>)}
+        {finalEditModal === 'audience' && <label>주요 고객<select autoFocus value={finalEditDraft.targetAge} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, targetAge: event.target.value }))}>{targetAgeOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
         {finalEditModal === 'values' && <label>{brandKind === 'ci' ? '회사 모토' : '핵심 가치'}<textarea autoFocus value={brandKind === 'ci' ? finalEditDraft.companyMotto : finalEditDraft.valuesText} onChange={(event) => setFinalEditDraft((draft) => brandKind === 'ci' ? { ...draft, companyMotto: event.target.value } : { ...draft, valuesText: event.target.value })} maxLength={300} /></label>}
         {finalEditModal === 'tone' && <div className="final-tone-editor">
           <div className="final-tone-mode-toggle" role="tablist" aria-label="분위기 입력 방식">
@@ -4662,7 +4977,8 @@ function CustomerApp() {
         </div>}
         {finalEditModal === 'style' && <label>로고 타입<select autoFocus value={finalEditDraft.logoStyle} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, logoStyle: event.target.value as LogoStyle }))}>{logoStyleOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
         {finalEditModal === 'shape' && <label>원하는 로고 모양<textarea autoFocus value={finalEditDraft.logoShape} onChange={(event) => setFinalEditDraft((draft) => ({ ...draft, logoShape: event.target.value }))} maxLength={100} /></label>}
-        <div className="credit-modal-actions"><button className="gradient-button" type="button" disabled={finalEditModal === 'tone' && finalEditToneMode === 'direct' && !finalEditDraft.tone.trim()} onClick={saveFinalEditModal}>저장하기</button><button className="modal-secondary-button" type="button" onClick={() => setFinalEditModal(null)}>취소</button></div>
+        {finalEditError && <p className="project-error" role="alert">{finalEditError}</p>}
+        <div className="credit-modal-actions"><button className="gradient-button" type="button" disabled={finalEditSaving || (finalEditModal === 'tone' && finalEditToneMode === 'direct' && !finalEditDraft.tone.trim())} onClick={() => void saveFinalEditModal()}>{finalEditSaving ? '저장 중...' : '저장하기'}</button><button className="modal-secondary-button" type="button" disabled={finalEditSaving} onClick={() => setFinalEditModal(null)}>취소</button></div>
       </section>
     </div>
   }
@@ -4959,6 +5275,7 @@ function CustomerApp() {
       {resumePromptProject && renderResumePromptModal()}
       {brandKitPreview && renderBrandKitPreviewModal()}
       {mypageLogoAction && renderMypageLogoActionModal()}
+      {restoreOriginalOpen && renderRestoreOriginalModal()}
       {assetDeleteTarget && renderAssetDeleteModal()}
     </div>
   )

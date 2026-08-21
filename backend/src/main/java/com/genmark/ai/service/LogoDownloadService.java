@@ -1,5 +1,7 @@
 package com.genmark.ai.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.LogoCandidate;
 import com.genmark.ai.entity.LogoDownload;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 로고 다운로드 (F12-4).
@@ -38,6 +41,7 @@ public class LogoDownloadService {
     private final LogoDownloadRepository downloadRepository;
     private final MemberRepository memberRepository;
     private final LogoFileStorage fileStorage;
+    private final ObjectMapper objectMapper;
 
     /** 종류별 보관 한도. CI 20개, BI 20개를 각각 센다. */
     private final int retentionLimit;
@@ -47,12 +51,14 @@ public class LogoDownloadService {
                                LogoDownloadRepository downloadRepository,
                                MemberRepository memberRepository,
                                LogoFileStorage fileStorage,
+                               ObjectMapper objectMapper,
                                @Value("${app.download.retention-per-type:20}") int retentionLimit) {
         this.projectLookup = projectLookup;
         this.candidateRepository = candidateRepository;
         this.downloadRepository = downloadRepository;
         this.memberRepository = memberRepository;
         this.fileStorage = fileStorage;
+        this.objectMapper = objectMapper;
         this.retentionLimit = retentionLimit;
     }
 
@@ -74,8 +80,10 @@ public class LogoDownloadService {
                         candidateId, project.getId(), memberId))
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
 
+        String assetRevision = currentRevision(candidate);
         LogoDownload existing = downloadRepository
-                .findByMemberIdAndCandidateId(memberId, candidate.getId()).orElse(null);
+                .findByMemberIdAndCandidateIdAndAssetRevision(memberId, candidate.getId(), assetRevision)
+                .orElse(null);
         if (existing != null) {
             return toResponse(existing, false);
         }
@@ -85,17 +93,37 @@ public class LogoDownloadService {
                 .orElseThrow(() -> new ApiException(ErrorCode.AUTH_REQUIRED));
 
         String archivedKey = fileStorage.archiveForDownload(
-                memberId, candidate.getPublicId(), candidate.getStorageKey());
+                memberId, candidate.getPublicId(), assetRevision, candidate.getStorageKey());
 
         LogoDownload download = downloadRepository.save(LogoDownload.builder()
                 .member(member)
                 .candidate(candidate)
+                .assetRevision(assetRevision)
                 .projectType(projectType)
                 .storageKey(archivedKey)
                 .build());
 
         enforceRetentionLimit(memberId, projectType);
         return toResponse(download, true);
+    }
+
+    /**
+     * 지금 이 후보가 어떤 버전인지 돌려준다. 수정할 때마다 값이 바뀌므로, 수정 전에 받아둔
+     * 기록과 수정 후 받은 기록을 구분하는 열쇠가 된다. 수정 이력이 없으면 "original".
+     */
+    private String currentRevision(LogoCandidate candidate) {
+        String metadataJson = candidate.getAiMetadataJson();
+        if (metadataJson == null) return LogoDownload.ORIGINAL_REVISION;
+        try {
+            Map<String, Object> metadata = objectMapper.readValue(metadataJson, new TypeReference<>() {});
+            Object revision = metadata.get("svgRevision");
+            return revision instanceof String value && !value.isBlank()
+                    ? value
+                    : LogoDownload.ORIGINAL_REVISION;
+        } catch (Exception ignored) {
+            // 메타데이터가 깨졌다고 다운로드까지 막을 이유는 없다. 원본으로 간주한다.
+            return LogoDownload.ORIGINAL_REVISION;
+        }
     }
 
     /** 마이페이지에서 사용자가 보관 중인 다운로드 자산을 삭제한다. */
@@ -156,6 +184,7 @@ public class LogoDownloadService {
                 project.getPublicId(),
                 download.getCandidate().getPublicId(),
                 download.getProjectType().name(),
+                download.getAssetRevision(),
                 "/api/v1/me/downloads/" + download.getId() + "/image",
                 firstTime,
                 download.getDownloadedAt());

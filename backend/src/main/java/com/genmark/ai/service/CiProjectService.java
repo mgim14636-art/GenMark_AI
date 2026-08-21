@@ -70,6 +70,20 @@ public class CiProjectService {
                 .orElseGet(CiLatestProfileResponse::empty);
     }
 
+    /**
+     * 마이페이지 프로필 수정에서 회사명·회사 모토를 고칠 때 쓴다. latestProfile()과 같은
+     * "가장 최근 CI 한 건"을 대상으로 하지만, 여기서는 회사명이 비어 있어도(아직 한 번도
+     * 안 채운 CI라도) 그 CI를 그대로 수정 대상으로 삼는다 — 지금 막 이름을 채우는
+     * 상황일 수 있기 때문이다. 이렇게 고친 값은 이 CI를 "이어서 작성"할 때도 그대로 보인다.
+     */
+    @Transactional
+    public CiLatestProfileResponse updateLatestProfile(Long memberId, CiProjectUpsertRequest request) {
+        CiProject project = ciProjectRepository.findFirstByMemberIdOrderByCreatedAtDesc(memberId)
+                .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "아직 만든 CI 프로젝트가 없습니다."));
+        apply(project, request);
+        return new CiLatestProfileResponse(true, project.getCompanyName(), project.getCoreValues());
+    }
+
     @Transactional
     public CiProjectResponse update(String publicId, Long memberId, CiProjectUpsertRequest request) {
         CiProject project = requireOwned(publicId, memberId);

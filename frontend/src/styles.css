@@ -43,7 +43,9 @@
 }
 
 /* Logo editor screen */
-.logo-editor-screen { min-height: 100dvh; overflow-x: hidden; color: #17203a; background: radial-gradient(circle at 9% 11%, rgb(243 239 255 / .42), transparent 27%), radial-gradient(circle at 91% 18%, rgb(255 233 247 / .35), transparent 27%), #fff; }
+/* 뒤로가기 버튼(position:absolute)의 기준점을 이 화면 자신으로 고정한다 —
+   trademark-selection-screen 등과 같은 이유. */
+.logo-editor-screen { position: relative; min-height: 100dvh; overflow-x: hidden; color: #17203a; background: radial-gradient(circle at 9% 11%, rgb(243 239 255 / .42), transparent 27%), radial-gradient(circle at 91% 18%, rgb(255 233 247 / .35), transparent 27%), #fff; }
 .logo-editor-header { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto 42px; align-items: center; gap: 15px; min-height: 91px; padding: 0 28px; border-bottom: 1px solid #eeeaf7; background: rgb(255 255 255 / .86); }
 .logo-editor-back, .logo-editor-help { display: grid; width: 39px; height: 39px; place-items: center; border: 0; border-radius: 50%; color: #26314b; background: transparent; font-family: Arial, sans-serif; font-size: 32px; line-height: 1; }
 .logo-editor-help { border: 1px solid #e4dfef; font-family: Georgia, serif; font-size: 23px; }
@@ -52,7 +54,10 @@
 .logo-editor-brand strong { font-weight: 700; }
 .logo-editor-save { display: inline-flex; align-items: center; justify-content: center; min-width: 88px; min-height: 43px; border: 1px solid #e6def9; border-radius: 999px; color: #7541e6; background: #fff; font-size: 17px; letter-spacing: -.08em; }
 .logo-editor-save span { margin-left: 4px; font-family: Arial, sans-serif; font-size: 16px; }
-.logo-editor-content { width: min(calc(100% - 28px), 660px); margin: 0 auto; padding: 16px 0 34px; }
+/* padding-top이 뒤로가기 버튼(top:18px, 높이 42px → 60px 지점에서 끝남) 아래로
+   카드를 밀어낸다. 헤더가 있던 시절엔 헤더가 이 버튼과 겹치지 않게 해줬는데,
+   헤더를 없애면서 카드가 버튼과 겹치게 됐다. */
+.logo-editor-content { width: min(calc(100% - 28px), 660px); margin: 0 auto; padding: 68px 0 34px; }
 .logo-editor-meta { display: flex; align-items: center; justify-content: center; min-height: 51px; gap: 45px; color: #6f7690; }
 .logo-editor-counter { display: flex; align-items: center; justify-content: space-between; width: 176px; min-height: 39px; border: 1px solid #eee9f8; border-radius: 999px; padding: 0 8px; background: #fff; }
 .logo-editor-counter button { display: grid; width: 27px; height: 27px; place-items: center; border: 0; border-radius: 50%; color: #6d70a0; background: transparent; font-family: Arial, sans-serif; font-size: 24px; line-height: 1; }
@@ -67,17 +72,11 @@
 .editor-symbol-target.selected::before, .editor-symbol-target.selected::after { position: absolute; width: 14px; height: 14px; border: 1.5px solid #a984ff; border-radius: 50%; background: #fff; content: ''; }
 .editor-symbol-target.selected::before { top: -8px; left: -8px; box-shadow: 226px 0 0 -1px #fff, 226px 0 0 0 #a984ff; }
 .editor-symbol-target.selected::after { bottom: -8px; left: -8px; box-shadow: 226px 0 0 -1px #fff, 226px 0 0 0 #a984ff; }
-.editor-uploaded-logo-target { position: relative; display: grid; width: 286px; height: 286px; place-items: center; overflow: hidden; border: 0; box-sizing: border-box; background: #fff; cursor: pointer; }
+/* 예전엔 286px 고정 상자라서, 카드 안에 흰 여백이 넓게 남고 로고를 그 여백까지
+   옮길 수 없는 것처럼 보였다. 카드(artboard)가 주는 만큼 꽉 채우도록 바꿔서,
+   흰 배경 전체가 이동 가능 영역이 되게 한다. */
+.editor-uploaded-logo-target { position: relative; display: grid; width: 100%; aspect-ratio: 1 / 1; place-items: center; overflow: hidden; border: 0; box-sizing: border-box; background: #fff; cursor: pointer; }
 .editor-uploaded-logo-target.selected { border-color: transparent; }
-.editor-safe-area-guide { position: absolute; z-index: 3; inset: 11px; pointer-events: none; opacity: .88; background:
-    linear-gradient(90deg, #9a7bd8, #d091bd) left top / 28px 2px no-repeat,
-    linear-gradient(180deg, #9a7bd8, #d091bd) left top / 2px 28px no-repeat,
-    linear-gradient(90deg, #d091bd, #9a7bd8) right top / 28px 2px no-repeat,
-    linear-gradient(180deg, #d091bd, #9a7bd8) right top / 2px 28px no-repeat,
-    linear-gradient(90deg, #9a7bd8, #d091bd) left bottom / 28px 2px no-repeat,
-    linear-gradient(0deg, #9a7bd8, #d091bd) left bottom / 2px 28px no-repeat,
-    linear-gradient(90deg, #d091bd, #9a7bd8) right bottom / 28px 2px no-repeat,
-    linear-gradient(0deg, #d091bd, #9a7bd8) right bottom / 2px 28px no-repeat; }
 .editor-uploaded-logo-target.selected::before, .editor-uploaded-logo-target.selected::after { position: absolute; z-index: 2; width: 14px; height: 14px; border: 1.5px solid #a984ff; border-radius: 50%; background: #fff; content: ''; }
 .editor-uploaded-logo-target.selected::before { top: -8px; left: -8px; box-shadow: 286px 0 0 -1px #fff, 286px 0 0 0 #a984ff; }
 .editor-uploaded-logo-target.selected::after { bottom: -8px; left: -8px; box-shadow: 286px 0 0 -1px #fff, 286px 0 0 0 #a984ff; }
@@ -148,7 +147,7 @@
 .editor-color-row { margin-top: 4px; }
 .editor-color-control { display: grid; gap: 10px; grid-column: 1 / -1; }
 .editor-color-control .editor-color-row { grid-template-columns: 48px minmax(0, 1fr); }
-.editor-color-display { display: flex; grid-column: 2; flex-direction: column; align-items: center; gap: 7px; }
+.editor-color-display { display: flex; grid-column: 2; justify-self: start; flex-direction: column; align-items: center; justify-content: center; gap: 7px; }
 .editor-color-display-swatch { display: block; width: 50px; height: 50px; border: 1px solid rgb(73 56 119 / .22); border-radius: 50%; box-shadow: inset 0 1px 3px rgb(255 255 255 / .72), 0 3px 9px rgb(47 34 75 / .14); }
 .editor-color-edit { display: inline-flex; position: relative; min-height: 34px; align-items: center; gap: 4px; border: 0; border-radius: 999px; padding: 5px 10px; color: #7651c6; background: #f7f1ff; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; transition: color 180ms ease, background 180ms ease, transform 180ms ease; }
 .editor-color-edit:hover,
@@ -190,14 +189,14 @@
   .logo-editor-help { font-size: 19px; }
   .logo-editor-brand { gap: 5px; font-size: 21px; }
   .logo-editor-save { min-width: 65px; min-height: 35px; font-size: 14px; }
-  .logo-editor-content { width: min(calc(100% - 22px), 560px); padding-top: 10px; }
+  /* 뒤로가기 버튼(모바일 top:12px, 높이 44px → 56px 지점에서 끝남)과 안 겹치게. */
+  .logo-editor-content { width: min(calc(100% - 22px), 560px); padding-top: 62px; }
   .logo-editor-meta { justify-content: space-between; gap: 0; }
   .logo-editor-counter { width: 152px; min-height: 35px; }
   .logo-editor-counter strong, .logo-editor-autosave { font-size: 13px; }
   .logo-editor-preview-card { border-radius: 17px; }
   .logo-editor-artboard { min-height: 310px; padding-top: 25px; }
   .editor-symbol-target { width: 160px; height: 140px; }
-  .editor-uploaded-logo-target { width: 212px; height: 212px; }
   .editor-symbol-target.selected::before, .editor-symbol-target.selected::after { width: 11px; height: 11px; }
   .editor-symbol-target.selected::before { box-shadow: 160px 0 0 -1px #fff, 160px 0 0 0 #a984ff; }
   .editor-symbol-target.selected::after { box-shadow: 160px 0 0 -1px #fff, 160px 0 0 0 #a984ff; }
@@ -775,6 +774,10 @@
 .logo-result-primary > svg:first-child { margin-left: 26px; }
 .logo-result-edit { border: 2px solid #9255ef; color: #8a51e9; background: #fff; }
 .logo-result-edit > svg:first-child { margin-left: 26px; }
+.logo-result-restore { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; border: 1px solid #e2dcf1; border-radius: 14px; padding: 8px 16px; color: #6c7590; background: #fff; font-size: clamp(13px, 1.4vw, 16px); font-weight: 600; letter-spacing: -.05em; cursor: pointer; transition: color 180ms ease, border-color 180ms ease, background 180ms ease; }
+.logo-result-restore:hover { color: #8a51e9; border-color: #b892ef; background: #faf6ff; }
+.logo-result-restore:focus-visible { outline: 3px solid rgb(146 94 232 / .26); outline-offset: 2px; }
+.logo-result-restore:disabled { opacity: .5; cursor: not-allowed; }
 .logo-result-utility-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; margin-top: 16px; }
 .logo-result-utility-grid button { display: grid; grid-template-columns: 40px minmax(0, 1fr) 19px; align-items: center; min-height: 78px; gap: 13px; border: 1px solid #eeeaf7; border-radius: 18px; padding: 12px 20px; color: #526078; background: #fff; box-shadow: 0 5px 15px rgb(76 61 125 / .07); font-size: clamp(16px, 1.9vw, 22px); text-align: left; letter-spacing: -.08em; }
 .logo-result-utility-grid button > svg:last-child { margin-left: auto; color: #8992aa; }

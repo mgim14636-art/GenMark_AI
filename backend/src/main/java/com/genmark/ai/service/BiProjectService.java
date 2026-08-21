@@ -22,9 +22,18 @@ import java.util.stream.Stream;
 @Transactional(readOnly = true)
 public class BiProjectService {
 
-    /** brand-brief/target-age/tone/logo-style/final-review page order shown to the user. */
+    /**
+     * brand-brief/tone/logo-style/final-review page order shown to the user.
+     * 주요 타겟(target-age)은 별도 화면 없이 brand-brief 화면(상호명 입력 화면) 안에서
+     * 함께 입력받는다 — 프론트엔드가 'target-age'라는 step 값을 보낸 적이 없어서, 예전에
+     * 이 맵에 있던 "target-age", 2 항목은 실제로는 절대 쓰이지 않는 죽은 코드였다. 그런데도
+     * tone=3, logo-style=4, final-review=5로 번호가 밀려 있던 탓에, 실제 저장되는
+     * current_step 값이 1 → 2(brand-brief 제출) → 4(tone 제출, 3을 건너뜀) → 5(logo-style
+     * 제출) → 6(final-review 제출)처럼 3을 건너뛰고 어긋나 있었다. CI(STEP_ORDER가
+     * brand-brief=1/tone=2/logo-style=3/final-review=4)와 같은 방식으로 번호를 다시 맞춘다.
+     */
     private static final Map<String, Integer> STEP_ORDER = Map.of(
-            "brand-brief", 1, "target-age", 2, "tone", 3, "logo-style", 4, "final-review", 5);
+            "brand-brief", 1, "tone", 2, "logo-style", 3, "final-review", 4);
 
     private final BiProjectRepository biProjectRepository;
 

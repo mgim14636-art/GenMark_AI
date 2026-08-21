@@ -60,6 +60,8 @@ export type LogoCandidate = {
   storageKey: string
   svgUrl: string | null
   svgEdited: boolean
+  /** 현재 버전. 다운로드 기록의 assetRevision과 같은 체계('original' 포함)라 서로 비교할 수 있다. */
+  svgRevision: string
   mimeType: string
   width: number | null
   height: number | null
@@ -89,6 +91,8 @@ export type DownloadRecord = {
   projectId: string
   candidateId: string
   projectType: 'CI' | 'BI'
+  /** 받은 시점의 로고 버전. 수정 이력이 없는 원본이면 'original'. */
+  assetRevision: string
   imageUrl: string
   firstTime: boolean
   downloadedAt: string
@@ -324,6 +328,11 @@ export const onboardingApi = {
 
 export const ciProjectsApi = {
   latestProfile: () => apiRequest<CiLatestProfile>('/ci-projects/latest-profile'),
+  updateLatestProfile: (input: { companyName?: string; coreValues?: string }) =>
+    apiRequest<CiLatestProfile>('/ci-projects/latest-profile', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
 }
 
 type BackendProjectResponse = {
@@ -497,6 +506,11 @@ export const projectsApi = {
     method: 'PUT',
     body: JSON.stringify({ svg }),
   }),
+  /** 편집본을 버리고 AI가 처음 만든 원본 로고로 되돌린다. 편집본 파일 자체는 서버에 남는다. */
+  restoreCandidateOriginalSvg: (projectId: string, candidateId: string) => apiRequest<LogoCandidate>(
+    `/projects/${projectId}/logo-candidates/${candidateId}/svg/restore-original`,
+    { method: 'POST' },
+  ),
   selectCandidate: (projectId: string, candidateId: string) => apiRequest<LogoCandidate>(`/projects/${projectId}/logo-candidates/${candidateId}/select`, {
     method: 'POST',
   }),

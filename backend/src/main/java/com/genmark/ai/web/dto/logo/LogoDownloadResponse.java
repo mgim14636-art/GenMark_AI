@@ -14,6 +14,8 @@ public record LogoDownloadResponse(
         String projectId,
         String candidateId,
         String projectType,
+        /** 받은 시점의 로고 버전. 수정 이력이 없는 원본이면 "original". */
+        String assetRevision,
         String imageUrl,
         boolean firstTime,
         LocalDateTime downloadedAt

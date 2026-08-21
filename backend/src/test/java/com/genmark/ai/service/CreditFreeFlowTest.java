@@ -92,11 +92,14 @@ class CreditFreeFlowTest {
         when(projectLookup.requireOwned(project.getPublicId(), member.getId())).thenReturn(project);
         when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
                 candidate.getPublicId(), project.getId(), member.getId())).thenReturn(Optional.of(candidate));
-        when(downloadRepository.findByMemberIdAndCandidateId(member.getId(), candidate.getId()))
+        // 수정 이력이 없는 후보라 리비전은 "original"이다.
+        when(downloadRepository.findByMemberIdAndCandidateIdAndAssetRevision(
+                member.getId(), candidate.getId(), LogoDownload.ORIGINAL_REVISION))
                 .thenReturn(Optional.empty());
         when(memberRepository.findById(member.getId())).thenReturn(Optional.of(member));
-        when(fileStorage.archiveForDownload(member.getId(), candidate.getPublicId(), candidate.getStorageKey()))
-                .thenReturn("downloads/1/candidate-1.png");
+        when(fileStorage.archiveForDownload(member.getId(), candidate.getPublicId(),
+                LogoDownload.ORIGINAL_REVISION, candidate.getStorageKey()))
+                .thenReturn("downloads/1/candidate-1-original.png");
         when(downloadRepository.save(any(LogoDownload.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(downloadRepository.findByMemberIdAndProjectTypeOrderByDownloadedAtAsc(
@@ -108,6 +111,7 @@ class CreditFreeFlowTest {
                 downloadRepository,
                 memberRepository,
                 fileStorage,
+                new com.fasterxml.jackson.databind.ObjectMapper(),
                 20);
 
         var response = service.download(project.getPublicId(), candidate.getPublicId(), member.getId());
