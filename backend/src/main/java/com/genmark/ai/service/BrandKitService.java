@@ -46,6 +46,7 @@ import java.util.zip.ZipOutputStream;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class BrandKitService {
+    private static final String THUMBNAIL_RENDERER_VERSION = "product-mockup-single-v1";
     private static final ObjectMapper CANONICAL_JSON = new ObjectMapper()
             .configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true)
             .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
@@ -224,7 +225,8 @@ public class BrandKitService {
 
     private boolean isReusable(BrandKit kit, LogoCandidate candidate) {
         int expectedImageCount = kit.getKitType() == BrandKit.KitType.BUSINESS_CARD ? 2 : 1;
-        return storage.brandKitSourceKeyMatches(kit.getPublicId(), candidate.getStorageKey())
+        return !kit.isPreliminary()
+                && storage.brandKitSourceKeyMatches(kit.getPublicId(), candidate.getStorageKey())
                 && storage.brandKitHasExpectedImageCount(kit.getPublicId(), expectedImageCount);
     }
 
@@ -268,6 +270,9 @@ public class BrandKitService {
                                   Map<String, Object> survey) {
         Map<String, Object> spec = new TreeMap<>();
         spec.put("kit_type", kitType.name());
+        if (kitType == BrandKit.KitType.THUMBNAIL) {
+            spec.put("renderer_version", THUMBNAIL_RENDERER_VERSION);
+        }
         spec.put("survey", snakeCase(survey));
         if (info != null) {
             Map<String, Object> cardInfo = new TreeMap<>();
