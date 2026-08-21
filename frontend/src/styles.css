@@ -11446,3 +11446,98 @@ textarea {
 .trademark-analysis-copy > div:last-child {
   transform: none;
 }
+
+/* ============================================================
+   명함 정보 입력 모달 — 모바일 규격 고정
+   ------------------------------------------------------------
+   모바일 스타일이 @media (max-width: 768px) 안에 이미 있었지만,
+   앱 프레임은 520px여도 브라우저 창은 1920px이라 그 블록이 절대
+   발동하지 않는다. 그래서 모달이 680px로 벌어지고 입력 필드가
+   2열로 남아 프레임을 뚫고 나왔다.
+   창 너비와 무관하게 항상 모바일 규격으로 고정한다.
+
+   세로는 스크롤 없이 취소 버튼까지 한 화면에 들어오도록 약 670px에
+   맞췄다. 스크롤이 생기면 네이티브 스크롤바가 둥근 모서리 안쪽에
+   자리를 차지해 오른쪽만 각져 보이는 문제도 함께 없앤다.
+   ============================================================ */
+
+.modal-backdrop.business-card-backdrop { padding: 12px; }
+
+.credit-modal.business-card-modal {
+  width: min(100%, 468px);
+  max-height: min(92dvh, 700px);
+  border-radius: 24px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.credit-modal.business-card-modal::-webkit-scrollbar { display: none; }
+
+/* 헤더 — 설명 문단은 App.tsx에서 제거했다 */
+.business-card-modal-intro {
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  padding: 17px 48px 14px 17px;
+}
+
+.business-card-modal-icon { width: 42px; height: 42px; border-radius: 13px; }
+.business-card-modal-icon svg { width: 22px; height: 22px; }
+
+.credit-modal.business-card-modal h2 {
+  font-size: 18px;
+  line-height: 1.32;
+  letter-spacing: -.05em;
+  word-break: keep-all;
+}
+
+/* 입력 영역 — 한 줄에 하나씩 */
+.business-card-form { padding: 16px 17px 16px; }
+
+.business-card-form-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.business-card-field-wide { grid-column: auto; }
+.business-card-field { gap: 5px; }
+.business-card-field > span { font-size: 12.5px; }
+
+.business-card-field input {
+  min-height: 40px;
+  border-radius: 11px;
+  padding: 0 12px;
+  /* 16px 미만이면 모바일 사파리가 포커스 시 화면을 확대한다. 그대로 둔다. */
+  font-size: 16px;
+}
+
+.business-card-form-note {
+  margin-top: 10px;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+
+.business-card-form-note svg { width: 14px; height: 14px; }
+
+/* 버튼 — 세로 2단, 주 버튼이 위 */
+.business-card-form-actions {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.business-card-form-actions .modal-secondary-button { order: 2; }
+
+.business-card-form-actions .modal-secondary-button,
+.business-card-form-actions .gradient-button {
+  min-height: 46px;
+  font-size: 14.5px;
+}
+
+.business-card-modal .modal-close {
+  top: 11px;
+  right: 11px;
+  width: 32px;
+  height: 32px;
+}
