@@ -1,0 +1,206 @@
+{
+    "bottom_left.png": {
+        "spray_bottle": {
+            "quad": [
+                [
+                    342,
+                    232
+                ],
+                [
+                    416,
+                    232
+                ],
+                [
+                    416,
+                    263
+                ],
+                [
+                    342,
+                    263
+                ]
+            ],
+            "shading_strength": 0.3,
+            "max_width_ratio": 0.95
+        },
+        "dropper_bottle": {
+            "quad": [
+                [
+                    450,
+                    253
+                ],
+                [
+                    510,
+                    253
+                ],
+                [
+                    510,
+                    277
+                ],
+                [
+                    450,
+                    277
+                ]
+            ],
+            "shading_strength": 0.2,
+            "max_width_ratio": 0.95
+        },
+        "cream_jar": {
+            "quad": [
+                [
+                    258,
+                    296
+                ],
+                [
+                    304,
+                    296
+                ],
+                [
+                    304,
+                    308
+                ],
+                [
+                    258,
+                    308
+                ]
+            ],
+            "shading_strength": 0.3,
+            "max_width_ratio": 0.95
+        }
+    },
+    "top_left.png": {
+        "spray_bottle": {
+            "quad": [
+                [
+                    337,
+                    171
+                ],
+                [
+                    403,
+                    171
+                ],
+                [
+                    403,
+                    219
+                ],
+                [
+                    337,
+                    219
+                ]
+            ],
+            "shading_strength": 0.3,
+            "max_width_ratio": 0.95
+        },
+        "dropper_bottle": {
+            "quad": [
+                [
+                    422,
+                    225
+                ],
+                [
+                    458,
+                    225
+                ],
+                [
+                    458,
+                    252
+                ],
+                [
+                    422,
+                    252
+                ]
+            ],
+            "shading_strength": 0.2,
+            "max_width_ratio": 0.95
+        },
+        "cream_jar": {
+            "quad": [
+                [
+                    247,
+                    277
+                ],
+                [
+                    299,
+                    277
+                ],
+                [
+                    299,
+                    298
+                ],
+                [
+                    247,
+                    298
+                ]
+            ],
+            "shading_strength": 0.3,
+            "max_width_ratio": 0.8
+        }
+    },
+    "top_right.png": {
+        "spray_bottle": {
+            "quad": [
+                [
+                    330,
+                    229
+                ],
+                [
+                    406,
+                    229
+                ],
+                [
+                    406,
+                    258
+                ],
+                [
+                    330,
+                    258
+                ]
+            ],
+            "shading_strength": 0.3,
+            "max_width_ratio": 0.95
+        },
+        "dropper_bottle": {
+            "quad": [
+                [
+                    419,
+                    245
+                ],
+                [
+                    468,
+                    245
+                ],
+                [
+                    468,
+                    266
+                ],
+                [
+                    419,
+                    266
+                ]
+            ],
+            "shading_strength": 0.2,
+            "max_width_ratio": 0.95
+        },
+        "cream_jar": {
+            "quad": [
+                [
+                    253,
+                    293
+                ],
+                [
+                    299,
+                    293
+                ],
+                [
+                    299,
+                    302
+                ],
+                [
+                    253,
+                    302
+                ]
+            ],
+            "shading_strength": 0.3,
+            "max_width_ratio": 0.95
+        }
+    }
+}

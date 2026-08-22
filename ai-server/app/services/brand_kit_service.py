@@ -328,22 +328,29 @@ def _compose_business_card(logo: Image.Image, info: Optional[CardInfo], survey: 
 
 # --------------------------------------------------------------------------- 제품 썸네일
 # AI팀이 준비한 세 목업 중 top_left 한 장만 사용한다. 한 요청에서 세 템플릿을 모두
-# 호출하면 지연시간과 비용이 세 배가 되므로, 현재 제품 썸네일 계약(images 한 장)에
-# 맞춰 단일 편집 호출로 고정한다.
+# 처리하면 지연시간과 비용이 세 배가 되므로, 현재 제품 썸네일 계약(images 한 장)에
+# 맞춰 하나만 고정한다.
+#
+# [2026-08-21] AI 이미지 편집(product_mockup_ai_service, FLUX.2 Pro)으로 로고를
+# 합성했었지만, 사용자가 "목업 사진이 절대 깨지면 안 되고 로고만 정확히 인쇄돼야
+# 한다"고 명시적으로 요청했다 — AI 편집은 장면 전체를 다시 그리므로 액자 그림·나무
+# 결·병 반사 같은 디테일이 매번 조금씩 달라지고, 자(jar)에 엉뚱한 글자가 생기거나
+# 종이 위에 로고가 중복으로 찍히는 등 완전히 통제되지 않는 부작용이 반복 확인됐다.
+# 조합 로고(심볼+워드마크)의 글자가 편집 중 흐트러질 위험도 있었다.
+# cosmetic_mockup_templates.py(PIL 원근 합성, product_mockup.py/brand_kit.py 재사용)로
+# 바꿔 AI 호출 없이 로고 이미지를 있는 그대로(글자 포함) 라벨 영역에 끼워 넣는다 —
+# 로고가 들어간 영역 외에는 원본 사진과 픽셀 단위로 동일하다.
 _PRODUCT_MOCKUP_TEMPLATE = "top_left"
 
 
 def _generate_ai_product_mockup(
     size: Tuple[int, int], logo: Image.Image, product_name: Optional[str], survey: dict
 ) -> Image.Image:
-    from app.services import product_mockup_ai_service
+    from app.services.brand_kit import compose_brand_kit
+    from app.services.cosmetic_mockup_templates import COSMETIC_MOCKUP_TEMPLATES
 
-    brand_name = _brand_name(survey) or (product_name or "")
-    image = product_mockup_ai_service.composite_logo_onto_mockup(
-        logo,
-        template=_PRODUCT_MOCKUP_TEMPLATE,
-        brand_name=brand_name,
-    )
+    template = COSMETIC_MOCKUP_TEMPLATES[_PRODUCT_MOCKUP_TEMPLATE]
+    image = compose_brand_kit(logo, template)
     return _fit_cover(image.convert("RGB"), size)
 
 

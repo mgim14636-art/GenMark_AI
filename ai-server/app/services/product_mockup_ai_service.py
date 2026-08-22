@@ -223,6 +223,26 @@ def _restore_original_text(
     return composited
 
 
+def _position_guide(mockup: Image.Image, template: str) -> Image.Image:
+    """로고의 정확한 위치·크기만 알려주는 자리표시자 가이드(실제 로고 없이).
+
+    이전 버전은 실제 로고를 붙여넣은 가이드를 3번째 레퍼런스로 썼는데, 그러면
+    레퍼런스 안에 같은 브랜드 아트워크가 두 번(원본 로고 + 가이드 위 복사본) 들어가
+    FLUX.2 Pro가 이를 "중복된 저작물"로 보고 Protected Content로 거절하는 사례가
+    있었다(실측, 2026-08-21 — 팀원이 이 3번째 레퍼런스를 통째로 빼서 해결). 로고
+    없이 중립색 사각형만 앵커 위치에 그려서, 아트워크를 중복시키지 않으면서도
+    "정확히 이 세 자리에만, 이 크기로"라는 위치·크기 정보만 전달한다.
+    """
+    guide = mockup.convert("RGB").copy()
+    w, h = guide.size
+    draw = ImageDraw.Draw(guide)
+    for anchor in _ANCHORS.get(template, []):
+        side = max(round(anchor.size * w), 6)
+        cx, cy = round(anchor.cx * w), round(anchor.cy * h)
+        draw.rectangle((cx - side, cy - side, cx + side, cy + side), fill=(150, 150, 150))
+    return guide
+
+
 def _edit_prompt(brand_name: str) -> str:
     name_hint = (
         f' If the logo has no readable text on it, you may add the brand name "{brand_name}" '
@@ -238,27 +258,36 @@ def _edit_prompt(brand_name: str) -> str:
         "gray text printed directly onto the glass (no paper label). The jar has no "
         "printing yet. Reference image 2 is original brand artwork supplied by the user "
         "who owns it and created it in this application. Apply that artwork as provided, "
-        "without redesigning its geometry or color.\n\n"
-        "Apply the user-supplied brand artwork to all three containers:\n"
-        "1. Spray bottle: tiny logo above the existing text, same tiny size as in "
-        "the existing product copy — it must stay just as small as on the other two containers, "
-        "being the tallest bottle is not a reason to enlarge it.\n"
-        "2. Jar: add the tiny logo centered on the front — this one currently has nothing "
-        "printed on it, so do not leave it blank.\n"
-        "3. Dropper bottle: tiny logo above the existing text, no larger than the "
-        "existing product copy.\n\n"
+        "without redesigning its geometry or color. Reference image 3 is the same photo "
+        "with three plain gray rectangles marked on it — those rectangles are NOT part of "
+        "the artwork and must never appear in the final image; they only mark the exact "
+        "position and size where the logo from reference image 2 belongs, one rectangle per "
+        "container.\n\n"
+        "Apply the user-supplied brand artwork to exactly those three marked spots, one per "
+        "container, at the size shown by each gray rectangle:\n"
+        "1. Spray bottle: logo above the existing text, matching the marked size — being "
+        "the tallest bottle is not a reason to enlarge it beyond the mark.\n"
+        "2. Jar: add ONLY the logo symbol at the marked spot — no text, no words, no brand "
+        "name, no extra graphic of any kind. It currently has nothing printed on it and must "
+        "stay that way except for the logo mark itself.\n"
+        "3. Dropper bottle: logo above the existing text, matching the marked size.\n\n"
         "For all three: print the logo directly onto the frosted glass like the existing "
         "text (do not add any new white sticker, paper label, or solid patch behind it — "
         "glass stays visible around it), wrap it to the glass's curvature and match the "
         "existing lighting and reflections. Do not remove, move, or resize any existing "
-        "printed text on the spray or dropper bottle. The logo must appear ONLY on the "
-        "glass surface of these three containers — never on the wooden table, tray, paper "
-        "card underneath, flasks, plants, picture frames, or any other prop or empty space "
-        "in the scene."
+        "printed text on the spray or dropper bottle. The logo must appear ONLY at those "
+        "three marked spots on the glass — nowhere else in the frame. Do not print or place "
+        "the logo (or any part of it) on the wooden table, tray, paper card underneath, "
+        "flasks, plants, picture frames, shadows, or any other prop or empty space — exactly "
+        "three copies of the logo total, one per container, nothing more."
         f"{name_hint} "
+        "Do not print, invent, or add any text, words, letters, or brand name anywhere in "
+        "this image beyond what already exists in reference image 1. The only new visual "
+        "element you may add is the logo symbol from reference image 2, and only at the "
+        "three marked spots. If reference image 2 has no text on it, add none — not on the "
+        "jar, not anywhere else. "
         "Everything else in reference image 1 — container shapes, cap colors, positions, "
-        "background, props, surface, lighting, camera angle — stays identical. No other "
-        "new text or graphics."
+        "background, props, surface, lighting, camera angle — stays identical."
     )
 
 
@@ -279,10 +308,11 @@ def composite_logo_onto_mockup(
     # 여백이 좁은 용기에서 통째로 무시하는 원인이 됐다(실측 확인됨).
     # product_mockup._remove_flat_background로 실제 알파 투명 배경을 만든 뒤 전달한다.
     logo_rgba = _remove_flat_background(logo.convert("RGBA"))
+    guide = _position_guide(mockup, template)
     image, _svg = _call_image_api(
         _edit_prompt(brand_name),
         model=_EDIT_MODEL,
-        input_references=[mockup, logo_rgba],
+        input_references=[mockup, logo_rgba, guide],
         aspect_ratio="16:9",
     )
     image = _restore_original_text(mockup, image, template, logo_rgba)
