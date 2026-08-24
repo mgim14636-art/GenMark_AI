@@ -299,11 +299,7 @@ public class LogoFileStorage {
      *
      * @return 보관본의 storageKey
      */
-    public String archiveForDownload(Long memberId, String candidatePublicId, String assetRevision,
-                                     String sourceStorageKey) {
-        if (assetRevision == null || !SAFE_PATH_SEGMENT.matcher(assetRevision).matches()) {
-            throw new ApiException(ErrorCode.STORAGE_ERROR);
-        }
+    public String archiveForDownload(Long memberId, String candidatePublicId, String sourceStorageKey) {
         try {
             Path source = root.resolve(sourceStorageKey).normalize();
             if (!source.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
@@ -312,8 +308,7 @@ public class LogoFileStorage {
             if (!directory.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
             Files.createDirectories(directory);
 
-            // 파일명에 리비전을 넣어야 수정 전에 받아둔 보관본을 덮어쓰지 않는다.
-            Path target = directory.resolve(candidatePublicId + "-" + assetRevision + ".png");
+            Path target = directory.resolve(candidatePublicId + ".png");
             Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
             return root.relativize(target).toString().replace('\\', '/');
         } catch (IOException e) {

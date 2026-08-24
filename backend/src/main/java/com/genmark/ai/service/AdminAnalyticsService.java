@@ -70,7 +70,8 @@ public class AdminAnalyticsService {
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy.MM.dd");
     private static final Set<String> VALID_PERIODS = Set.of("daily", "weekly", "monthly", "custom");
     private static final List<String> DEFAULT_SURVEY_CATEGORIES = List.of(
-            "로고 생성·재생성", "브랜드 맞춤 로고", "로고 수정", "유사 상표 확인", "로고 저장·활용", "기타");
+            "로고 생성 시간이 오래 걸려서 불편함", "원하는 느낌/스타일의 로고가 잘 안 나옴", "로고 수정이 어렵거나 마음대로 안 됨",
+            "브랜드 키트·명함 만들기 기능이 아쉬움", "유사 상표 확인 결과를 얼마나 믿어야 할지 모르겠음", "기타 사항");
 
     private final AdminRepository adminRepository;
     private final BiProjectRepository biProjectRepository;
