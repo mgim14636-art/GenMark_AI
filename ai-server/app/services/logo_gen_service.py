@@ -270,6 +270,51 @@ def strip_stray_specks(svg: str, min_diag_ratio: float = 0.02) -> str:
     return re.sub(r'<path[^>]*\sd="([^"]+)"[^>]*/>', _sub, svg)
 
 
+def autocrop_svg(svg: str) -> str:
+    """Recraft가 그린 SVG의 viewBox 여백을 균일하게 통일한다.
+
+    SVG마다 viewBox 안에서 실제 그림이 차지하는 비율이 매번 달라(캔버스 중앙에
+    꽉 차게 나올 때도, 한쪽에 작게 치우쳐 나올 때도 있음) — product_mockup의
+    LabelRegion처럼 고정 좌표·크기로 합성하는 쪽에서는 이게 그대로 "로고 크기·
+    위치가 실행마다 달라 보이는" 문제로 나타난다(실측 확인됨).
+    logo_autocrop_svg.autocrop_svg_to_content가 cairosvg로 한 번 래스터화해 실제
+    도형의 bounding box를 구하고, viewBox만 그 범위(+균일 여백)로 다시 잡아
+    도형 좌표 자체는 안 건드리고 여백만 통일한다.
+
+    cairosvg는 네이티브 libcairo가 있어야 실제로 렌더링되는데, Windows 로컬
+    개발 환경에는 흔히 없다(rasterize_svg의 cairosvg 폴백과 같은 사유 — 실측
+    확인됨: 이 환경에서 `import cairosvg` 자체가 OSError). 그 경우 크롭을 건너뛰고
+    원본 SVG를 그대로 돌려준다 — 파이프라인이 이 함수 유무로 죽지 않게 하기 위함.
+    """
+    import os
+    import tempfile
+
+    try:
+        from app.services.logo_autocrop_svg import autocrop_svg_to_content
+    except (ImportError, OSError) as e:
+        print(f"[logo_gen_service] SVG autocrop 건너뜀(cairosvg 미가용: {e})", flush=True)
+        return svg
+
+    fd_in, path_in = tempfile.mkstemp(suffix=".svg")
+    fd_out, path_out = tempfile.mkstemp(suffix=".svg")
+    os.close(fd_out)
+    try:
+        with os.fdopen(fd_in, "w", encoding="utf-8") as f:
+            f.write(svg)
+        autocrop_svg_to_content(path_in, path_out)
+        with open(path_out, "r", encoding="utf-8") as f:
+            return f.read()
+    except (OSError, ValueError) as e:
+        print(f"[logo_gen_service] SVG autocrop 실패({e}) — 원본 SVG 유지", flush=True)
+        return svg
+    finally:
+        for p in (path_in, path_out):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+
 # 흰색 계열은 배경·하이라이트로 쓰이므로 색 통일 대상에서 뺀다. 이걸 칠해버리면
 # 속을 비워 둔 선 로고의 안쪽이 메워지고, 도형에 뚫어 둔 구멍도 막힌다.
 _NEAR_WHITE = re.compile(r"^#(?:fff(?:fff)?|f[ef]f[ef]f[ef])$", re.I)
@@ -519,6 +564,7 @@ def _call_image_api(
         if is_vector(model) or raw.lstrip()[:5] in (b"<?xml", b"<svg "):
             svg = strip_background(raw.decode("utf-8"))
             svg = strip_stray_specks(svg)
+            svg = autocrop_svg(svg)
             return rasterize_svg(svg), svg
         return Image.open(BytesIO(raw)).convert("RGBA"), None
 
