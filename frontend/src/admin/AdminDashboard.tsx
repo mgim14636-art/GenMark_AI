@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   Clock3,
   Download,
+  FileText,
   FolderCheck,
   Heart,
   House,
@@ -60,10 +61,24 @@ type AdminAccountRow = {
 }
 
 const previewAdminMembers: AdminMemberTableRow[] = [
-  { id: 1, email: 'tkss1217@gmail.com', name: '김명은', provider: 'GOOGLE', ciGenerations: 8, biGenerations: 5, downloadCount: 7, ciDownloads: 4, biDownloads: 3, creditBalance: 12, paidUser: true, createdAt: '2026-08-05T09:24:00' },
-  { id: 2, email: 'minji.kim@example.com', name: '김민지', provider: 'KAKAO', ciGenerations: 6, biGenerations: 9, downloadCount: 8, ciDownloads: 3, biDownloads: 5, creditBalance: 18, paidUser: true, createdAt: '2026-08-08T14:10:00' },
-  { id: 3, email: 'design.lee@example.com', name: '이서윤', provider: 'GOOGLE', ciGenerations: 3, biGenerations: 4, downloadCount: 3, ciDownloads: 2, biDownloads: 1, creditBalance: 7, paidUser: false, createdAt: '2026-08-11T11:42:00' },
+  { id: 1, email: 'tkss1217@gmail.com', name: '김명은', provider: 'GOOGLE', ciGenerations: 8, biGenerations: 5, downloadCount: 7, ciDownloads: 4, biDownloads: 3, creditBalance: 12, paidUser: true, createdAt: '2026-08-05T09:24:00', onboardingCompleted: true, onboardingUsage: ['online', 'social'], onboardingAudience: 'owner', onboardingCompletedAt: '2026-08-05T09:20:00' },
+  { id: 2, email: 'minji.kim@example.com', name: '김민지', provider: 'KAKAO', ciGenerations: 6, biGenerations: 9, downloadCount: 8, ciDownloads: 3, biDownloads: 5, creditBalance: 18, paidUser: true, createdAt: '2026-08-08T14:10:00', onboardingCompleted: true, onboardingUsage: ['offline'], onboardingAudience: 'company', onboardingCompletedAt: '2026-08-08T14:05:00' },
+  { id: 3, email: 'design.lee@example.com', name: '이서윤', provider: 'GOOGLE', ciGenerations: 3, biGenerations: 4, downloadCount: 3, ciDownloads: 2, biDownloads: 1, creditBalance: 7, paidUser: false, createdAt: '2026-08-11T11:42:00', onboardingCompleted: false, onboardingUsage: [], onboardingAudience: null, onboardingCompletedAt: null },
 ]
+
+/** 온보딩(첫 방문 설문) 1단계 선택지. 실제 문구는 App.tsx의 onboardingOptions와 같다. */
+const ONBOARDING_USAGE_LABELS: Record<string, string> = {
+  online: '온라인 쇼핑몰',
+  social: '인스타그램 · SNS',
+  offline: '매장 · 명함 · 인쇄물',
+}
+/** 온보딩 2단계 선택지. 실제 문구는 App.tsx의 audienceOptions와 같다. */
+const ONBOARDING_AUDIENCE_LABELS: Record<string, string> = {
+  company: '회사 / 팀',
+  owner: '자영업',
+  hobby: '취미 / 창작',
+  sidejob: '부업 & 투잡',
+}
 
 const previewAdminAccounts: AdminAccountRow[] = [
   { id: 'admin@genmark.ai', name: '김명은', createdAt: '2026.08.01', lastAccessAt: '2026.08.14 14:36' },
@@ -143,6 +158,79 @@ type LogoPanelState = {
   memberId: string
   type: 'generated' | 'downloaded'
 } | null
+
+/**
+ * 꺾은선 차트를 그릴 때 쓰는 컨테이너의 실제 픽셀 폭을 잰다.
+ *
+ * viewBox를 고정값(예: 600)으로 두면 카드 폭과 비율이 안 맞을 때 SVG가 통째로
+ * 축소되어 가운데로 몰린다(preserveAspectRatio 기본 동작). 그러면 SVG 안의 점과
+ * 바깥 HTML로 그린 날짜 글자가 서로 어긋난다. 잰 폭을 그대로 viewBox 폭으로 쓰면
+ * SVG 좌표 1이 화면 1px이 되어 축소가 아예 일어나지 않는다.
+ */
+const useMeasuredWidth = (fallbackWidth: number) => {
+  const [width, setWidth] = useState(fallbackWidth)
+  // 탭을 바꾸면 차트가 뒤늦게 생기므로 useRef 대신 콜백 ref를 쓴다.
+  // useRef는 처음 붙을 때 알림이 없어서, 그때 화면에 없던 차트는 폭을 영영 못 잰다.
+  const [element, setElement] = useState<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!element) return
+    const apply = (measured: number) => { if (measured > 0) setWidth(measured) }
+    apply(element.getBoundingClientRect().width)
+    const observer = new ResizeObserver((entries) => apply(entries[0]?.contentRect.width ?? 0))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [element])
+  return [setElement, width] as const
+}
+
+/**
+ * y축 눈금을 데이터 크기에 맞춰 정한다.
+ *
+ * 기본 단위: 100 미만이면 5, 100~999면 100, 1000 이상이면 자릿수에 맞춰 1000·10000…으로 올라간다.
+ * 그 단위로 눈금이 6칸을 넘게 촘촘해지면 2·4·5…배로 키워서 읽기 좋은 개수로 맞춘다.
+ * (예: 최대 2 → 0·5 / 최대 80 → 0·20·40·60·80 / 최대 150 → 0·100·200 / 최대 1248 → 0·1000·2000)
+ */
+const buildNiceAxis = (maxValue: number) => {
+  const max = Math.max(1, Math.ceil(maxValue))
+  const baseUnit = max < 100 ? 5 : Math.pow(10, Math.floor(Math.log10(max)))
+  const step = [1, 2, 4, 5, 10, 20, 25, 50, 100]
+    .map((multiplier) => baseUnit * multiplier)
+    .find((candidate) => Math.ceil(max / candidate) <= 6) ?? baseUnit * 100
+  const top = Math.ceil(max / step) * step
+  const ticks: number[] = []
+  for (let value = 0; value <= top; value += step) ticks.push(value)
+  return { top, ticks }
+}
+
+/**
+ * 꺾은선 차트 두 개의 여백·높이(px). viewBox를 실제 픽셀 폭으로 쓰기 때문에
+ * 여기 숫자는 전부 화면 픽셀과 1:1로 대응한다.
+ * gutter = 왼쪽 y축 숫자 자리, labelY = 아래쪽 날짜 글자의 기준선.
+ */
+const MINI_CHART = { gutter: 34, padRight: 16, plotTop: 10, plotBottom: 112, labelY: 130, height: 138 } as const
+const LINE_CHART = { gutter: 44, padRight: 16, plotTop: 10, plotBottom: 196, labelY: 217, height: 226 } as const
+
+/**
+ * "로고 생성 건수" 막대 차트(admin-mini-dual-bars)의 세로 픽셀 치수.
+ * admin-dashboard.css의 .admin-mini-dual-bars(전체 136px)와
+ * .admin-mini-dual-group > div(막대 영역 = 100% - 18px)에 맞춰져 있다 —
+ * CSS 쪽 값을 바꾸면 여기도 같이 바꿔야 눈금선이 실제 막대와 어긋나지 않는다.
+ */
+const DUAL_BAR_LABEL_HEIGHT = 18
+const DUAL_BAR_PLOT_HEIGHT = 118
+
+/** 꺾은선 차트의 점 좌표를 계산한다. 점이 하나뿐이면 왼쪽 끝에 붙이지 않고 가운데 놓는다. */
+const buildLinePoints = (
+  values: readonly number[], labels: readonly string[],
+  layout: { left: number; right: number; top: number; bottom: number; axisTop: number },
+) => values.map((value, index) => {
+  const span = layout.right - layout.left
+  const x = values.length === 1
+    ? layout.left + span / 2
+    : layout.left + (span / (values.length - 1)) * index
+  const y = layout.bottom - (value / layout.axisTop) * (layout.bottom - layout.top)
+  return { x, y, value, label: labels[index] ?? '' }
+})
 
 const normalizeAdminSearchValue = (value: string) => value.trim().toLocaleLowerCase()
 
@@ -366,8 +454,8 @@ function AdminSurveyResponseTable({ responses }: { responses: AdminSurveyRespons
       <div className="admin-table-shell">
         <table className="admin-survey-response-table">
           <caption className="admin-sr-only">개선 요청 설문 응답 목록</caption>
-          <thead><tr><th scope="col">No.</th><th scope="col">회원</th><th scope="col">만족도</th><th scope="col">개선 항목</th><th scope="col">응답일</th></tr></thead>
-          <tbody>{filteredResponses.length === 0 ? <tr><td colSpan={5} className="admin-empty-table-state">저장된 설문 응답이 없습니다.</td></tr> : filteredResponses.map((response, index) => <tr key={response.memberId}><td data-label="No.">{index + 1}</td><td data-label="회원"><code>{response.memberEmail ?? `회원 ${response.memberId}`}</code>{response.memberName && <small className="admin-survey-member-name">{response.memberName}</small>}</td><td data-label="만족도"><span className={`admin-request-tag ${response.rating === 5 ? '' : 'other'}`}>{response.rating === 5 ? '좋아요' : response.rating === 1 ? '싫어요' : '미응답'}</span></td><td data-label="개선 항목"><span className="admin-request-other-text">{response.improvements.length ? response.improvements.join(' · ') : '선택 없음'}</span></td><td data-label="응답일">{response.completedAt ? formatAdminDate(response.completedAt) : '—'}</td></tr>)}</tbody>
+          <thead><tr><th scope="col">No.</th><th scope="col">회원</th><th scope="col">만족도</th><th scope="col">개선 항목</th><th scope="col">코멘트</th><th scope="col">응답일</th></tr></thead>
+          <tbody>{filteredResponses.length === 0 ? <tr><td colSpan={6} className="admin-empty-table-state">저장된 설문 응답이 없습니다.</td></tr> : filteredResponses.map((response, index) => <tr key={response.memberId}><td data-label="No.">{index + 1}</td><td data-label="회원"><code>{response.memberEmail ?? `회원 ${response.memberId}`}</code>{response.memberName && <small className="admin-survey-member-name">{response.memberName}</small>}</td><td data-label="만족도"><span className={`admin-request-tag ${response.rating === 5 ? '' : 'other'}`}>{response.rating === 5 ? '좋아요' : response.rating === 1 ? '싫어요' : '미응답'}</span></td><td data-label="개선 항목"><span className="admin-request-other-text">{response.improvements.length ? response.improvements.join(' · ') : '선택 없음'}</span></td><td data-label="코멘트"><span className="admin-request-other-text">{response.comment || '—'}</span></td><td data-label="응답일">{response.completedAt ? formatAdminDate(response.completedAt) : '—'}</td></tr>)}</tbody>
         </table>
       </div>
     </section>
@@ -394,16 +482,19 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
   const [dashboardCalendarOpen, setDashboardCalendarOpen] = useState(false)
   const dashboardCalendarRef = useRef<HTMLDivElement | null>(null)
   const adminAccountMenuRef = useRef<HTMLDivElement | null>(null)
+  // 꺾은선 차트는 잰 폭을 그대로 viewBox 폭으로 써서 SVG 좌표와 화면 픽셀을 1:1로 맞춘다.
+  const [overviewChartRef, overviewChartWidth] = useMeasuredWidth(600)
+  const [generationChartRef, generationChartWidth] = useMeasuredWidth(600)
   const [dashboardSection, setDashboardSectionState] = useState<DashboardSection>(getDashboardSectionFromUrl)
   const [isMemberMenuOpen, setIsMemberMenuOpen] = useState(true)
   const [isStatsMenuOpen, setIsStatsMenuOpen] = useState(true)
   const [openLogoPanel, setOpenLogoPanel] = useState<LogoPanelState>(null)
   const [memberSearchQuery, setMemberSearchQuery] = useState('')
   const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false)
+  const [openOnboardingMemberId, setOpenOnboardingMemberId] = useState<number | null>(null)
   const [hoveredOverviewSignupPoint, setHoveredOverviewSignupPoint] = useState<number | null>(null)
   const [hoveredGenerationUserPoint, setHoveredGenerationUserPoint] = useState<number | null>(null)
   const [adminId, setAdminId] = useState(getStoredAdminId)
-  const [adminIdDraft, setAdminIdDraft] = useState(getStoredAdminId)
   const [adminToken, setAdminToken] = useState(getStoredAdminToken)
   const [adminLoginId, setAdminLoginId] = useState(getStoredAdminId)
   const [adminPassword, setAdminPassword] = useState('')
@@ -419,12 +510,11 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
   const [adminSurveyResponses, setAdminSurveyResponses] = useState<AdminSurveyResponse[]>([])
   const adminInitial = Array.from(adminId.trim())[0]?.toLocaleUpperCase() || 'A'
 
-  const saveAdminId = () => {
-    const nextAdminId = adminIdDraft.trim()
-    if (!nextAdminId) return
-    setAdminId(nextAdminId)
-    storeAdminId(nextAdminId)
+  const logoutAdmin = () => {
     setIsAdminMenuOpen(false)
+    setAdminToken('')
+    storeAdminToken('')
+    setAdminPassword('')
   }
 
   const setDashboardSection = (nextSection: DashboardSection) => {
@@ -563,7 +653,6 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
         setAdminToken(result.accessToken)
         storeAdminToken(result.accessToken)
         setAdminId(result.loginId)
-        setAdminIdDraft(result.loginId)
         storeAdminId(result.loginId)
         setAdminPassword('')
       })
@@ -713,13 +802,15 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
       { id: 3, category: '상표 이미지 분석', message: '유사도 결과에 분석 기준과 참고 설명이 함께 나오면 좋겠습니다.', user: '박서연', time: '어제 11:42' },
       { id: 4, category: '제품 썸네일', message: '완성한 로고로 제품 썸네일까지 바로 만들어보고 싶어요.', user: '최지훈', time: '8월 4일' },
     ]
-    const chartPoints = selectedPeriodData.userTrend.map((value, index, values) => {
-      const x = 20 + (550 / (values.length - 1)) * index
-      const y = 205 - (value / 1500) * 191
-      return { x, y, value, label: generationXAxisLabels[index] }
+    const generationUserAxis = buildNiceAxis(Math.max(0, ...selectedPeriodData.userTrend))
+    const chartPoints = buildLinePoints(selectedPeriodData.userTrend, generationXAxisLabels, {
+      left: LINE_CHART.gutter, right: generationChartWidth - LINE_CHART.padRight,
+      top: LINE_CHART.plotTop, bottom: LINE_CHART.plotBottom, axisTop: generationUserAxis.top,
     })
     const chartPath = chartPoints.map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x} ${point.y}`).join(' ')
-    const chartAreaPath = `${chartPath} L570 205 L20 205 Z`
+    const chartAreaPath = chartPoints.length
+      ? `${chartPath} L${chartPoints[chartPoints.length - 1].x} ${LINE_CHART.plotBottom} L${chartPoints[0].x} ${LINE_CHART.plotBottom} Z`
+      : ''
     const signupPeriodData = {
       daily: { total: '12,684', newUsers: '1,248', completion: '82.4', started: '68.7', totalDelta: '+8.6%', newDelta: '이번 달', completionDelta: '+4.1%', startedDelta: '+6.2%', monthly: [520, 610, 700, 780, 744, 900, 1010, 1100, 1248, 1240, 1236, 1248], sources: [46, 34, 12, 8], funnel: [1248, 1029, 852, 684], dropoff: '17.2' },
       weekly: { total: '18,420', newUsers: '2,186', completion: '84.1', started: '71.5', totalDelta: '+10.2%', newDelta: '+7.4%', completionDelta: '+4.8%', startedDelta: '+7.1%', monthly: [148, 176, 204, 232, 220, 266, 294, 320, 356, 382, 410, 438], sources: [42, 37, 13, 8], funnel: [2186, 1810, 1528, 1268], dropoff: '15.9' },
@@ -799,14 +890,16 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     const overviewSignupTrend = adminAnalytics
       ? { labels: adminAnalytics.signup.trend.map((point) => point.label), values: adminAnalytics.signup.trend.map((point) => point.value) }
       : standalone ? overviewSignupTrendByPeriod[dashboardPeriod] : { labels: [], values: [] }
-    const overviewSignupTrendMax = Math.max(1, ...overviewSignupTrend.values)
-    const overviewSignupChartPoints = overviewSignupTrend.values.map((value, index, values) => {
-      const x = 12 + (576 / Math.max(values.length - 1, 1)) * index
-      const y = 174 - (value / overviewSignupTrendMax) * 142
-      return { x, y, value, label: overviewSignupTrend.labels[index] }
-    })
+    const overviewSignupAxis = buildNiceAxis(Math.max(0, ...overviewSignupTrend.values))
+    const overviewSignupLayout = {
+      left: MINI_CHART.gutter, right: overviewChartWidth - MINI_CHART.padRight,
+      top: MINI_CHART.plotTop, bottom: MINI_CHART.plotBottom, axisTop: overviewSignupAxis.top,
+    }
+    const overviewSignupChartPoints = buildLinePoints(overviewSignupTrend.values, overviewSignupTrend.labels, overviewSignupLayout)
     const overviewSignupChartPath = overviewSignupChartPoints.map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x} ${point.y}`).join(' ')
-    const overviewSignupAreaPath = `${overviewSignupChartPath} L588 174 L12 174 Z`
+    const overviewSignupAreaPath = overviewSignupChartPoints.length
+      ? `${overviewSignupChartPath} L${overviewSignupChartPoints[overviewSignupChartPoints.length - 1].x} ${MINI_CHART.plotBottom} L${overviewSignupChartPoints[0].x} ${MINI_CHART.plotBottom} Z`
+      : ''
     const logoGenerationTrendByPeriod = {
       daily: { labels: ['00시', '04시', '08시', '12시', '16시', '20시'], ci: [14, 18, 22, 27, 31, 36], bi: [24, 31, 38, 44, 53, 62] },
       weekly: { labels: ['8/1', '8/2', '8/3', '8/4', '8/5', '8/6', '8/7'], ci: [92, 106, 98, 120, 126, 110, 90], bi: [168, 186, 176, 204, 218, 190, 162] },
@@ -816,7 +909,37 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     const logoGenerationTrend = adminAnalytics
       ? { labels: adminAnalytics.generation.trend.map((point) => point.label), ci: adminAnalytics.generation.trend.map((point) => point.ci), bi: adminAnalytics.generation.trend.map((point) => point.bi) }
       : standalone ? logoGenerationTrendByPeriod[dashboardPeriod] : { labels: [], ci: [], bi: [] }
-    const logoGenerationTrendMax = Math.max(1, ...logoGenerationTrend.ci, ...logoGenerationTrend.bi)
+    const logoGenerationAxis = buildNiceAxis(Math.max(0, ...logoGenerationTrend.ci, ...logoGenerationTrend.bi))
+    // 0건은 색칠된 막대 대신 회색 점선을 바닥에 붙여, "값이 아주 작다"와
+    // "아예 0이다"를 한눈에 구분할 수 있게 한다.
+    const renderDualBarSegment = (kind: 'ci' | 'bi', kindLabel: string, label: string, value: number) => value > 0
+      ? <i key={kind} className={kind} style={{ height: `${Math.max(3, (value / logoGenerationAxis.top) * 100)}%` }} title={`${label} ${kindLabel} ${value.toLocaleString()}건`} aria-label={`${label} ${kindLabel} ${value.toLocaleString()}건`} tabIndex={0} />
+      : <i key={kind} className={`${kind} zero`} title={`${label} ${kindLabel} 0건`} aria-label={`${label} ${kindLabel} 0건`} tabIndex={0} />
+
+    // 온보딩(첫 방문 설문) 1단계 "어디에 사용할 예정인가요?" 응답 분포.
+    // 실데이터는 백엔드가 이미 계산해서 signup.onboardingUsage로 내려준다("생성 계기/용도" 도넛과 같은 값).
+    const onboardingUsagePreviewByPeriod = {
+      daily: [{ label: '온라인 판매', value: 62 }, { label: 'SNS', value: 48 }, { label: '오프라인', value: 21 }],
+      weekly: [{ label: '온라인 판매', value: 214 }, { label: 'SNS', value: 168 }, { label: '오프라인', value: 74 }],
+      monthly: [{ label: '온라인 판매', value: 812 }, { label: 'SNS', value: 640 }, { label: '오프라인', value: 288 }],
+      custom: [{ label: '온라인 판매', value: 96 }, { label: 'SNS', value: 71 }, { label: '오프라인', value: 33 }],
+    } as const
+    const selectedOnboardingUsageStats = adminAnalytics
+      ? adminAnalytics.signup.onboardingUsage.map(({ label, value }) => ({ label, value }))
+      : standalone ? onboardingUsagePreviewByPeriod[dashboardPeriod] : []
+    const onboardingUsageMax = Math.max(1, ...selectedOnboardingUsageStats.map(({ value }) => value))
+
+    // 온보딩 2단계 "어떤 계기로 방문하게 되셨나요?" 응답 분포. 실데이터는 signup.onboardingAudience로 내려온다.
+    const onboardingAudiencePreviewByPeriod = {
+      daily: [{ label: '회사 / 팀', value: 38 }, { label: '자영업', value: 52 }, { label: '취미 / 창작', value: 24 }, { label: '부업 & 투잡', value: 17 }],
+      weekly: [{ label: '회사 / 팀', value: 132 }, { label: '자영업', value: 181 }, { label: '취미 / 창작', value: 86 }, { label: '부업 & 투잡', value: 57 }],
+      monthly: [{ label: '회사 / 팀', value: 504 }, { label: '자영업', value: 688 }, { label: '취미 / 창작', value: 326 }, { label: '부업 & 투잡', value: 222 }],
+      custom: [{ label: '회사 / 팀', value: 59 }, { label: '자영업', value: 81 }, { label: '취미 / 창작', value: 38 }, { label: '부업 & 투잡', value: 26 }],
+    } as const
+    const selectedOnboardingAudienceStats = adminAnalytics
+      ? adminAnalytics.signup.onboardingAudience.map(({ label, value }) => ({ label, value }))
+      : standalone ? onboardingAudiencePreviewByPeriod[dashboardPeriod] : []
+    const onboardingAudienceMax = Math.max(1, ...selectedOnboardingAudienceStats.map(({ value }) => value))
 
     const surveyImprovementCategories = [
       '로고 생성 시간이 오래 걸려서 불편함',
@@ -839,6 +962,11 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     const surveyImprovementTotal = selectedSurveyImprovementStats.reduce((total, { value }) => total + value, 0)
     const allAdminMembers: AdminMemberTableRow[] = standalone ? previewAdminMembers : adminMemberData
     const displayedAdminMembers = allAdminMembers.filter((member) => matchesAdminMemberSearch(memberSearchQuery, member.email))
+    // 온보딩 작성률은 기간과 무관하게 "지금 이 순간" 기준 누적 값이다 — 가입자 수 카드의
+    // 총 회원 수와 같은 성격(추이 그래프만 기간별, 헤더 총량은 전체 누적)이라 맞춰뒀다.
+    const onboardingCompletedCount = allAdminMembers.filter((member) => member.onboardingCompleted).length
+    const onboardingTotalCount = allAdminMembers.length
+    const onboardingCompletionRate = onboardingTotalCount ? Math.round(onboardingCompletedCount / onboardingTotalCount * 100) : 0
     const displayedAdminAccounts = standalone
       ? previewAdminAccounts
       : adminAccounts.map((account) => ({ id: account.loginId, name: account.name, createdAt: account.createdAt, lastAccessAt: account.lastAccessAt ? account.lastAccessAt.replace('T', ' ') : '기록 없음' }))
@@ -856,19 +984,25 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
         </aside>
 
         <section className="admin-dashboard-content">
+          {/* 화면에는 안 보이고 인쇄할 때만 나오는 표지 — 인쇄물의 첫 페이지를
+              통째로 차지하고, 그 다음부터 실제 내용(요약표 등)이 이어진다. */}
+          <div className="admin-print-cover-page">
+            <h1 className="admin-print-cover-title">GenMark AI 보고서</h1>
+            <p className="admin-print-cover-meta">{dashboardSection === 'overview' ? `${periodLabels[dashboardPeriod]} 기준 ` : ''}{new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })} 출력</p>
+          </div>
+
           <header className="admin-dashboard-header">
              <div><p className="admin-eyebrow">ADMIN · ANALYTICS</p><h1>GenMark AI {dashboardSectionLabels[dashboardSection]}</h1>{adminStats && <p className="admin-live-status">실시간 API 연결됨 · 회원 {adminStats.totalMembers}명 · 생성 {adminStats.totalGenerations}건</p>}</div>
             <div className="admin-header-actions" ref={adminAccountMenuRef}>
               <button className="admin-account-trigger" type="button" aria-label="관리자 계정 메뉴" aria-expanded={isAdminMenuOpen} onClick={() => setIsAdminMenuOpen((open) => !open)}>
                 <span className="admin-avatar">{adminInitial}</span>
+                <span className="admin-account-id">{adminId}</span>
                 <ChevronDown className={isAdminMenuOpen ? 'menu-chevron-open' : ''} size={17} />
               </button>
-              {isAdminMenuOpen && <div className="admin-account-menu" role="dialog" aria-label="관리자 아이디 수정">
+              {isAdminMenuOpen && <div className="admin-account-menu" role="dialog" aria-label="관리자 메뉴">
                 <p>관리자 아이디</p>
                 <strong>{adminId}</strong>
-                <label htmlFor="admin-id-input">아이디 수정</label>
-                <input id="admin-id-input" type="text" value={adminIdDraft} onChange={(event) => setAdminIdDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveAdminId() }} />
-                <button type="button" onClick={saveAdminId}>저장</button>
+                <button type="button" className="admin-logout-button" onClick={logoutAdmin}>로그아웃</button>
               </div>}
             </div>
           </header>
@@ -896,39 +1030,68 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
                 </div>
               )}
             </div>
+            <button className="admin-report-print-button" type="button" onClick={() => window.print()}>
+              <FileText size={15} aria-hidden="true" /><span>보고서 PDF로 저장</span>
+            </button>
           </section>}
+
+          {/* 화면에는 안 보이고 인쇄할 때만 나오는 핵심 지표 요약표 — 카드
+              5개를 대시보드 위젯 그대로 찍는 대신, 항목마다 한 행씩
+              깔끔한 표로 정리해 실무 보고서처럼 보이게 한다. */}
+          {dashboardSection === 'overview' && <table className="admin-print-summary-table">
+            <caption>핵심 지표 요약</caption>
+            <thead><tr><th scope="col">지표</th><th scope="col">값</th><th scope="col">비고</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">가입자 수</th><td>{selectedSignupData.total}명</td><td>{selectedSignupData.totalDelta}</td></tr>
+              <tr><th scope="row">로고 생성 건수</th><td>{selectedPeriodData.total}건</td><td>CI {selectedPeriodData.ci}건 · BI {selectedPeriodData.bi}건</td></tr>
+              <tr><th scope="row">전체 다운로드 건수</th><td>{selectedDownloadData.total}건</td><td>CI {selectedDownloadData.ciShare}% · BI {selectedDownloadData.biShare}%</td></tr>
+              <tr><th scope="row">온보딩 작성 현황</th><td>{onboardingCompletedCount}명 (작성률 {onboardingCompletionRate}%)</td><td>전체 회원 {onboardingTotalCount}명 중 작성</td></tr>
+              <tr><th scope="row">설문 개선 항목</th><td>{surveyImprovementTotal.toLocaleString()}건</td><td>{periodLabels[dashboardPeriod]} 응답 기준</td></tr>
+            </tbody>
+          </table>}
 
           {dashboardSection === 'overview' ? <>
             <section className="admin-overview-chart-grid" aria-label="대시보드 핵심 지표">
               <article className="admin-card admin-overview-chart-card">
                 <div className="admin-overview-chart-heading">
                   <div><p>가입자 수</p><strong>{selectedSignupData.total}<small>명</small></strong><span className="admin-positive">{selectedSignupData.totalDelta} <ArrowUpRight size={14} /></span></div>
-                  <span className="admin-kpi-icon purple"><UsersRound size={19} /></span>
                 </div>
-                <div className="admin-mini-line-chart">
-                  <svg viewBox="0 0 600 190" role="img" aria-label={periodLabels[dashboardPeriod] + ' 가입자 수 추이'}>
+                <div className="admin-mini-line-chart" ref={overviewChartRef}>
+                  <svg width="100%" height={MINI_CHART.height} viewBox={`0 0 ${overviewChartWidth} ${MINI_CHART.height}`} role="img" aria-label={periodLabels[dashboardPeriod] + ' 가입자 수 추이'}>
                     <defs><linearGradient id="overviewLineFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#8d70ed" stopOpacity=".24" /><stop offset="1" stopColor="#8d70ed" stopOpacity=".02" /></linearGradient></defs>
+                    {overviewSignupAxis.ticks.map((tick) => {
+                      const y = MINI_CHART.plotBottom - (tick / overviewSignupAxis.top) * (MINI_CHART.plotBottom - MINI_CHART.plotTop)
+                      return <g key={tick}>
+                        <line x1={MINI_CHART.gutter} y1={y} x2={overviewChartWidth - MINI_CHART.padRight} y2={y} stroke="#eef0f5" strokeWidth="1" />
+                        <text x={MINI_CHART.gutter - 8} y={y + 3} textAnchor="end" fill="#8b93a5" fontSize="9">{tick.toLocaleString()}</text>
+                      </g>
+                    })}
                     <path d={overviewSignupAreaPath} fill="url(#overviewLineFill)" />
                     <path d={overviewSignupChartPath} fill="none" stroke="#8d70ed" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                    {overviewSignupChartPoints.map((point, index) => <g key={point.label + point.value} role="button" tabIndex={0} aria-label={point.label + ' 가입자 ' + point.value.toLocaleString() + '명'} onMouseEnter={() => setHoveredOverviewSignupPoint(index)} onMouseLeave={() => setHoveredOverviewSignupPoint(null)} onFocus={() => setHoveredOverviewSignupPoint(index)} onBlur={() => setHoveredOverviewSignupPoint(null)}><circle cx={point.x} cy={point.y} r={hoveredOverviewSignupPoint === index ? 8 : 4.5} fill="#fff" stroke="#8d70ed" strokeWidth={hoveredOverviewSignupPoint === index ? 4 : 3} />{hoveredOverviewSignupPoint === index && <g className="admin-chart-tooltip" pointerEvents="none"><rect x={Math.min(Math.max(point.x - 48, 0), 504)} y={Math.max(point.y - 52, 4)} width="96" height="39" rx="9" fill="#202945" /><text x={Math.min(Math.max(point.x, 48), 552)} y={Math.max(point.y - 34, 22)} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="700">{point.label}</text><text x={Math.min(Math.max(point.x, 48), 552)} y={Math.max(point.y - 18, 38)} textAnchor="middle" fill="#dcd5ff" fontSize="10">{point.value.toLocaleString()}명 가입</text></g>}</g>)}
+                    {overviewSignupChartPoints.map((point) => <text key={'label-' + point.label} x={point.x} y={MINI_CHART.labelY} textAnchor="middle" fill="#8b93a5" fontSize="9">{point.label}</text>)}
+                    {overviewSignupChartPoints.map((point, index) => <g key={point.label + point.value} role="button" tabIndex={0} aria-label={point.label + ' 가입자 ' + point.value.toLocaleString() + '명'} onMouseEnter={() => setHoveredOverviewSignupPoint(index)} onMouseLeave={() => setHoveredOverviewSignupPoint(null)} onFocus={() => setHoveredOverviewSignupPoint(index)} onBlur={() => setHoveredOverviewSignupPoint(null)}><circle cx={point.x} cy={point.y} r={hoveredOverviewSignupPoint === index ? 8 : 4.5} fill="#fff" stroke="#8d70ed" strokeWidth={hoveredOverviewSignupPoint === index ? 4 : 3} />{hoveredOverviewSignupPoint === index && <g className="admin-chart-tooltip" pointerEvents="none"><rect x={Math.min(Math.max(point.x - 48, 0), Math.max(overviewChartWidth - 96, 0))} y={Math.max(point.y - 52, 4)} width="96" height="39" rx="9" fill="#202945" /><text x={Math.min(Math.max(point.x, 48), Math.max(overviewChartWidth - 48, 48))} y={Math.max(point.y - 34, 22)} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="700">{point.label}</text><text x={Math.min(Math.max(point.x, 48), Math.max(overviewChartWidth - 48, 48))} y={Math.max(point.y - 18, 38)} textAnchor="middle" fill="#dcd5ff" fontSize="10">{point.value.toLocaleString()}명 가입</text></g>}</g>)}
                   </svg>
-                  <div className="admin-mini-line-axis" style={{ gridTemplateColumns: 'repeat(' + overviewSignupTrend.labels.length + ', minmax(0, 1fr))' }}>{overviewSignupTrend.labels.map((label) => <span key={label}>{label}</span>)}</div>
                 </div>
               </article>
 
               <article className="admin-card admin-overview-chart-card">
                 <div className="admin-overview-chart-heading">
                   <div><p>로고 생성 건수</p><strong>{selectedPeriodData.total}<small>건</small></strong><span className="admin-positive">{selectedPeriodData.totalDelta} <ArrowUpRight size={14} /></span></div>
-                  <span className="admin-kpi-icon pink"><Sparkles size={19} /></span>
                 </div>
-                <div className="admin-mini-dual-bars" aria-label={periodLabels[dashboardPeriod] + ' CI BI 로고 생성량'}>{logoGenerationTrend.labels.map((label, index) => <div className="admin-mini-dual-group" key={label}><div><i className="ci" style={{ height: Math.max(12, logoGenerationTrend.ci[index] / logoGenerationTrendMax * 100) + '%' }} title={`${label} CI ${logoGenerationTrend.ci[index]}건`} aria-label={`${label} CI ${logoGenerationTrend.ci[index]}건`} tabIndex={0} /><i className="bi" style={{ height: Math.max(12, logoGenerationTrend.bi[index] / logoGenerationTrendMax * 100) + '%' }} title={`${label} BI ${logoGenerationTrend.bi[index]}건`} aria-label={`${label} BI ${logoGenerationTrend.bi[index]}건`} tabIndex={0} /></div><span>{label}</span></div>)}</div>
+                <div className="admin-mini-dual-plot">
+                  {logoGenerationAxis.ticks.map((tick) => (
+                    <div key={tick} className="admin-mini-dual-gridline" style={{ bottom: `${DUAL_BAR_LABEL_HEIGHT + (tick / logoGenerationAxis.top) * DUAL_BAR_PLOT_HEIGHT}px` }}>
+                      <span>{tick.toLocaleString()}</span>
+                    </div>
+                  ))}
+                  <div className="admin-mini-dual-bars" aria-label={periodLabels[dashboardPeriod] + ' CI BI 로고 생성량'}>{logoGenerationTrend.labels.map((label, index) => <div className="admin-mini-dual-group" key={label}><div>{renderDualBarSegment('ci', 'CI', label, logoGenerationTrend.ci[index])}{renderDualBarSegment('bi', 'BI', label, logoGenerationTrend.bi[index])}</div><span>{label}</span></div>)}</div>
+                </div>
                 <div className="admin-mini-dual-legend"><span><i className="ci" />CI</span><span><i className="bi" />BI</span></div>
               </article>
 
               <article className="admin-card admin-overview-chart-card">
                 <div className="admin-overview-chart-heading">
                   <div><p>전체 다운로드 건수</p><strong>{selectedDownloadData.total}<small>건</small></strong><span className="admin-positive">{selectedDownloadData.conversion === '실데이터' ? 'CI·BI 실데이터' : `${selectedDownloadData.conversion}% 전환`} <ArrowUpRight size={14} /></span></div>
-                  <span className="admin-kpi-icon orange"><Download size={19} /></span>
                 </div>
                 <div className="admin-download-overview-graph"><div className="admin-overview-donut"><span>{selectedDownloadData.total}<small>전체</small></span></div><div className="admin-overview-legend"><span><i className="ci" />CI <strong>{selectedDownloadData.ciShare}%</strong></span><span><i className="bi" />BI <strong>{selectedDownloadData.biShare}%</strong></span></div></div>
               </article>
@@ -936,10 +1099,25 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
               <article className="admin-card admin-overview-chart-card admin-survey-overview-card" aria-labelledby="admin-survey-overview-title">
                 <div className="admin-overview-chart-heading">
                   <div><p id="admin-survey-overview-title">설문 개선 항목</p><strong>{surveyImprovementTotal.toLocaleString()}<small>건</small></strong><span className="admin-positive">{periodLabels[dashboardPeriod]} 응답</span></div>
-                  <span className="admin-kpi-icon blue"><ClipboardCheck size={19} /></span>
                 </div>
                 <div className="admin-survey-improvement-bars" role="list" aria-label="설문 개선 항목별 응답 통계">
                   {selectedSurveyImprovementStats.map(({ label, value }) => <div className="admin-survey-improvement-row" key={label} role="listitem" aria-label={label + ' ' + value.toLocaleString() + '건'}><div><span>{label}</span><strong>{value.toLocaleString()}건</strong></div><i aria-hidden="true"><b style={{ width: `${surveyImprovementMax ? value / surveyImprovementMax * 100 : 0}%` }} /></i></div>)}
+                </div>
+              </article>
+
+              <article className="admin-card admin-overview-chart-card" aria-labelledby="admin-onboarding-overview-title">
+                <div className="admin-overview-chart-heading">
+                  <div><p id="admin-onboarding-overview-title">온보딩 작성 현황</p><strong>{onboardingCompletedCount.toLocaleString()}<small>명</small></strong></div>
+                </div>
+                <div className="admin-onboarding-overview-body">
+                  <p className="admin-onboarding-overview-subheading">어디에 사용할 예정인가요?</p>
+                  <div className="admin-survey-improvement-bars" role="list" aria-label="온보딩 사용처별 응답 통계">
+                    {selectedOnboardingUsageStats.map(({ label, value }) => <div className="admin-survey-improvement-row" key={label} role="listitem" aria-label={label + ' ' + value.toLocaleString() + '건'}><div><span>{label}</span><strong>{value.toLocaleString()}건</strong></div><i aria-hidden="true"><b style={{ width: `${onboardingUsageMax ? value / onboardingUsageMax * 100 : 0}%` }} /></i></div>)}
+                  </div>
+                  <p className="admin-onboarding-overview-subheading">어떤 계기로 방문하게 되셨나요?</p>
+                  <div className="admin-survey-improvement-bars" role="list" aria-label="온보딩 방문 계기별 응답 통계">
+                    {selectedOnboardingAudienceStats.map(({ label, value }) => <div className="admin-survey-improvement-row" key={label} role="listitem" aria-label={label + ' ' + value.toLocaleString() + '건'}><div><span>{label}</span><strong>{value.toLocaleString()}건</strong></div><i aria-hidden="true"><b style={{ width: `${onboardingAudienceMax ? value / onboardingAudienceMax * 100 : 0}%` }} /></i></div>)}
+                  </div>
                 </div>
               </article>
             </section>
@@ -949,16 +1127,33 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
               <div className="admin-member-table-wrap" role="region" tabIndex={0} aria-label="회원 목록 표, 좌우로 스크롤할 수 있습니다">
                 <table className="admin-member-table admin-member-usage-table">
                   <caption className="admin-sr-only">회원별 가입 경로, 로고 생성, 다운로드 및 잔여 크레딧 목록</caption>
-                  <thead><tr><th scope="col">No.</th><th scope="col">아이디(이메일)</th><th scope="col">가입 경로</th><th scope="col">이름</th><th scope="col">가입일자</th><th scope="col">CI 생성 건수</th><th scope="col">BI 생성 건수</th><th scope="col">CI 다운로드 건수</th><th scope="col">BI 다운로드 건수</th><th scope="col">잔여 크레딧</th></tr></thead>
-                  <tbody>{displayedAdminMembers.length === 0 ? <tr><td colSpan={10} className="admin-empty-table-state">입력한 회원 아이디와 일치하는 회원이 없습니다.</td></tr> : displayedAdminMembers.map((member, index) => {
+                  <thead><tr><th scope="col">No.</th><th scope="col">아이디(이메일)</th><th scope="col">가입 경로</th><th scope="col">이름</th><th scope="col">온보딩</th><th scope="col">가입일자</th><th scope="col">CI 생성 건수</th><th scope="col">BI 생성 건수</th><th scope="col">CI 다운로드 건수</th><th scope="col">BI 다운로드 건수</th><th scope="col">잔여 크레딧</th></tr></thead>
+                  <tbody>{displayedAdminMembers.length === 0 ? <tr><td colSpan={11} className="admin-empty-table-state">입력한 회원 아이디와 일치하는 회원이 없습니다.</td></tr> : displayedAdminMembers.map((member, index) => {
                     const downloadCounts = adminMemberDownloadCounts[member.id]
                     const ciDownloads = downloadCounts?.ci ?? member.ciDownloads
                     const biDownloads = downloadCounts?.bi ?? member.biDownloads
-                    return <tr key={member.id}>
+                    const isOnboardingOpen = openOnboardingMemberId === member.id
+                    const onboardingPanelId = `admin-onboarding-${member.id}`
+                    return <Fragment key={member.id}>
+                    <tr className={isOnboardingOpen ? 'admin-logo-member-row is-open' : 'admin-logo-member-row'}>
                        <td data-label="No." className="admin-index-cell">{index + 1}</td>
                        <td data-label="아이디(이메일)" className="admin-member-email"><strong title={member.email}>{member.email}</strong></td>
                        <td data-label="가입 경로">{member.provider?.toLowerCase() === 'kakao' ? '카카오' : member.provider?.toLowerCase() === 'google' ? 'Google' : member.provider || '기타'}</td>
                        <td data-label="이름"><div className="admin-member-identity"><span className="admin-member-avatar"><UserRound size={17} /></span><strong>{member.name || '이름 미등록'}</strong></div></td>
+                       <td data-label="온보딩">
+                         <button
+                           className="admin-logo-record-button admin-onboarding-toggle"
+                           type="button"
+                           disabled={!member.onboardingCompleted}
+                           aria-expanded={isOnboardingOpen}
+                           aria-controls={onboardingPanelId}
+                           onClick={() => setOpenOnboardingMemberId(isOnboardingOpen ? null : member.id)}
+                         >
+                           {member.onboardingCompleted ? <ClipboardCheck size={15} aria-hidden="true" /> : <X size={15} aria-hidden="true" />}
+                           <span>{member.onboardingCompleted ? '작성완료' : '미작성'}</span>
+                           {member.onboardingCompleted && <ChevronDown size={15} aria-hidden="true" />}
+                         </button>
+                       </td>
                       <td data-label="가입일자">{formatAdminDate(member.createdAt)}</td>
                       <td data-label="CI 생성 건수" className="admin-count-cell"><strong>{member.ciGenerations.toLocaleString()}</strong><small>건</small></td>
                       <td data-label="BI 생성 건수" className="admin-count-cell"><strong>{member.biGenerations.toLocaleString()}</strong><small>건</small></td>
@@ -966,6 +1161,37 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
                       <td data-label="BI 다운로드 건수" className="admin-count-cell"><strong>{biDownloads === undefined ? '—' : biDownloads.toLocaleString()}</strong>{biDownloads !== undefined && <small>건</small>}</td>
                       <td data-label="잔여 크레딧" className="admin-credit-cell"><strong>{member.creditBalance.toLocaleString()}</strong><small>개</small></td>
                     </tr>
+                    <tr className={isOnboardingOpen ? 'admin-logo-accordion-row is-open' : 'admin-logo-accordion-row'} aria-hidden={!isOnboardingOpen}>
+                      <td colSpan={11}>
+                        <div id={onboardingPanelId} className={isOnboardingOpen ? 'admin-logo-accordion is-open' : 'admin-logo-accordion'}>
+                          <div className="admin-logo-accordion-inner" role="region" aria-label={`${member.name || '회원'} 온보딩 응답`}>
+                            <div className="admin-logo-accordion-heading">
+                              <strong>온보딩 응답</strong>
+                              <span>{member.onboardingCompletedAt ? `${formatAdminDate(member.onboardingCompletedAt)} 작성` : ''}</span>
+                            </div>
+                            <div className="admin-onboarding-answer-group">
+                              <p className="admin-onboarding-answer-label">로고를 어디에 사용할 예정인가요? (복수 선택)</p>
+                              <ul className="admin-onboarding-answer-list">
+                                {Object.entries(ONBOARDING_USAGE_LABELS).map(([key, label]) => {
+                                  const checked = member.onboardingUsage.includes(key)
+                                  return <li key={key} className={checked ? 'checked' : ''}>{checked ? <ClipboardCheck size={14} aria-hidden="true" /> : <span className="admin-onboarding-answer-dot" aria-hidden="true" />}{label}</li>
+                                })}
+                              </ul>
+                            </div>
+                            <div className="admin-onboarding-answer-group">
+                              <p className="admin-onboarding-answer-label">어떤 계기로 방문하게 되셨나요?</p>
+                              <ul className="admin-onboarding-answer-list">
+                                {Object.entries(ONBOARDING_AUDIENCE_LABELS).map(([key, label]) => {
+                                  const checked = member.onboardingAudience === key
+                                  return <li key={key} className={checked ? 'checked' : ''}>{checked ? <ClipboardCheck size={14} aria-hidden="true" /> : <span className="admin-onboarding-answer-dot" aria-hidden="true" />}{label}</li>
+                                })}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                    </Fragment>
                   })}</tbody>
                 </table>
               </div>
@@ -1001,7 +1227,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
           </section>
 
           <section className="admin-chart-grid lower">
-             <article className="admin-card admin-trend-card"><div className="admin-card-heading"><div><h2>이용자 수</h2><p>{periodLabels[dashboardPeriod]} 기준 이용자 추이</p></div><span className="admin-chart-key"><i /> 이용자 수</span></div><div className="admin-line-chart"><div className="admin-y-axis"><span>1,500</span><span>1,200</span><span>900</span><span>600</span><span>300</span><span>0</span></div><svg viewBox="0 0 600 230" role="img" aria-label={`${periodLabels[dashboardPeriod]} 이용자 수 추이`}><defs><linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#9473f1" stopOpacity=".24" /><stop offset="1" stopColor="#9473f1" stopOpacity=".02" /></linearGradient></defs><path d={chartAreaPath} fill="url(#trendFill)" /><path d={chartPath} fill="none" stroke="#8b69ed" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />{chartPoints.map((point, index) => <g key={`${point.x}-${point.y}`} role="button" tabIndex={0} aria-label={point.label + ' 이용자 ' + point.value.toLocaleString() + '명'} onMouseEnter={() => setHoveredGenerationUserPoint(index)} onMouseLeave={() => setHoveredGenerationUserPoint(null)} onFocus={() => setHoveredGenerationUserPoint(index)} onBlur={() => setHoveredGenerationUserPoint(null)}><circle cx={point.x} cy={point.y} r={hoveredGenerationUserPoint === index ? 8 : 4.5} fill="#fff" stroke="#8b69ed" strokeWidth={hoveredGenerationUserPoint === index ? 4 : 3} />{hoveredGenerationUserPoint === index && <g className="admin-chart-tooltip" pointerEvents="none"><rect x={Math.min(Math.max(point.x - 48, 0), 504)} y={Math.max(point.y - 52, 4)} width="96" height="39" rx="9" fill="#202945" /><text x={Math.min(Math.max(point.x, 48), 552)} y={Math.max(point.y - 34, 22)} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="700">{point.label}</text><text x={Math.min(Math.max(point.x, 48), 552)} y={Math.max(point.y - 18, 38)} textAnchor="middle" fill="#dcd5ff" fontSize="10">{point.value.toLocaleString()}명</text></g>}</g>)}</svg><div className="admin-x-axis" style={{ gridTemplateColumns: 'repeat(' + generationXAxisLabels.length + ', minmax(0, 1fr))' }}>{generationXAxisLabels.map((label) => <span key={label}>{label}</span>)}</div></div></article>
+             <article className="admin-card admin-trend-card"><div className="admin-card-heading"><div><h2>이용자 수</h2><p>{periodLabels[dashboardPeriod]} 기준 이용자 추이</p></div><span className="admin-chart-key"><i /> 이용자 수</span></div><div className="admin-line-chart" ref={generationChartRef}><svg width="100%" height={LINE_CHART.height} viewBox={`0 0 ${generationChartWidth} ${LINE_CHART.height}`} role="img" aria-label={`${periodLabels[dashboardPeriod]} 이용자 수 추이`}><defs><linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#9473f1" stopOpacity=".24" /><stop offset="1" stopColor="#9473f1" stopOpacity=".02" /></linearGradient></defs>{generationUserAxis.ticks.map((tick) => { const y = LINE_CHART.plotBottom - (tick / generationUserAxis.top) * (LINE_CHART.plotBottom - LINE_CHART.plotTop); return <g key={tick}><line x1={LINE_CHART.gutter} y1={y} x2={generationChartWidth - LINE_CHART.padRight} y2={y} stroke="#e9eaf1" strokeWidth="1" /><text x={LINE_CHART.gutter - 9} y={y + 3} textAnchor="end" fill="#7e879b" fontSize="10">{tick.toLocaleString()}</text></g> })}<path d={chartAreaPath} fill="url(#trendFill)" /><path d={chartPath} fill="none" stroke="#8b69ed" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />{chartPoints.map((point) => <text key={`label-${point.label}`} x={point.x} y={LINE_CHART.labelY} textAnchor="middle" fill="#7e879b" fontSize="10">{point.label}</text>)}{chartPoints.map((point, index) => <g key={`${point.x}-${point.y}`} role="button" tabIndex={0} aria-label={point.label + ' 이용자 ' + point.value.toLocaleString() + '명'} onMouseEnter={() => setHoveredGenerationUserPoint(index)} onMouseLeave={() => setHoveredGenerationUserPoint(null)} onFocus={() => setHoveredGenerationUserPoint(index)} onBlur={() => setHoveredGenerationUserPoint(null)}><circle cx={point.x} cy={point.y} r={hoveredGenerationUserPoint === index ? 8 : 4.5} fill="#fff" stroke="#8b69ed" strokeWidth={hoveredGenerationUserPoint === index ? 4 : 3} />{hoveredGenerationUserPoint === index && <g className="admin-chart-tooltip" pointerEvents="none"><rect x={Math.min(Math.max(point.x - 48, 0), Math.max(generationChartWidth - 96, 0))} y={Math.max(point.y - 52, 4)} width="96" height="39" rx="9" fill="#202945" /><text x={Math.min(Math.max(point.x, 48), Math.max(generationChartWidth - 48, 48))} y={Math.max(point.y - 34, 22)} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="700">{point.label}</text><text x={Math.min(Math.max(point.x, 48), Math.max(generationChartWidth - 48, 48))} y={Math.max(point.y - 18, 38)} textAnchor="middle" fill="#dcd5ff" fontSize="10">{point.value.toLocaleString()}명</text></g>}</g>)}</svg></div></article>
             <article className="admin-card admin-ci-bi-card"><div className="admin-card-heading"><div><h2>CI / BI 생성현황</h2><p>로고 형태별 생성 비중</p></div><CircleHelp size={18} /></div><div className="admin-column-chart"><div className="admin-column-grid"><span>7,000</span><span>5,000</span><span>3,000</span><span>1,000</span><span>0</span></div><div className="admin-columns"><div><strong>{selectedPeriodData.ci}건</strong><i className="ci" style={{ height: `${Math.min(88, (Number(selectedPeriodData.ci.replace(',', '')) / 7000) * 100)}%` }} /><span>CI</span></div><div><strong>{selectedPeriodData.bi}건</strong><i className="bi" style={{ height: `${Math.min(88, (Number(selectedPeriodData.bi.replace(',', '')) / 7000) * 100)}%` }} /><span>BI</span></div></div></div></article>
           </section>
 

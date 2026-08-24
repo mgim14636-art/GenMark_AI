@@ -3,8 +3,10 @@ package com.genmark.ai.service;
 import com.genmark.ai.entity.LogoDownload;
 import com.genmark.ai.entity.LogoGeneration;
 import com.genmark.ai.entity.Member;
+import com.genmark.ai.entity.MemberOnboarding;
 import com.genmark.ai.repository.LogoDownloadRepository;
 import com.genmark.ai.repository.LogoGenerationRepository;
+import com.genmark.ai.repository.MemberOnboardingRepository;
 import com.genmark.ai.repository.MemberRepository;
 import com.genmark.ai.web.dto.admin.AdminDashboardResponse;
 import com.genmark.ai.web.dto.admin.AdminDownloadRow;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -36,6 +39,7 @@ public class AdminStatsService {
     private final MemberRepository memberRepository;
     private final LogoGenerationRepository generationRepository;
     private final LogoDownloadRepository downloadRepository;
+    private final MemberOnboardingRepository onboardingRepository;
 
     public AdminDashboardResponse dashboard() {
         LocalDateTime weekAgo = LocalDateTime.now().minusDays(7);
@@ -73,6 +77,14 @@ public class AdminStatsService {
     }
 
     private AdminMemberRow toRow(Member member) {
+        // member_onboardings의 PK가 member_id라 회원당 최대 한 행만 있다 — 그 행이 있으면 작성 완료.
+        MemberOnboarding onboarding = onboardingRepository.findById(member.getId()).orElse(null);
+        List<String> onboardingUsage = new ArrayList<>();
+        if (onboarding != null) {
+            if (onboarding.getUsage1() != null) onboardingUsage.add(onboarding.getUsage1());
+            if (onboarding.getUsage2() != null) onboardingUsage.add(onboarding.getUsage2());
+            if (onboarding.getUsage3() != null) onboardingUsage.add(onboarding.getUsage3());
+        }
         return new AdminMemberRow(
                 member.getId(),
                 member.getEmail(),
@@ -84,6 +96,10 @@ public class AdminStatsService {
                 member.getCreditBalance(),
                 // 유료 사용자 판단 기준이 아직 정해지지 않았다. 결제 기능이 생기면 그때 실제 값을 넣는다.
                 false,
-                member.getCreatedAt());
+                member.getCreatedAt(),
+                onboarding != null,
+                onboardingUsage,
+                onboarding == null ? null : onboarding.getAudience(),
+                onboarding == null ? null : onboarding.getCompletedAt());
     }
 }

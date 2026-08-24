@@ -167,6 +167,10 @@ export type AdminMember = {
   creditBalance: number
   paidUser: boolean
   createdAt: string
+  onboardingCompleted: boolean
+  onboardingUsage: string[]
+  onboardingAudience: string | null
+  onboardingCompletedAt: string | null
 }
 
 export type AdminMetricPoint = {
@@ -199,6 +203,7 @@ export type AdminAnalyticsResponse = {
     startedGenerationMembers: number
     providerCounts: AdminMetricPoint[]
     onboardingUsage: AdminMetricPoint[]
+    onboardingAudience: AdminMetricPoint[]
     trend: AdminTrendPoint[]
     funnel: AdminMetricPoint[]
   }
