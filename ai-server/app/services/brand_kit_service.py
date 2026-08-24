@@ -340,7 +340,62 @@ def _compose_business_card(logo: Image.Image, info: Optional[CardInfo], survey: 
 # cosmetic_mockup_templates.py(PIL 원근 합성, product_mockup.py/brand_kit.py 재사용)로
 # 바꿔 AI 호출 없이 로고 이미지를 있는 그대로(글자 포함) 라벨 영역에 끼워 넣는다 —
 # 로고가 들어간 영역 외에는 원본 사진과 픽셀 단위로 동일하다.
-_PRODUCT_MOCKUP_TEMPLATE = "top_left"
+# [2026-08-24] top_left 목업은 703x384라 1000x1000 규격에 맞추며 2.6배 확대해야 했고
+# 그게 로고까지 뭉개져 보이던 원인이었다(실측 확인). 4672x7000 고해상도 목업
+# (skincare_set)으로 기본값을 바꿔 확대가 사실상 없어지게 한다.
+_PRODUCT_MOCKUP_TEMPLATE = "skincare_set"
+
+# [2026-08-24] "용기 하단에 로션·스킨처럼 제품유형이랑 용량 정도는 레터링으로
+# 고정해둬" — 요청·설문 값이 아니라 용기별로 항상 같은 문구를 작게 박아 넣는다.
+# 자(jar)는 통이 작아 로고만 크게 넣기로 이미 정했으므로(cosmetic_mockup_templates.py
+# 주석 참고) 캡션 대상에서 뺐다.
+# [2026-08-24 2차] "top_left 템플릿처럼 영문으로" — top_left 목업의 병들에 이미
+# 인쇄돼 있는 작은 영문 카피(예: "Advancing & Refreshing / MADE IN KOREA") 스타일에
+# 맞춰 한글 대신 영문으로 바꿨다.
+# [2026-08-24 3차] 제품유형·용량 사이에 작은 회색 태그라인을 한 줄 추가해달라는
+# 요청 — "제품유형(굵게) / 태그라인(작은 회색) / 용량(작은 회색)" 3줄 구조.
+# [2026-08-24 4차] 태그라인이 한 줄로는 병 폭에 너무 빡빡해서, 자연스러운 위치에서
+# 줄바꿈해 두 줄로 나눴다(중간 항목은 전부 태그라인 취급하므로 리스트에 그냥
+# 항목을 하나 더 추가하면 된다 — _draw_fixed_captions 수정 불필요).
+_SKINCARE_SET_CAPTIONS = {
+    "toner_bottle": ["TONER", "Eye Treatment", "Formulated", "150mL"],
+    "white_bottle": ["LOTION", "Refreshing & Hydrating", "All Skin Types", "150mL"],
+}
+
+# (폰트 크기, 굵기, 색상) — 원본 4672x7000 해상도 기준. 첫 줄은 제품유형(굵게, 진한
+# 색), 마지막 줄은 용량(작게, 옅은 회색), 그 사이는 전부 태그라인(더 작게, 회색)
+# 취급한다.
+_CAPTION_HEADER_STYLE = (80, "bold", (70, 66, 60))
+_CAPTION_TAGLINE_STYLE = (46, "regular", (135, 130, 122))
+_CAPTION_VOLUME_STYLE = (60, "regular", (120, 115, 108))
+
+
+def _draw_fixed_captions(image: Image.Image, template) -> Image.Image:
+    """라벨 영역 바로 아래에 고정된 제품유형·태그라인·용량 캡션을 작게 그려 넣는다.
+
+    위치는 그 용기의 라벨 영역 bbox 가로 중앙·아래쪽 끝에서 살짝 띄운 지점이다.
+    원본이 4672x7000 고해상도라 최종 1000x1000으로 축소(약 0.214배)되는 걸 감안해,
+    축소 후에도 작은 캡션처럼 보이도록 폰트 크기를 원본 해상도 기준으로 크게 잡았다.
+    """
+    d = ImageDraw.Draw(image)
+    for name, region in template.regions:
+        lines = _SKINCARE_SET_CAPTIONS.get(name)
+        if not lines:
+            continue
+        left, top, right, bottom = region.bbox()
+        cx = (left + right) / 2
+        y = bottom + round((bottom - top) * 0.18)
+        for i, line in enumerate(lines):
+            if i == 0:
+                size, weight, fill = _CAPTION_HEADER_STYLE
+            elif i == len(lines) - 1:
+                size, weight, fill = _CAPTION_VOLUME_STYLE
+            else:
+                size, weight, fill = _CAPTION_TAGLINE_STYLE
+            d.text((cx, y), line, font=_resolve_font(size, weight=weight),
+                   fill=fill, anchor="ma")
+            y += round(size * 1.6)
+    return image
 
 
 def _generate_ai_product_mockup(
@@ -351,21 +406,28 @@ def _generate_ai_product_mockup(
 
     template = COSMETIC_MOCKUP_TEMPLATES[_PRODUCT_MOCKUP_TEMPLATE]
     image = compose_brand_kit(logo, template)
+    image = _draw_fixed_captions(image, template)
     return _fit_cover(image.convert("RGB"), size)
 
 
 def _fit_cover(img: Image.Image, size: Tuple[int, int]) -> Image.Image:
-    """잘라내는 대신 빈틈없이 채우도록 리사이즈한다(가운데 크롭).
+    """잘라내는 대신 빈틈없이 채우도록 리사이즈한다(가로는 중앙, 세로는 하단 기준 크롭).
 
     AI가 돌려주는 이미지는 요청한 1:1 비율과 정확히 같은 픽셀 수가 아닐 수 있어,
     캔버스 규격(1000x1000)에 맞춰 여백 없이 덮는다.
+
+    세로 크롭을 가운데가 아니라 "아래쪽 기준"(위쪽만 잘라냄)으로 바꿨다 —
+    skincare_set처럼 세로로 긴 목업은 제품이 사진 아래쪽에 놓여 있고 위쪽은 대부분
+    빈 배경이라, 가운데 크롭이면 제품 하단(자 라벨 등)이 그대로 잘려나간다(실측
+    확인됨 — 자 라벨 여백이 하나도 안 남음). top_left처럼 가로로 긴 목업은 이
+    함수에서 가로 크롭만 발생하므로(세로가 이미 꽉 참) 이 변경의 영향을 받지 않는다.
     """
     W, H = size
     ratio = max(W / img.width, H / img.height)
     new_size = (max(1, round(img.width * ratio)), max(1, round(img.height * ratio)))
     resized = img.resize(new_size, Image.LANCZOS)
     left = (resized.width - W) // 2
-    top = (resized.height - H) // 2
+    top = resized.height - H
     return resized.crop((left, top, left + W, top + H))
 
 
@@ -487,13 +549,6 @@ def _compose_product_thumbnail(
                 (W // 2, int(H * 0.06)), label,
                 font=_resolve_font(30, weight="regular"), fill=accent, anchor="ma",
             )
-
-    name = (product_name or _brand_name(survey) or "").strip()
-    if name:
-        d.text(
-            (W // 2, int(H * 0.66)), name[:28],
-            font=_resolve_font(46, weight="bold"), fill=text_color, anchor="ma",
-        )
 
     if headline:
         d.text(
