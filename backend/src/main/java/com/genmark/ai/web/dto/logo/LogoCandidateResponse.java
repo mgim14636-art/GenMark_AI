@@ -17,8 +17,6 @@ public record LogoCandidateResponse(
         String storageKey,
         String svgUrl,
         boolean svgEdited,
-        /** 지금 이 후보가 가리키는 버전. 수정 이력이 없으면 "original". 다운로드 기록의 assetRevision과 같은 체계다. */
-        String svgRevision,
         String mimeType,
         Integer width,
         Integer height,

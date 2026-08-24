@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.genmark.ai.entity.BiProject;
 import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.LogoCandidate;
-import com.genmark.ai.entity.LogoDownload;
 import com.genmark.ai.entity.LogoGeneration;
 import com.genmark.ai.entity.ProjectLike;
 import com.genmark.ai.entity.ProjectStatus;
@@ -243,7 +242,7 @@ public class LogoGenerationService {
         LogoGeneration generation = c.getGeneration();
         String projectType = generation.getCiProject() != null ? "CI" : "BI";
         return new LogoCandidateResponse(c.getPublicId(), generation.getProject().getPublicId(), projectType,
-                c.getCandidateOrder(), c.getStorageKey(), svgUrl(c), svgEdited(c), svgRevision(c), c.getMimeType(),
+                c.getCandidateOrder(), c.getStorageKey(), svgUrl(c), svgEdited(c), c.getMimeType(),
                 c.getWidth(), c.getHeight(), c.isSelected(), c.getPinnedAt(), c.getCreatedAt());
     }
 
@@ -321,22 +320,6 @@ public class LogoGenerationService {
             return Boolean.TRUE.equals(metadata.get("svgEdited"));
         } catch (JsonProcessingException e) {
             return false;
-        }
-    }
-
-    /**
-     * 지금 이 후보가 가리키는 버전. 다운로드 기록의 assetRevision과 같은 체계를 쓴다
-     * (수정 이력이 없으면 "original") — 마이페이지가 "이 버전을 이미 받았는지"를 비교할 수 있어야 한다.
-     */
-    private String svgRevision(LogoCandidate candidate) {
-        if (candidate.getAiMetadataJson() == null) return LogoDownload.ORIGINAL_REVISION;
-        try {
-            Map<?, ?> metadata = objectMapper.readValue(candidate.getAiMetadataJson(), Map.class);
-            return metadata.get("svgRevision") instanceof String value && !value.isBlank()
-                    ? value
-                    : LogoDownload.ORIGINAL_REVISION;
-        } catch (JsonProcessingException e) {
-            return LogoDownload.ORIGINAL_REVISION;
         }
     }
 }

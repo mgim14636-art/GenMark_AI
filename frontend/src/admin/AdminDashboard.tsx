@@ -362,12 +362,12 @@ function AdminSurveyResponseTable({ responses }: { responses: AdminSurveyRespons
 
   return (
     <section className="admin-record-page" aria-labelledby="survey-response-title">
-      <div className="admin-section-heading"><div><p className="admin-eyebrow">USER FEEDBACK</p><h2 id="survey-response-title">개선 요청</h2><p>실제 설문 응답에서 선택한 개선 항목과 추가 의견을 확인해요.</p></div><AdminMemberIdSearch id="survey-member-search" value={searchQuery} onChange={setSearchQuery} /></div>
+      <div className="admin-section-heading"><div><p className="admin-eyebrow">USER FEEDBACK</p><h2 id="survey-response-title">개선 요청</h2><p>실제 설문 응답에서 선택한 개선 항목을 확인해요.</p></div><AdminMemberIdSearch id="survey-member-search" value={searchQuery} onChange={setSearchQuery} /></div>
       <div className="admin-table-shell">
         <table className="admin-survey-response-table">
           <caption className="admin-sr-only">개선 요청 설문 응답 목록</caption>
-          <thead><tr><th scope="col">No.</th><th scope="col">회원</th><th scope="col">만족도</th><th scope="col">개선 항목</th><th scope="col">추가 의견</th><th scope="col">응답일</th></tr></thead>
-          <tbody>{filteredResponses.length === 0 ? <tr><td colSpan={6} className="admin-empty-table-state">저장된 설문 응답이 없습니다.</td></tr> : filteredResponses.map((response, index) => <tr key={response.memberId}><td data-label="No.">{index + 1}</td><td data-label="회원"><code>{response.memberEmail ?? `회원 ${response.memberId}`}</code>{response.memberName && <small className="admin-survey-member-name">{response.memberName}</small>}</td><td data-label="만족도"><span className={`admin-request-tag ${response.rating === 5 ? '' : 'other'}`}>{response.rating === 5 ? '좋아요' : response.rating === 1 ? '싫어요' : '미응답'}</span></td><td data-label="개선 항목"><span className="admin-request-other-text">{response.improvements.length ? response.improvements.join(' · ') : '선택 없음'}</span></td><td data-label="추가 의견"><span className="admin-request-other-text">{response.comment || '없음'}</span></td><td data-label="응답일">{response.completedAt ? formatAdminDate(response.completedAt) : '—'}</td></tr>)}</tbody>
+          <thead><tr><th scope="col">No.</th><th scope="col">회원</th><th scope="col">만족도</th><th scope="col">개선 항목</th><th scope="col">응답일</th></tr></thead>
+          <tbody>{filteredResponses.length === 0 ? <tr><td colSpan={5} className="admin-empty-table-state">저장된 설문 응답이 없습니다.</td></tr> : filteredResponses.map((response, index) => <tr key={response.memberId}><td data-label="No.">{index + 1}</td><td data-label="회원"><code>{response.memberEmail ?? `회원 ${response.memberId}`}</code>{response.memberName && <small className="admin-survey-member-name">{response.memberName}</small>}</td><td data-label="만족도"><span className={`admin-request-tag ${response.rating === 5 ? '' : 'other'}`}>{response.rating === 5 ? '좋아요' : response.rating === 1 ? '싫어요' : '미응답'}</span></td><td data-label="개선 항목"><span className="admin-request-other-text">{response.improvements.length ? response.improvements.join(' · ') : '선택 없음'}</span></td><td data-label="응답일">{response.completedAt ? formatAdminDate(response.completedAt) : '—'}</td></tr>)}</tbody>
         </table>
       </div>
     </section>
@@ -819,12 +819,12 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     const logoGenerationTrendMax = Math.max(1, ...logoGenerationTrend.ci, ...logoGenerationTrend.bi)
 
     const surveyImprovementCategories = [
-      '로고 생성·재생성',
-      '브랜드 맞춤 로고',
-      '로고 수정',
-      '유사 상표 확인',
-      '로고 저장·활용',
-      '기타',
+      '로고 생성 시간이 오래 걸려서 불편함',
+      '원하는 느낌/스타일의 로고가 잘 안 나옴',
+      '로고 수정이 어렵거나 마음대로 안 됨',
+      '브랜드 키트·명함 만들기 기능이 아쉬움',
+      '유사 상표 확인 결과를 얼마나 믿어야 할지 모르겠음',
+      '기타 사항',
     ] as const
     const surveyImprovementStatsByPeriod = {
       daily: [184, 160, 128, 86, 62, 18],

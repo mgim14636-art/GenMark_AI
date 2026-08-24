@@ -54,6 +54,8 @@ type MypageAssetItem = {
   candidateId?: string
   projectType?: 'CI' | 'BI'
   dateKey: string
+  /** 정렬용 원본 타임스탬프(ISO). 로고/브랜드킷 그룹 안에서 최신순 정렬에만 쓴다 — 없으면 dateKey로 대체. */
+  sortKey?: string
 }
 type MypageAssetGroup = {
   dateKey: string
@@ -243,7 +245,7 @@ const productGalleryItems = [
   { id: 'terraluna-product', name: 'TERRALUNA', category: '토너', meta: '보태니컬 · 클라리파잉 토너', likes: '860', image: '/product-gallery/terraluna.png', position: '50% 50%', tone: 'terraluna' },
 ]
 
-const surveyImprovementOptions: SurveyImprovement[] = ['로고 생성·재생성', '브랜드 맞춤 로고', '로고 수정', '유사 상표 확인', '로고 저장·활용', '기타']
+const surveyImprovementOptions: SurveyImprovement[] = ['로고 생성 시간이 오래 걸려서 불편함', '원하는 느낌/스타일의 로고가 잘 안 나옴', '로고 수정이 어렵거나 마음대로 안 됨', '브랜드 키트·명함 만들기 기능이 아쉬움', '유사 상표 확인 결과를 얼마나 믿어야 할지 모르겠음', '기타 사항']
 
 const getModeFromUrl = (): ViewMode => {
   const requestedView = new URLSearchParams(window.location.search).get('view')
@@ -273,7 +275,7 @@ const getModeFromUrl = (): ViewMode => {
 // TEMP_RESULT_PREVIEW: 결과 후보가 없을 때 결과 화면 레이아웃을 생성 API 없이
 // 검토하기 위한 로컬 목업 데이터입니다. 실제 생성·저장 흐름에는 사용하지 않습니다.
 const resultPreviewCandidates: LogoCandidate[] = [
-  { id: 'preview-candidate-1', projectId: 'preview-project', projectType: 'CI', order: 1, storageKey: 'preview-candidate-1', svgUrl: null, svgEdited: false, svgRevision: 'original', mimeType: 'image/svg+xml', width: 760, height: 760, selected: true, pinnedAt: null, createdAt: '' },
+  { id: 'preview-candidate-1', projectId: 'preview-project', projectType: 'CI', order: 1, storageKey: 'preview-candidate-1', svgUrl: null, svgEdited: false, mimeType: 'image/svg+xml', width: 760, height: 760, selected: true, pinnedAt: null, createdAt: '' },
 ]
 const resultPreviewImageUrl = '/logo-result-preview-bramont.png'
 const GENERATED_LOGO_COUNT = 1
@@ -658,7 +660,8 @@ function CustomerApp() {
   const [surveyComment, setSurveyComment] = useState('')
   const [surveySubmitted, setSurveySubmitted] = useState(false)
   const [remainingCredits, setRemainingCredits] = useState(2)
-  const [creditModal, setCreditModal] = useState<'credit' | 'survey' | null>(null)
+  const [creditModal, setCreditModal] = useState<'survey' | null>(null)
+  const [pendingSurveyDownload, setPendingSurveyDownload] = useState<{ name: string; subtitle: string; candidateId?: string; storageKey?: string; svgUrl?: string | null } | null>(null)
   const [finalEditModal, setFinalEditModal] = useState<FinalEditKind | null>(null)
   const resultHydrationProjectRef = useRef<string | null>(null)
   const [finalEditToneMode, setFinalEditToneMode] = useState<FinalToneMode>('recommended')
@@ -804,7 +807,7 @@ function CustomerApp() {
             setRestoreOriginalError('')
           }
         } else if (creditModal) {
-          setCreditModal(null)
+          // 최초 1회 설문은 필수라 Esc로도 못 닫는다 — 제출해야만 닫힌다.
         } else {
           setResumePromptProject(null)
         }
@@ -862,7 +865,6 @@ function CustomerApp() {
   }, [mode])
 
   const [choiceInfoModal, setChoiceInfoModal] = useState<'ci' | 'bi' | null>(null)
-  const [pendingDownload, setPendingDownload] = useState<{ name: string; subtitle: string; candidateId?: string; storageKey?: string; svgUrl?: string | null } | null>(null)
   const editorCandidate = logoCandidates[resultCandidate] ?? logoCandidates[0]
 
   useEffect(() => {
@@ -2562,32 +2564,35 @@ function CustomerApp() {
       window.setTimeout(() => URL.revokeObjectURL(link.href), 0)
       return true
     } catch (error) {
+      // SURVEY_REQUIRED는 여기서 삼키지 않고 그대로 던진다 — 호출한 쪽(requestLogoDownload)이
+      // "다운로드 실패"가 아니라 "설문부터 받아야 함"으로 구분해서 처리해야 하기 때문이다.
+      if (error instanceof AuthError && error.code === 'SURVEY_REQUIRED') throw error
       setProjectError(error instanceof Error ? error.message : '로고를 다운로드하지 못했어요.')
       return false
     }
   }
 
+  // 서버가 "이 회원 설문 미완료"로 판단하면(SURVEY_REQUIRED) 다운로드는 진행되지 않는다.
+  // 그 경우 받으려던 로고를 pendingSurveyDownload에 잠깐 담아두고 설문을 강제로 띄운 뒤,
+  // 설문 제출이 성공해야 그 로고를 실제로 받는다 — "최초 1회는 반드시 설문을 받는다"를
+  // 프론트가 아니라 서버가 강제하므로, 이 상태를 조작해도 다운로드 자체는 여전히 막힌다.
   const requestLogoDownload = (candidate: { name: string; subtitle: string; candidateId?: string; storageKey?: string; svgUrl?: string | null }) => {
-    setPendingDownload(candidate)
-    setCreditModal('credit')
+    void downloadLogo(candidate).catch((error) => {
+      if (error instanceof AuthError && error.code === 'SURVEY_REQUIRED') {
+        openCreditSurvey(candidate)
+        return
+      }
+      setProjectError(error instanceof Error ? error.message : '로고를 다운로드하지 못했어요.')
+    })
   }
 
-  const openCreditSurvey = () => {
+  const openCreditSurvey = (pendingDownload: { name: string; subtitle: string; candidateId?: string; storageKey?: string; svgUrl?: string | null }) => {
+    setPendingSurveyDownload(pendingDownload)
     setSurveyRating(5)
     setSurveyImprovements([])
     setSurveyComment('')
     setProjectError('')
     setCreditModal('survey')
-  }
-
-  const downloadWithCredit = () => {
-    if (!pendingDownload || remainingCredits < 1) return
-    void downloadLogo(pendingDownload).then((downloaded) => {
-      if (!downloaded) return
-      setRemainingCredits((current) => Math.max(0, current - 1))
-      setPendingDownload(null)
-      setCreditModal(null)
-    })
   }
 
   const submitSurveyResponse = async () => {
@@ -2605,7 +2610,12 @@ function CustomerApp() {
   const submitCreditSurvey = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     void submitSurveyResponse()
-      .then(() => setCreditModal(null))
+      .then(() => {
+        setCreditModal(null)
+        const download = pendingSurveyDownload
+        setPendingSurveyDownload(null)
+        if (download) void downloadLogo(download)
+      })
       .catch((error) => setProjectError(error instanceof Error ? error.message : '설문을 제출하지 못했어요.'))
   }
 
@@ -4598,12 +4608,9 @@ function CustomerApp() {
         ],
       },
     ]
-    // 버전까지 묶어서 비교한다. 후보 id만 보면, 로고를 받은 뒤 수정한 경우
-    // "지금 모습"을 보여줄 카드가 사라져서 마이페이지가 과거 버전만 보여주게 된다.
-    const downloadedRevisions = new Set(downloadHistory.map((item) => `${item.candidateId}:${item.assetRevision}`))
+    const downloadedCandidateIds = new Set(downloadHistory.map((item) => item.candidateId))
     const generatedLogoAssets: MypageAssetItem[] = Object.values(mypageGeneratedLogoCandidates)
-      .filter((candidate) => candidate.storageKey && !hiddenMypageLogoCandidateIds.includes(candidate.id)
-        && !downloadedRevisions.has(`${candidate.id}:${candidate.svgRevision}`))
+      .filter((candidate) => candidate.storageKey && !hiddenMypageLogoCandidateIds.includes(candidate.id) && !downloadedCandidateIds.has(candidate.id))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((candidate) => {
         const projectLabel = candidate.projectType
@@ -4612,37 +4619,45 @@ function CustomerApp() {
           id: `generated-logo-${candidate.id}`,
           kind: 'logo',
           title: `${projectLabel} 로고`,
-          subtitle: `${new Date(candidate.createdAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성${candidate.svgEdited ? ' · 수정본' : ''}`,
+          subtitle: `${new Date(candidate.createdAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성`,
           imageUrl,
           imageUrls: [imageUrl],
           projectId: candidate.projectId,
           candidateId: candidate.id,
           projectType: candidate.projectType,
           dateKey: getLocalDateKey(candidate.createdAt),
+          sortKey: candidate.createdAt,
         }
       })
-    const actualAssetItems: MypageAssetItem[] = [
-      ...downloadHistory.map((item) => {
-        const dateKey = getLocalDateKey(item.downloadedAt)
-        // item.imageUrl is the copy archived at download time. Each edited version now gets
-        // its own download record and its own archived copy, so this already shows the exact
-        // version that was downloaded — showing the candidate's current image instead would
-        // render every record of the same logo identically.
+    const downloadHistoryAssets: MypageAssetItem[] = downloadHistory.map((item) => {
+        // item.imageUrl is a copy frozen at download time. logo_downloads only keeps one row
+        // per (member, candidate) — downloading the same candidate again after an edit reuses
+        // that row rather than archiving a fresh copy — so the frozen copy goes stale the moment
+        // the logo is edited. Prefer the candidate's current image so edits show up here too;
+        // there's at most one download-history card per candidate, so this can't render two
+        // different records identically.
+        const currentCandidate = mypageGeneratedLogoCandidates[item.candidateId]
+        const imageUrl = currentCandidate?.storageKey
+          ? getLogoCandidateImageUrl(currentCandidate.storageKey)
+          : item.imageUrl
+        // 시각도 마찬가지 이유로 다운로드 시각(item.downloadedAt) 대신 로고 생성 시각을 쓴다 —
+        // 안 그러면 언제 (다시) 받았느냐에 따라 카드에 찍히는 시각이 흔들린다.
+        const timestamp = currentCandidate?.createdAt ?? item.downloadedAt
         return {
           id: `download-${item.downloadId}`,
           kind: 'logo' as const,
           title: `${item.projectType} 로고`,
-          subtitle: `${new Date(item.downloadedAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 저장`,
-          imageUrl: item.imageUrl,
+          subtitle: `${new Date(timestamp).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })} 생성`,
+          imageUrl,
           projectId: item.projectId,
           candidateId: item.candidateId,
           projectType: item.projectType,
           downloadId: item.downloadId,
-          dateKey,
+          dateKey: getLocalDateKey(timestamp),
+          sortKey: timestamp,
         }
-      }),
-      ...generatedLogoAssets,
-      ...brandKitHistory.flatMap((kit): MypageAssetItem[] => {
+      })
+    const brandKitAssets: MypageAssetItem[] = brandKitHistory.flatMap((kit): MypageAssetItem[] => {
         if (kit.status !== 'SUCCEEDED' || !kit.createdAt) return []
         const storageKeys = (kit.storageKeys?.length ? kit.storageKeys : kit.storageKey ? [kit.storageKey] : []).filter(Boolean)
         const dateKey = getLocalDateKey(kit.createdAt)
@@ -4661,6 +4676,7 @@ function CustomerApp() {
             candidateId: kit.candidateId,
             projectType: kit.kitType === 'BUSINESS_CARD' ? 'CI' : 'BI',
             dateKey,
+            sortKey: kit.createdAt,
           }]
         }
         return [{
@@ -4675,8 +4691,15 @@ function CustomerApp() {
           candidateId: kit.candidateId,
           projectType: 'BI',
           dateKey,
+          sortKey: kit.createdAt,
         }]
-      }),
+      })
+    // 우선순위: 로고(최신순) 전체가 브랜드킷(최신순) 전체보다 항상 위에 온다 — 아래 reduce가
+    // push된 순서를 그대로 유지하므로, 같은 날짜 그룹 안에서도 이 순서가 그대로 보존된다.
+    const byRecency = (a: MypageAssetItem, b: MypageAssetItem) => (b.sortKey ?? b.dateKey).localeCompare(a.sortKey ?? a.dateKey)
+    const actualAssetItems: MypageAssetItem[] = [
+      ...[...downloadHistoryAssets, ...generatedLogoAssets].sort(byRecency),
+      ...brandKitAssets.sort(byRecency),
     ]
     const actualAssetGroups = actualAssetItems.reduce<MypageAssetGroup[]>((groups, asset) => {
       const group = groups.find((entry) => entry.dateKey === asset.dateKey)
@@ -4751,6 +4774,18 @@ function CustomerApp() {
         return
       }
       try {
+        // 마이페이지에서 받는 로고는 이 함수를 거치는 경로(SVG 직접 다운로드, 아래 공개
+        // PNG 링크)가 여러 개라 백엔드 다운로드 기록 API 호출이 통째로 빠져 있었다
+        // (logo_downloads에 안 쌓이고, 관리자 통계에도 안 잡힘). 여기 한 곳에서만
+        // 기록해서 어느 경로로 받든 빠짐없이 잡히게 한다. 실패해도 파일은 그대로 받게 둔다.
+        if (item.kind === 'logo' && item.projectId && item.candidateId) {
+          try {
+            const download = await projectsApi.downloadCandidate(item.projectId, item.candidateId)
+            setDownloadHistory((current) => [download, ...current.filter((existing) => existing.downloadId !== download.downloadId)])
+          } catch {
+            // 기록 실패는 무시한다.
+          }
+        }
         if (await downloadMypageLogoSvg(item)) return
         const isPublicAsset = item.imageUrl.startsWith('/uploads/') || item.imageUrl.startsWith('/mypage/')
         if (isPublicAsset) {
@@ -4776,10 +4811,9 @@ function CustomerApp() {
     }
     return (
       <main className="mypage-screen" aria-labelledby="mypage-title">
-        <header className="workspace-header">
+        <div className="mypage-back-bar">
           <button className="workspace-back" type="button" aria-label="홈으로 돌아가기" onClick={() => setMode('home')}><ChevronLeft aria-hidden="true" size={23} strokeWidth={1.8} /></button>
-          <div className="workspace-brand"><BrandLogo /><strong><span className="brand-mark-accent">GenMark AI</span></strong></div>
-        </header>
+        </div>
 
         <section className="mypage-content">
           <header className="mypage-heading">
@@ -4906,9 +4940,11 @@ function CustomerApp() {
 
             <section className="survey-section" aria-labelledby="rating-title"><h2 id="rating-title">결과에 얼마나 만족하시나요?</h2><div className="rating-options" role="radiogroup" aria-label="결과 만족도"><button type="button" role="radio" aria-checked={surveyRating === 5} className={surveyRating === 5 ? 'rating-choice like selected' : 'rating-choice like'} onClick={() => setSurveyRating(5)}><ThumbsUp aria-hidden="true" size={34} strokeWidth={1.7} fill={surveyRating === 5 ? 'currentColor' : 'none'} /><span>좋아요</span></button><button type="button" role="radio" aria-checked={surveyRating === 1} className={surveyRating === 1 ? 'rating-choice dislike selected' : 'rating-choice dislike'} onClick={() => setSurveyRating(1)}><ThumbsDown aria-hidden="true" size={34} strokeWidth={1.7} fill={surveyRating === 1 ? 'currentColor' : 'none'} /><span>싫어요</span></button></div></section>
 
-            <section className="survey-section" aria-labelledby="improvement-title"><h2 id="improvement-title">어떤 부분이 더 좋아졌으면 하나요?</h2><p className="survey-helper">개선이 필요하다고 느낀 항목을 모두 선택해주세요.</p><div className="improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'improvement-option selected' : 'improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div></section>
-
-            <section className="survey-section" aria-labelledby="comment-title"><h2 id="comment-title">추가 의견</h2><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /><div className="survey-character-count">{surveyComment.length} / 500</div></section>
+            {surveyRating === 1 && (
+              <section className="survey-section" aria-labelledby="improvement-title"><h2 id="improvement-title">어떤 부분이 더 좋아졌으면 하나요?</h2><p className="survey-helper">개선이 필요하다고 느낀 항목을 모두 선택해주세요.</p><div className="improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'improvement-option selected' : 'improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div>
+                {surveyImprovements.includes('기타 사항') && <textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어떤 부분이 아쉬웠는지 자유롭게 적어주세요." maxLength={500} />}
+              </section>
+            )}
 
             {projectError && <p className="project-error" role="alert">{projectError}</p>}
             <button className="survey-submit gradient-button" type="submit" disabled={surveyRating === 0}>의견 보내기 <ChevronRight aria-hidden="true" size={22} strokeWidth={1.8} /></button>
@@ -4983,34 +5019,18 @@ function CustomerApp() {
     </div>
   }
 
-  const renderCreditModal = () => (
-    <div ref={activeModalRef} className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreditModal(null) }}>
-      <section className="credit-modal" role="dialog" aria-modal="true" aria-labelledby="credit-modal-title">
-        <button className="modal-close" type="button" aria-label="크레딧 안내 닫기" onClick={() => setCreditModal(null)}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
-        <div className="credit-modal-icon"><Download aria-hidden="true" size={28} strokeWidth={1.8} /></div>
-        <h2 id="credit-modal-title">크레딧을 확인해볼까요?</h2>
-        <p>현재 남은 크레딧은 <strong>{remainingCredits}개</strong>예요.</p>
-        <p>짧은 설문조사에 참여하시면 크레딧 <strong>1개</strong>를 더 드릴게요. 지금 의견을 남겨볼까요?</p>
-        <div className="credit-modal-actions">
-          <button className="gradient-button" type="button" onClick={openCreditSurvey}>설문 참여하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
-          <button className="modal-secondary-button" type="button" onClick={remainingCredits > 0 ? downloadWithCredit : () => setCreditModal(null)}>{remainingCredits > 0 ? '크레딧 사용하고 다운로드' : '닫기'}</button>
-        </div>
-      </section>
-    </div>
-  )
-
   const renderCreditSurveyModal = () => (
     <div ref={activeModalRef} className="modal-backdrop" role="presentation">
       <section className="credit-modal survey-modal" role="dialog" aria-modal="true" aria-labelledby="credit-survey-title">
-        <button className="modal-close" type="button" aria-label="설문 닫기" onClick={() => setCreditModal(null)}><X aria-hidden="true" size={22} strokeWidth={1.8} /></button>
-        <div className="survey-modal-heading"><MessageSquare aria-hidden="true" size={24} strokeWidth={1.8} /><div><h2 id="credit-survey-title">잠깐만 의견을 들려주세요</h2><p>설문에 참여하시면 크레딧 1개를 드려요.</p></div></div>
+        <div className="survey-modal-heading"><MessageSquare aria-hidden="true" size={24} strokeWidth={1.8} /><div><h2 id="credit-survey-title">잠깐만 의견을 들려주세요</h2><p>작은 의견 하나가 서비스를 더 좋게 만들어요.</p></div></div>
         <form onSubmit={submitCreditSurvey}>
           <div className="modal-survey-block"><h3>결과에 얼마나 만족하시나요?</h3><div className="modal-rating-options" role="radiogroup" aria-label="결과 만족도"><button type="button" role="radio" aria-checked={surveyRating === 5} className={surveyRating === 5 ? 'modal-rating-choice like selected' : 'modal-rating-choice like'} onClick={() => setSurveyRating(5)}><ThumbsUp aria-hidden="true" size={24} strokeWidth={1.8} fill={surveyRating === 5 ? 'currentColor' : 'none'} /><span>좋아요</span></button><button type="button" role="radio" aria-checked={surveyRating === 1} className={surveyRating === 1 ? 'modal-rating-choice dislike selected' : 'modal-rating-choice dislike'} onClick={() => setSurveyRating(1)}><ThumbsDown aria-hidden="true" size={24} strokeWidth={1.8} fill={surveyRating === 1 ? 'currentColor' : 'none'} /><span>싫어요</span></button></div></div>
           {surveyRating === 1 && <div className="survey-followup" aria-live="polite"><div className="survey-followup-inner">
-            <div className="modal-survey-block"><h3>어떤 부분이 더 좋아졌으면 하나요?</h3><div className="modal-improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'modal-improvement-option selected' : 'modal-improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div></div>
-            <div className="modal-survey-block"><h3>추가 의견</h3><textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어렵거나 이해되지 않았던 부분을 자유롭게 작성해주세요." maxLength={500} /></div>
+            <div className="modal-survey-block"><h3>어떤 부분이 더 좋아졌으면 하나요?</h3><div className="modal-improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'modal-improvement-option selected' : 'modal-improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div>
+              {surveyImprovements.includes('기타 사항') && <textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어떤 부분이 아쉬웠는지 자유롭게 적어주세요." maxLength={500} />}
+            </div>
           </div></div>}
-          <button className="gradient-button modal-submit" type="submit">의견 보내고 크레딧 받기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
+          <button className="gradient-button modal-submit" type="submit">설문 내용 제출하기 <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} /></button>
         </form>
       </section>
     </div>
@@ -5268,7 +5288,7 @@ function CustomerApp() {
         </button>
       </nav>}
 
-      {creditModal === 'credit' ? renderCreditModal() : creditModal === 'survey' ? renderCreditSurveyModal() : null}
+      {creditModal === 'survey' ? renderCreditSurveyModal() : null}
       {finalEditModal && renderFinalEditModal()}
       {businessCardModalOpen && renderBusinessCardModal()}
       {resumePromptProject && renderResumePromptModal()}

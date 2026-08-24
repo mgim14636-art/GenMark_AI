@@ -13,6 +13,7 @@ public enum ErrorCode {
     ADMIN_LOGIN_FAILED(HttpStatus.UNAUTHORIZED, "관리자 아이디 또는 비밀번호가 올바르지 않습니다."),
     CREDIT_NOT_ENOUGH(HttpStatus.PAYMENT_REQUIRED, "크레딧이 부족합니다."),
     SURVEY_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "이미 설문조사에 응답했습니다."),
+    SURVEY_REQUIRED(HttpStatus.FORBIDDEN, "로고를 받으려면 먼저 짧은 설문에 응답해 주세요."),
     AI_UNAVAILABLE(HttpStatus.BAD_GATEWAY, "AI 서버 응답을 받을 수 없습니다."),
     AI_INVALID_RESPONSE(HttpStatus.BAD_GATEWAY, "AI 서버 응답 형식이 올바르지 않습니다."),
     AI_INCOMPLETE_RESULT(HttpStatus.BAD_GATEWAY, "AI가 로고 후보 1개를 반환하지 않았습니다."),

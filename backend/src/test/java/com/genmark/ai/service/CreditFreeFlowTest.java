@@ -13,6 +13,7 @@ import com.genmark.ai.repository.LogoCandidateRepository;
 import com.genmark.ai.repository.LogoDownloadRepository;
 import com.genmark.ai.repository.LogoGenerationRepository;
 import com.genmark.ai.repository.MemberRepository;
+import com.genmark.ai.repository.MemberSurveyRepository;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -87,19 +88,18 @@ class CreditFreeFlowTest {
         LogoCandidateRepository candidateRepository = mock(LogoCandidateRepository.class);
         LogoDownloadRepository downloadRepository = mock(LogoDownloadRepository.class);
         MemberRepository memberRepository = mock(MemberRepository.class);
+        MemberSurveyRepository surveyRepository = mock(MemberSurveyRepository.class);
         LogoFileStorage fileStorage = mock(LogoFileStorage.class);
 
+        when(surveyRepository.existsByMemberId(member.getId())).thenReturn(true);
         when(projectLookup.requireOwned(project.getPublicId(), member.getId())).thenReturn(project);
         when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
                 candidate.getPublicId(), project.getId(), member.getId())).thenReturn(Optional.of(candidate));
-        // 수정 이력이 없는 후보라 리비전은 "original"이다.
-        when(downloadRepository.findByMemberIdAndCandidateIdAndAssetRevision(
-                member.getId(), candidate.getId(), LogoDownload.ORIGINAL_REVISION))
+        when(downloadRepository.findByMemberIdAndCandidateId(member.getId(), candidate.getId()))
                 .thenReturn(Optional.empty());
         when(memberRepository.findById(member.getId())).thenReturn(Optional.of(member));
-        when(fileStorage.archiveForDownload(member.getId(), candidate.getPublicId(),
-                LogoDownload.ORIGINAL_REVISION, candidate.getStorageKey()))
-                .thenReturn("downloads/1/candidate-1-original.png");
+        when(fileStorage.archiveForDownload(member.getId(), candidate.getPublicId(), candidate.getStorageKey()))
+                .thenReturn("downloads/1/candidate-1.png");
         when(downloadRepository.save(any(LogoDownload.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(downloadRepository.findByMemberIdAndProjectTypeOrderByDownloadedAtAsc(
@@ -110,8 +110,8 @@ class CreditFreeFlowTest {
                 candidateRepository,
                 downloadRepository,
                 memberRepository,
+                surveyRepository,
                 fileStorage,
-                new com.fasterxml.jackson.databind.ObjectMapper(),
                 20);
 
         var response = service.download(project.getPublicId(), candidate.getPublicId(), member.getId());

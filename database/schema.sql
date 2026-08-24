@@ -179,14 +179,12 @@ CREATE TABLE IF NOT EXISTS logo_downloads (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     member_id BIGINT NOT NULL,
     candidate_id BIGINT NOT NULL,
-    -- 수정본마다 다른 값. 한 번도 수정하지 않은 원본은 'original'.
-    asset_revision VARCHAR(64) NOT NULL DEFAULT 'original',
     project_type VARCHAR(2) NOT NULL,
     storage_key VARCHAR(500) NOT NULL,
     downloaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_download_member FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
     CONSTRAINT fk_download_candidate FOREIGN KEY (candidate_id) REFERENCES logo_candidates(id) ON DELETE CASCADE,
-    CONSTRAINT uq_download_member_candidate_revision UNIQUE (member_id, candidate_id, asset_revision),
+    CONSTRAINT uq_download_member_candidate UNIQUE (member_id, candidate_id),
     CONSTRAINT chk_download_project_type CHECK (project_type IN ('CI', 'BI')),
     INDEX idx_download_member_type_time (member_id, project_type, downloaded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

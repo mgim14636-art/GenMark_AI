@@ -46,13 +46,13 @@ class SurveyServiceTest {
         SurveyService service = new SurveyService(
                 surveyRepository, memberRepository, creditService, new ObjectMapper());
         service.submit(7L, new SurveySubmitRequest(
-                5, List.of("로고 생성·재생성", "유사 상표 확인"), "   "));
+                5, List.of("로고 수정이 어렵거나 마음대로 안 됨", "유사 상표 확인 결과를 얼마나 믿어야 할지 모르겠음"), "   "));
 
         ArgumentCaptor<MemberSurvey> captor = ArgumentCaptor.forClass(MemberSurvey.class);
         verify(surveyRepository).save(captor.capture());
         assertThat(captor.getValue().getRating()).isEqualTo(5);
         assertThat(captor.getValue().getImprovementsJson())
-                .isEqualTo("[\"로고 생성·재생성\",\"유사 상표 확인\"]");
+                .isEqualTo("[\"로고 수정이 어렵거나 마음대로 안 됨\",\"유사 상표 확인 결과를 얼마나 믿어야 할지 모르겠음\"]");
         assertThat(captor.getValue().getComment()).isNull();
         assertThat(captor.getValue().getSurveyVersion()).isEqualTo(1);
     }

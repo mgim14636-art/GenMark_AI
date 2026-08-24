@@ -60,8 +60,6 @@ export type LogoCandidate = {
   storageKey: string
   svgUrl: string | null
   svgEdited: boolean
-  /** 현재 버전. 다운로드 기록의 assetRevision과 같은 체계('original' 포함)라 서로 비교할 수 있다. */
-  svgRevision: string
   mimeType: string
   width: number | null
   height: number | null
@@ -91,8 +89,6 @@ export type DownloadRecord = {
   projectId: string
   candidateId: string
   projectType: 'CI' | 'BI'
-  /** 받은 시점의 로고 버전. 수정 이력이 없는 원본이면 'original'. */
-  assetRevision: string
   imageUrl: string
   firstTime: boolean
   downloadedAt: string
@@ -104,12 +100,12 @@ export type SurveyStatus = {
 }
 
 export type SurveyImprovement =
-  | '로고 생성·재생성'
-  | '브랜드 맞춤 로고'
-  | '로고 수정'
-  | '유사 상표 확인'
-  | '로고 저장·활용'
-  | '기타'
+  | '로고 생성 시간이 오래 걸려서 불편함'
+  | '원하는 느낌/스타일의 로고가 잘 안 나옴'
+  | '로고 수정이 어렵거나 마음대로 안 됨'
+  | '브랜드 키트·명함 만들기 기능이 아쉬움'
+  | '유사 상표 확인 결과를 얼마나 믿어야 할지 모르겠음'
+  | '기타 사항'
 
 export type SurveySubmitInput = {
   rating: 1 | 5

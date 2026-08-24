@@ -1,7 +1,5 @@
 package com.genmark.ai.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.LogoCandidate;
 import com.genmark.ai.entity.LogoDownload;
@@ -10,6 +8,7 @@ import com.genmark.ai.entity.ProjectLike;
 import com.genmark.ai.repository.LogoCandidateRepository;
 import com.genmark.ai.repository.LogoDownloadRepository;
 import com.genmark.ai.repository.MemberRepository;
+import com.genmark.ai.repository.MemberSurveyRepository;
 import com.genmark.ai.web.dto.logo.LogoDownloadResponse;
 import com.genmark.ai.web.exception.ApiException;
 import com.genmark.ai.web.exception.ErrorCode;
@@ -18,13 +17,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 로고 다운로드 (F12-4).
  *
- * <p>핵심 규칙 세 가지.
+ * <p>핵심 규칙 네 가지.
  * <ul>
+ *   <li>설문에 한 번도 응답하지 않은 회원은 다운로드를 받을 수 없다 — 서버가 매 요청마다
+ *       확인하므로, 프론트를 조작해도 우회할 수 없다. 한 번이라도 응답하면 그 뒤로는
+ *       영원히 막히지 않는다</li>
  *   <li>같은 로고를 두 번 받아도 1회로 집계한다 — logo_downloads의
  *       UNIQUE(member_id, candidate_id)가 보장하므로 여기서는 기존 기록을 찾아 재사용만 한다</li>
  *   <li>다운로드한 로고만 서버에 보관한다 — 받는 순간 downloads/ 로 사본을 만든다</li>
@@ -40,8 +41,8 @@ public class LogoDownloadService {
     private final LogoCandidateRepository candidateRepository;
     private final LogoDownloadRepository downloadRepository;
     private final MemberRepository memberRepository;
+    private final MemberSurveyRepository surveyRepository;
     private final LogoFileStorage fileStorage;
-    private final ObjectMapper objectMapper;
 
     /** 종류별 보관 한도. CI 20개, BI 20개를 각각 센다. */
     private final int retentionLimit;
@@ -50,15 +51,15 @@ public class LogoDownloadService {
                                LogoCandidateRepository candidateRepository,
                                LogoDownloadRepository downloadRepository,
                                MemberRepository memberRepository,
+                               MemberSurveyRepository surveyRepository,
                                LogoFileStorage fileStorage,
-                               ObjectMapper objectMapper,
                                @Value("${app.download.retention-per-type:20}") int retentionLimit) {
         this.projectLookup = projectLookup;
         this.candidateRepository = candidateRepository;
         this.downloadRepository = downloadRepository;
         this.memberRepository = memberRepository;
+        this.surveyRepository = surveyRepository;
         this.fileStorage = fileStorage;
-        this.objectMapper = objectMapper;
         this.retentionLimit = retentionLimit;
     }
 
@@ -67,9 +68,17 @@ public class LogoDownloadService {
      *
      * <p>이미 받은 로고면 새 기록을 만들지 않고 기존 기록을 그대로 돌려준다. 사용자는 파일을
      * 다시 받을 수 있지만 집계상 횟수는 늘지 않는다.
+     *
+     * @throws ApiException {@link ErrorCode#SURVEY_REQUIRED} 이 회원이 설문에 한 번도
+     *         응답하지 않았을 때. 이미 다운로드한 로고를 다시 받으려는 요청도 예외 없이 막는다
+     *         — "한 번은 꼭 받는다"는 규칙이 다운로드 이력과 무관하게 적용돼야 하기 때문이다.
      */
     @Transactional
     public LogoDownloadResponse download(String projectId, String candidateId, Long memberId) {
+        if (!surveyRepository.existsByMemberId(memberId)) {
+            throw new ApiException(ErrorCode.SURVEY_REQUIRED);
+        }
+
         ProjectLike project = projectLookup.requireOwned(projectId, memberId);
         boolean isCi = project instanceof CiProject;
 
@@ -80,10 +89,8 @@ public class LogoDownloadService {
                         candidateId, project.getId(), memberId))
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
 
-        String assetRevision = currentRevision(candidate);
         LogoDownload existing = downloadRepository
-                .findByMemberIdAndCandidateIdAndAssetRevision(memberId, candidate.getId(), assetRevision)
-                .orElse(null);
+                .findByMemberIdAndCandidateId(memberId, candidate.getId()).orElse(null);
         if (existing != null) {
             return toResponse(existing, false);
         }
@@ -93,37 +100,17 @@ public class LogoDownloadService {
                 .orElseThrow(() -> new ApiException(ErrorCode.AUTH_REQUIRED));
 
         String archivedKey = fileStorage.archiveForDownload(
-                memberId, candidate.getPublicId(), assetRevision, candidate.getStorageKey());
+                memberId, candidate.getPublicId(), candidate.getStorageKey());
 
         LogoDownload download = downloadRepository.save(LogoDownload.builder()
                 .member(member)
                 .candidate(candidate)
-                .assetRevision(assetRevision)
                 .projectType(projectType)
                 .storageKey(archivedKey)
                 .build());
 
         enforceRetentionLimit(memberId, projectType);
         return toResponse(download, true);
-    }
-
-    /**
-     * 지금 이 후보가 어떤 버전인지 돌려준다. 수정할 때마다 값이 바뀌므로, 수정 전에 받아둔
-     * 기록과 수정 후 받은 기록을 구분하는 열쇠가 된다. 수정 이력이 없으면 "original".
-     */
-    private String currentRevision(LogoCandidate candidate) {
-        String metadataJson = candidate.getAiMetadataJson();
-        if (metadataJson == null) return LogoDownload.ORIGINAL_REVISION;
-        try {
-            Map<String, Object> metadata = objectMapper.readValue(metadataJson, new TypeReference<>() {});
-            Object revision = metadata.get("svgRevision");
-            return revision instanceof String value && !value.isBlank()
-                    ? value
-                    : LogoDownload.ORIGINAL_REVISION;
-        } catch (Exception ignored) {
-            // 메타데이터가 깨졌다고 다운로드까지 막을 이유는 없다. 원본으로 간주한다.
-            return LogoDownload.ORIGINAL_REVISION;
-        }
     }
 
     /** 마이페이지에서 사용자가 보관 중인 다운로드 자산을 삭제한다. */
@@ -184,7 +171,6 @@ public class LogoDownloadService {
                 project.getPublicId(),
                 download.getCandidate().getPublicId(),
                 download.getProjectType().name(),
-                download.getAssetRevision(),
                 "/api/v1/me/downloads/" + download.getId() + "/image",
                 firstTime,
                 download.getDownloadedAt());

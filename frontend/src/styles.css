@@ -81,8 +81,8 @@
 .editor-uploaded-logo-target.selected::before { top: -8px; left: -8px; box-shadow: 286px 0 0 -1px #fff, 286px 0 0 0 #a984ff; }
 .editor-uploaded-logo-target.selected::after { bottom: -8px; left: -8px; box-shadow: 286px 0 0 -1px #fff, 286px 0 0 0 #a984ff; }
 .editor-uploaded-logo { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 180ms cubic-bezier(.2, .8, .2, 1), opacity 180ms ease; }
-.editor-uploaded-logo-svg { display: grid; width: 110%; height: 110%; place-items: center; margin: auto; background: #fff; touch-action: none; user-select: none; }
-.editor-uploaded-logo-svg svg { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; background: #fff; transform: scale(1.14); transform-origin: center; }
+.editor-uploaded-logo-svg { display: grid; width: 100%; height: 100%; place-items: center; margin: auto; background: #fff; touch-action: none; user-select: none; }
+.editor-uploaded-logo-svg svg { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; background: #fff; }
 .editor-uploaded-logo-svg [data-genmark-editor-element] { cursor: grab; transition: filter 160ms ease, opacity 160ms ease; }
 .editor-uploaded-logo-svg [data-genmark-editor-element]:active { cursor: grabbing; }
 .editor-uploaded-logo-svg [data-genmark-editor-element]:hover { filter: drop-shadow(0 0 7px rgb(142 85 239 / .48)); }
@@ -243,6 +243,7 @@
 .mypage-screen, .survey-screen { min-height: 100dvh; color: #17203a; background: radial-gradient(circle at 88% 8%, rgb(255 226 246 / .38), transparent 28%), radial-gradient(circle at 8% 22%, rgb(233 226 255 / .45), transparent 28%), #fff; }
 .mypage-screen, .survey-screen { padding-bottom: 150px; }
 .mypage-content, .survey-content { width: min(calc(100% - 32px), 900px); margin: 0 auto; }
+.mypage-back-bar { padding: 20px clamp(18px, 4vw, 52px) 0; }
 .mypage-login-gate { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: calc(100dvh - 88px - 150px); padding: 24px 20px; text-align: center; }
 .mypage-login-gate-icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; color: #8a64df; background: #f4effc; }
 .mypage-login-gate h1 { margin: 0; color: #17203a; font-size: clamp(20px, 3vw, 26px); letter-spacing: -.05em; }
@@ -441,7 +442,7 @@
 .rating-choice.like.selected { border-color: #a271ed; color: #7d54df; background: #faf7ff; box-shadow: 0 7px 16px rgb(128 82 224 / .12); }
 .rating-choice.dislike.selected { border-color: #e48aaf; color: #d25f8a; background: #fff8fb; box-shadow: 0 7px 16px rgb(215 96 145 / .1); }
 .rating-caption { display: flex; justify-content: space-between; margin-top: 7px; color: #9ba0ae; font-size: 12px; }
-.improvement-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.improvement-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .improvement-option { display: inline-flex; align-items: center; justify-content: center; min-height: 45px; border: 1px solid #e6dff4; border-radius: 12px; color: #697187; background: #fff; font-size: 13px; letter-spacing: -.06em; }
 .improvement-option.selected { border-color: #8d70ed; color: #6644c5; background: #eee8ff; }
 .survey-section textarea { width: 100%; min-height: 150px; margin-top: 17px; resize: vertical; border: 1px solid #dacdf1; border-radius: 15px; padding: 16px; color: #26304a; background: #fff; font: inherit; font-size: 14px; line-height: 1.7; }
@@ -668,7 +669,7 @@
   .survey-section h2 { font-size: 18px; }
   .rating-choice { min-width: 0; flex: 1; min-height: 82px; }
   .rating-choice svg { width: 29px; height: 29px; }
-  .improvement-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .improvement-grid { gap: 8px; }
   .improvement-option { min-height: 42px; font-size: 12px; }
   .survey-submit { min-height: 54px; font-size: 16px; }
   .survey-complete-card { width: calc(100% - 28px); margin-top: 72px; border-radius: 22px; padding: 40px 20px; }
@@ -7094,7 +7095,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .resume-prompt-modal .credit-modal-actions { margin-top: 0; }
 .resume-prompt-modal .modal-secondary-button { border: 0; color: #8a92a6; background: transparent; }
 
-.survey-modal { width: min(100%, 640px); }
+.survey-modal { width: min(100%, 460px); }
 
 .survey-modal-heading {
   display: flex;
@@ -7149,21 +7150,23 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   to { grid-template-rows: 1fr; opacity: 1; transform: translateY(0); }
 }
 
-.modal-improvement-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.modal-improvement-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
 
 .modal-improvement-option {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  min-height: 38px;
+  min-height: 44px;
+  padding: 8px 14px;
   border: 1px solid #e6dff4;
   border-radius: 10px;
   color: #697187;
   background: #fff;
   font: inherit;
-  font-size: 11px;
-  letter-spacing: -.06em;
+  font-size: 13px;
+  letter-spacing: -.04em;
+  text-align: center;
 }
 
 .modal-improvement-option.selected { border-color: #8d70ed; color: #6644c5; background: #eee8ff; }
@@ -7171,6 +7174,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .modal-survey-block textarea {
   width: 100%;
   min-height: 115px;
+  margin-top: 10px;
   resize: vertical;
   border: 1px solid #dacdf1;
   border-radius: 13px;
@@ -7363,8 +7367,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .survey-modal-heading h2 { font-size: 19px; }
   .modal-survey-block { margin-top: 18px; }
   .modal-survey-block h3 { font-size: 15px; }
-  .modal-improvement-grid { grid-template-columns: repeat(2, 1fr); }
-.modal-improvement-option { font-size: 11px; }
+  .modal-improvement-option { font-size: 12px; }
   .business-card-modal { max-height: calc(100dvh - 24px); }
   .business-card-modal-intro { grid-template-columns: 48px minmax(0, 1fr); gap: 13px; padding: 24px 52px 20px 18px; }
   .business-card-modal-icon { width: 48px; height: 48px; border-radius: 15px; }
