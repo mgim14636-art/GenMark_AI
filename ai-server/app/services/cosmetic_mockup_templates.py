@@ -1,15 +1,15 @@
-"""top_left/top_right/bottom_left 목업 3장을 PIL 원근 합성용 브랜드킷 템플릿으로 정의한다.
+"""top_left, skincare_set 목업을 PIL 원근 합성용 브랜드킷 템플릿으로 정의한다.
 
 product_mockup_ai_service.py(AI 이미지 편집)는 장면 전체를 다시 그리므로 목업 사진의
-디테일(액자 그림, 나무 결, 병 반사 등)이 매번 조금씩 달라지고, 조합 로고(심볼+워드마크)의
-글자가 편집 과정에서 흐트러질 위험이 있다. 사용자가 "목업 파일이 절대 깨지면 안 된다,
-로고만 정확히 인쇄돼야 한다"고 명시적으로 요청해서, 이 파일은 그 반대 극단 — AI 호출
-없이 PIL로 로고 이미지를 그대로(글자 포함) 라벨 영역에 원근 변형해 끼워 넣는 경로를
-제공한다. product_mockup.py/brand_kit.py의 기존 함수(compose_brand_kit)를 그대로
-재사용하므로 목업 사진 자체는 로고가 들어간 영역 외에는 원본과 픽셀 단위로 동일하다.
+디테일과 로고 글자가 매번 조금씩 달라질 위험이 있어, 이 파일은 AI 호출 없이 PIL로
+로고 이미지를 그대로 라벨 영역에 원근 변형해 끼워 넣는 경로를 제공한다.
+product_mockup.py/brand_kit.py의 기존 함수(compose_brand_kit)를 그대로 재사용하므로
+목업 사진 자체는 로고가 들어간 영역 외에는 원본과 픽셀 단위로 동일하다.
 
-라벨 영역 좌표는 격자 오버레이로 실측(2026-08-20/21)한 값이다 — 세 병 모두 사진마다
-거의 정면으로 놓여 있어 사각형(축에 맞춘 4점)으로도 자연스럽다.
+skincare_set(set-skin-care-package-design-resource.png, 4672x7000 고해상도)은
+2026-08-22 grid overlay로 실측. jar는 통이 작아 텍스트 없이 로고만 크게(2026-08-22
+2차, 확대+하향 조정) 넣고, toner_bottle/white_bottle은 로고+브랜드명+제품종류+용량
+3줄 텍스트를 넣는다(별도 텍스트 렌더링 단계에서 처리, 이 파일은 좌표만 정의).
 """
 import os
 
@@ -26,57 +26,38 @@ def _rect(left: int, top: int, right: int, bottom: int) -> LabelRegion:
     )
 
 
-#
-# [실측 — 2026-08-21, 1차] _restore_original_text에서 쓰던 "기존 인쇄 문구" 박스를
-# 그대로 라벨 영역으로 재사용했더니 로고가 작고 어중간한 위치에 찍혔다. 그래서
-# 문구 위쪽 여백으로 옮겼는데, 그 좌표는 병 몸통이 아니라 실제로는 펌프/드로퍼
-# 캡·자 입구 테두리 위에 걸쳐 있었다(세로 스트립을 직접 잘라 육안 확인, 2026-08-21
-# 2차) — 로고가 유리가 아닌 금속 펌프·플라스틱 캡 위에 그려지면서 병 정면 밖으로
-# "튀어나온" 것처럼 보였다.
-#
-# [2026-08-22] 위 실측치와 별개로, 사용자가 mockup_compositor.py로 눈대중 보정하며
-# label_zones.json에 좌표를 직접 캘리브레이션했다. create_brand_kit()은 그 JSON을
-# 전혀 읽지 않고 이 파일의 좌표만 썼기 때문에, label_zones.json을 아무리 고쳐도
-# 실제 생성 결과에는 반영되지 않는 불일치가 있었다(사용자 실측 확인 — "결과 이미지가
-# 좌표대로 안 나와"). 아래 좌표는 label_zones.json의 quad 값을 그대로 옮긴 것이다 —
-# 이제 이 파일이 두 좌표 체계의 유일한 정본이다. label_zones.json/mockup_compositor.py를
-# 지워도 이 파일엔 영향 없다.
-#
-# [한계] label_zones.json은 zone(부위)별로 shading_strength·max_width_ratio를 따로
-# 갖지만, BrandKitTemplate.padding_ratio는 템플릿 하나에 값 하나뿐이다(product_mockup.py/
-# brand_kit.py를 안 건드리기로 한 제약 때문에 부위별 padding은 지원 안 함). 세 부위 중
-# 둘은 max_width_ratio 0.95(여백 거의 없음), 자만 0.8~0.95로 조금 다른데, 아래
-# padding_ratio=0.05는 "여백 거의 없음" 쪽에 맞춘 값이라 자는 label_zones.json 결과보다
-# 살짝 크게 나올 수 있다.
 COSMETIC_MOCKUP_TEMPLATES = {
     "top_left": BrandKitTemplate(
         name="top_left",
         image_path=os.path.join(_ASSET_DIR, "top_left.png"),
         regions=[
-            ("spray_bottle", _rect(337, 171, 403, 219)),
-            ("jar", _rect(247, 277, 299, 298)),
-            ("dropper_bottle", _rect(422, 225, 458, 252)),
+            ("spray_bottle", _rect(322, 180, 410, 240)),
+            ("dropper_bottle", _rect(400, 215, 468, 270)),
+            ("jar", _rect(238, 268, 308, 298)),
         ],
-        padding_ratio=0.05,
+        padding_ratio=0.14,
     ),
-    "top_right": BrandKitTemplate(
-        name="top_right",
-        image_path=os.path.join(_ASSET_DIR, "top_right.png"),
+    "skincare_set": BrandKitTemplate(
+        name="skincare_set",
+        image_path=os.path.join(_ASSET_DIR, "set-skin-care-package-design-resource.png"),
         regions=[
-            ("spray_bottle", _rect(330, 229, 406, 258)),
-            ("jar", _rect(253, 293, 299, 302)),
-            ("dropper_bottle", _rect(419, 245, 468, 266)),
+            # [2026-08-24] toner_bottle/white_bottle 폭을 넓혔다 — padding_ratio를
+            # 아무리 줄여도 로고가 라벨 영역 "폭"에 막혀 더 안 커졌다(실측 확인:
+            # 병 실제 유리/플라스틱 폭은 훨씬 넓은데 라벨 영역만 좁게 잡혀 있었음).
+            ("toner_bottle", _rect(2280, 3754, 2680, 4300)),
+            ("white_bottle", _rect(3230, 4012, 3820, 4550)),
+            # jar: 통이 작아 로고만 크게 + 아래쪽으로(2026-08-22 확대/하향 조정).
+            # [2026-08-24] 폭(600)보다 높이(240)가 더 좁아서 정사각형에 가까운
+            # 로고가 높이에 막혀 있었다 — 위쪽(뚜껑 나사산 끝나는 지점 바로 아래)
+            # 으로 넓혀 높이를 410으로 키웠다.
+            # [2026-08-24 2차] _fit_cover가 하단 기준 크롭으로 바뀌면서 화면 아래쪽은
+            # 더 이상 잘리지 않으므로, 자 몸통 기준 여유 안에서 100px 더 아래로 내렸다
+            # (자 받침 시작점 y≈6020보다 위, 60px 여유).
+            ("jar", _rect(1100, 5550, 1780, 5960)),
         ],
-        padding_ratio=0.05,
-    ),
-    "bottom_left": BrandKitTemplate(
-        name="bottom_left",
-        image_path=os.path.join(_ASSET_DIR, "bottom_left.png"),
-        regions=[
-            ("spray_bottle", _rect(342, 232, 416, 263)),
-            ("jar", _rect(258, 296, 304, 308)),
-            ("dropper_bottle", _rect(450, 253, 510, 277)),
-        ],
-        padding_ratio=0.05,
+        # [2026-08-24] 0.14 -> 0.05 -> 0.02: 로고를 계속 더 크게 해달라는 요청.
+        # 값이 작을수록 라벨 영역 안에서 로고가 차지하는 비율이 커진다(padding_ratio는
+        # "깎아내는 여백" 비율). 0에 가까울수록 라벨 영역 경계에 거의 닿을 때까지 커진다.
+        padding_ratio=0.02,
     ),
 }
