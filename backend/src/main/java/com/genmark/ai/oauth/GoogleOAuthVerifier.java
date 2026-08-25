@@ -3,6 +3,8 @@ package com.genmark.ai.oauth;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.genmark.ai.web.exception.ApiException;
 import com.genmark.ai.web.exception.ErrorCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -15,6 +17,7 @@ import org.springframework.web.client.RestClientException;
  */
 @Component
 public class GoogleOAuthVerifier implements OAuthVerifier {
+    private static final Logger log = LoggerFactory.getLogger(GoogleOAuthVerifier.class);
 
     private final RestClient restClient;
     private final String expectedClientId;
@@ -41,6 +44,7 @@ public class GoogleOAuthVerifier implements OAuthVerifier {
                     .retrieve()
                     .body(TokenInfo.class);
         } catch (RestClientException e) {
+            log.warn("Google tokeninfo 호출 실패: {}", e.toString());
             throw new ApiException(ErrorCode.OAUTH_VERIFICATION_FAILED, "구글 idToken 검증에 실패했습니다.");
         }
 
