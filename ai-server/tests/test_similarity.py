@@ -6,6 +6,7 @@
 import base64
 import io
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -278,6 +279,119 @@ def test_graphic_logo_styles_are_accepted(ready, stub_search):
             json={"imageBase64": png_base64(), "logoStyle": style, "topK": 3},
         )
         assert res.status_code == 200, style
+
+
+def test_generated_match_is_included_and_marked(ready, monkeypatch):
+    """관리자가 등록해둔 자체 생성 로고도 KIPRIS 매치와 한 리스트로 섞여 나온다."""
+    monkeypatch.setattr(
+        "app.services.similarity_service.DinoService.extract_features",
+        lambda src: [0.0] * 768,
+    )
+    monkeypatch.setattr(
+        "app.services.similarity_service.FaissService.search_similar",
+        lambda vector, top_k=3: [
+            {"source": "KIPRIS", "cos": 0.85,
+             "meta": fake_meta("402022012640", "raw/IMG/402022012640_tm000001.jpg")},
+            {"source": "GENERATED", "cos": 0.95,
+             "meta": {"candidate_public_id": "574249fe-9642-4234-b4f3-818beeecb95d"}},
+        ],
+    )
+    body = client.post(
+        "/api/v1/similarity/search",
+        json={"imageBase64": png_base64(), "topK": 3},
+    ).json()
+
+    assert [m["source"] for m in body["matches"]] == ["GENERATED", "KIPRIS"]
+    generated = body["matches"][0]
+    assert generated["applicationNumber"] == "574249fe-9642-4234-b4f3-818beeecb95d"
+    assert generated["name"].strip() and generated["category"].strip()
+
+
+def test_generated_match_skips_note_but_keeps_kipris_note(ready, monkeypatch):
+    """note는 실제 파일이 있는 KIPRIS 매치에 대해서만 요청한다."""
+    monkeypatch.setattr(
+        "app.services.similarity_service.DinoService.extract_features",
+        lambda src: [0.0] * 768,
+    )
+    monkeypatch.setattr(
+        "app.services.similarity_service.FaissService.search_similar",
+        lambda vector, top_k=3: [
+            {"source": "GENERATED", "cos": 0.95,
+             "meta": {"candidate_public_id": "gen-1"}},
+            {"source": "KIPRIS", "cos": 0.85,
+             "meta": fake_meta("402022012640", "raw/IMG/a.jpg")},
+        ],
+    )
+    monkeypatch.setattr("app.services.note_service.is_enabled", lambda: True)
+    seen_paths = {}
+
+    def fake_generate_notes(query, paths):
+        seen_paths["paths"] = list(paths)
+        return ["방패 외곽선이 닮았어요"]
+
+    monkeypatch.setattr("app.services.note_service.generate_notes", fake_generate_notes)
+
+    body = client.post(
+        "/api/v1/similarity/search",
+        json={"imageBase64": png_base64(), "topK": 2},
+    ).json()
+
+    # generate_notes에는 KIPRIS 이미지경로만 넘어가야 한다
+    assert seen_paths["paths"] == ["raw/IMG/a.jpg"]
+    generated, kipris = body["matches"]
+    assert generated["source"] == "GENERATED"
+    assert generated["note"] is None
+    assert kipris["source"] == "KIPRIS"
+    assert kipris["note"] == "방패 외곽선이 닮았어요"
+
+
+def test_faiss_service_merges_and_dedups_across_both_pools(monkeypatch):
+    """FaissService.search_similar 자체가 KIPRIS + generation-data를 병합·중복제거하는지."""
+    from app.services.faiss_service import FaissService
+
+    q = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+    kipris_vectors = np.array([
+        [1.0, 0.0, 0.0],   # idx 0, cos=1.0과 사실상 동일 -> generation 중복과 겹칠 수 있음
+        [0.0, 1.0, 0.0],   # idx 1, cos=0.0
+    ], dtype=np.float32)
+
+    class FakeIndexManager:
+        vectors = kipris_vectors
+
+        @staticmethod
+        def all_scores(vec):
+            return kipris_vectors @ vec
+
+        @staticmethod
+        def search(vec, top_k):
+            scores = (kipris_vectors @ vec[0]).tolist()
+            order = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+            return [scores[i] for i in order], order
+
+    monkeypatch.setattr("app.services.faiss_service.index_manager", FakeIndexManager)
+    monkeypatch.setattr("app.services.faiss_service.metadata_store",
+                         type("M", (), {"get": staticmethod(lambda idx: {"idx": idx})}))
+
+    gen_vectors = np.array([
+        [0.999, 0.001, 0.0],   # 거의 idx 0(KIPRIS)과 동일 -> dedup으로 하나만 남아야 함
+        [0.0, 0.0, 1.0],       # 완전히 다른 로고, cos=0.0
+    ], dtype=np.float32)
+    monkeypatch.setattr(
+        "app.services.generation_vector_service.load_all",
+        lambda: (gen_vectors, ["dup-of-kipris-0", "unique-gen"]),
+    )
+
+    results = FaissService.search_similar(q.tolist(), top_k=5, pool=5)
+
+    sources_and_ids = [
+        (r["source"], r["meta"].get("candidate_public_id", r["meta"].get("idx")))
+        for r in results
+    ]
+    # KIPRIS idx0과 generation "dup-of-kipris-0"은 코사인이 0.99를 넘어 하나만 남는다
+    assert sources_and_ids.count(("KIPRIS", 0)) + sources_and_ids.count(("GENERATED", "dup-of-kipris-0")) == 1
+    # 서로 다른 로고들은 모두 살아남는다
+    assert ("GENERATED", "unique-gen") in sources_and_ids
+    assert ("KIPRIS", 1) in sources_and_ids
 
 
 def test_snake_case_request_is_rejected(ready):
