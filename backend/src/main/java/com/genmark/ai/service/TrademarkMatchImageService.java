@@ -1,7 +1,9 @@
 package com.genmark.ai.service;
 
+import com.genmark.ai.entity.LogoCandidate;
 import com.genmark.ai.entity.TrademarkAnalysis;
 import com.genmark.ai.entity.TrademarkMatch;
+import com.genmark.ai.repository.LogoCandidateRepository;
 import com.genmark.ai.repository.TrademarkAnalysisRepository;
 import com.genmark.ai.repository.TrademarkMatchRepository;
 import com.genmark.ai.web.exception.ApiException;
@@ -26,12 +28,16 @@ public class TrademarkMatchImageService {
     private final ProjectLookupService projectLookup;
     private final TrademarkAnalysisRepository analysisRepository;
     private final TrademarkMatchRepository matchRepository;
+    private final LogoCandidateRepository candidateRepository;
+    private final LogoFileStorage storage;
     private final Path imageRoot;
     private final long maxImageBytes;
 
     public TrademarkMatchImageService(ProjectLookupService projectLookup,
                                       TrademarkAnalysisRepository analysisRepository,
                                       TrademarkMatchRepository matchRepository,
+                                      LogoCandidateRepository candidateRepository,
+                                      LogoFileStorage storage,
                                       @Value("${app.trademark-image-root}") String imageRoot,
                                       @Value("${app.trademark-image-max-bytes}") long maxImageBytes) {
         if (maxImageBytes <= 0 || maxImageBytes > Integer.MAX_VALUE) {
@@ -40,6 +46,8 @@ public class TrademarkMatchImageService {
         this.projectLookup = projectLookup;
         this.analysisRepository = analysisRepository;
         this.matchRepository = matchRepository;
+        this.candidateRepository = candidateRepository;
+        this.storage = storage;
         this.imageRoot = Path.of(imageRoot).toAbsolutePath().normalize();
         this.maxImageBytes = maxImageBytes;
     }
@@ -54,6 +62,9 @@ public class TrademarkMatchImageService {
         }
         TrademarkMatch match = matchRepository.findByAnalysisIdAndRank(analysis.getId(), rank)
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (match.getSource() == TrademarkMatch.Source.GENERATED) {
+            return loadGenerated(match);
+        }
         Path image = resolveImage(match.getImagePath());
         try (FileChannel channel = FileChannel.open(image, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
             long size = channel.size();
@@ -67,6 +78,22 @@ public class TrademarkMatchImageService {
         } catch (IOException | SecurityException exception) {
             throw new ApiException(ErrorCode.STORAGE_ERROR);
         }
+    }
+
+    /**
+     * 자체 생성 로고 매치는 KIPRIS 이미지 파일 대신, 후보(imagePath에 담긴
+     * candidatePublicId)를 우리 DB·스토리지에서 그대로 읽어 돌려준다.
+     */
+    private ImageContent loadGenerated(TrademarkMatch match) {
+        LogoCandidate candidate = candidateRepository.findByPublicId(match.getImagePath())
+                .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
+        byte[] bytes = storage.read(candidate.getStorageKey());
+        if (bytes.length == 0 || bytes.length > maxImageBytes) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        MediaType contentType = detectContentType(bytes);
+        String extension = contentType.equals(MediaType.IMAGE_PNG) ? ".png" : ".jpg";
+        return new ImageContent(bytes, contentType, candidate.getPublicId() + extension);
     }
 
     private Path resolveImage(String storedPath) {

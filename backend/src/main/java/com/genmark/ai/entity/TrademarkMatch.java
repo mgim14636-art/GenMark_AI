@@ -9,6 +9,9 @@ import lombok.*;
 })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class TrademarkMatch {
+    /** KIPRIS 등록 상표 매치인지, 관리자가 등록해둔 자체 생성 로고 매치인지. */
+    public enum Source { KIPRIS, GENERATED }
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
@@ -25,4 +28,8 @@ public class TrademarkMatch {
     @Column(nullable = false) private int similarity;
     @Column(name = "image_path", length = 500) private String imagePath;
     @Column(columnDefinition = "TEXT") private String note;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source", length = 20, columnDefinition = "VARCHAR(20)")
+    private Source source;
 }

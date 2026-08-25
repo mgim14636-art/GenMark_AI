@@ -1,0 +1,2 @@
+ALTER TABLE trademark_matches
+    ADD COLUMN source VARCHAR(20) NOT NULL DEFAULT 'KIPRIS';
