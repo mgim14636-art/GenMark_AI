@@ -323,6 +323,7 @@ export type TrademarkMatch = {
   imagePath: string | null
   imageUrl?: string
   note?: string | null
+  source?: 'KIPRIS' | 'GENERATED'
 }
 
 export const getLogoCandidateImageUrl = (storageKey: string) => {
