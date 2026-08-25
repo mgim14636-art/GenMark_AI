@@ -3830,7 +3830,7 @@ function CustomerApp() {
                   <div className="trademark-match-copy">
                     <strong>{match.name}</strong>
                     <span>{match.category}</span>
-                    <p>출원번호 {match.applicationNumber}</p>
+                    {match.source !== 'GENERATED' && <p>출원번호 {match.applicationNumber}</p>}
                     {match.note?.trim() && <p className="trademark-match-note">{match.note}</p>}
                   </div>
                   <strong className="trademark-match-score">{match.similarity}점</strong>
