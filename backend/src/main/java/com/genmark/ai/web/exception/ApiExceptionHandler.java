@@ -4,6 +4,8 @@ import com.genmark.ai.web.dto.ApiErrorBody;
 import com.genmark.ai.web.dto.ApiErrorDetail;
 import com.genmark.ai.web.dto.ApiErrorResponse;
 import com.genmark.ai.web.dto.ApiMeta;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +32,7 @@ import java.util.List;
 @RestControllerAdvice(basePackages = "com.genmark.ai.web.controller")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiErrorResponse> handleApiException(ApiException ex) {
@@ -51,6 +54,8 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception ex) {
+        // 분류되지 않은 예외는 원인을 알 수 없으면 다음에 또 못 찾으므로 반드시 남긴다.
+        log.error("Unhandled exception reached ApiExceptionHandler", ex);
         return buildResponse(ErrorCode.INTERNAL_ERROR, ErrorCode.INTERNAL_ERROR.getDefaultMessage(), List.of());
     }
 

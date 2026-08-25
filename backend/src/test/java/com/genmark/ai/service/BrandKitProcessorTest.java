@@ -44,17 +44,17 @@ class BrandKitProcessorTest {
                     && "젠마크".equals(survey.get("brand_name"));
         }))).thenReturn(new BrandKitAiClient.Result(
                 List.of("thumbnail-png"), false, List.of()));
-        when(storage.store("brand-kits/kit-thumbnail", 1, "thumbnail-png"))
+        when(storage.store("brand_kits/kit-thumbnail", 1, "thumbnail-png"))
                 .thenReturn(new LogoFileStorage.StoredImage(
-                        "logos/brand-kits/kit-thumbnail/candidate-1.png", 1000, 1000));
+                        "brand_kits/kit-thumbnail/candidate-1.png", 1000, 1000));
 
         new BrandKitProcessor(repository, aiClient, storage).process(8L);
 
         assertThat(kit.getStatus()).isEqualTo(BrandKit.Status.SUCCEEDED);
         assertThat(kit.getStorageKey())
-                .isEqualTo("logos/brand-kits/kit-thumbnail/candidate-1.png");
+                .isEqualTo("brand_kits/kit-thumbnail/candidate-1.png");
         assertThat(kit.isPreliminary()).isFalse();
-        verify(storage).store("brand-kits/kit-thumbnail", 1, "thumbnail-png");
+        verify(storage).store("brand_kits/kit-thumbnail", 1, "thumbnail-png");
         verify(storage, never()).store(anyString(), eq(2), anyString());
         verify(storage).storeBrandKitSourceKey("kit-thumbnail", "logos/selected.png");
     }
@@ -109,20 +109,20 @@ class BrandKitProcessorTest {
                         new BrandKitAiClient.PrintAsset("back-svg", "back-pdf")),
                 true, List.of("AI 연출 배경 미적용")));
         when(storage.store(anyString(), eq(1), eq("front-png")))
-                .thenReturn(new LogoFileStorage.StoredImage("brand-kits/front.png", 100, 100));
+                .thenReturn(new LogoFileStorage.StoredImage("brand_kits/front.png", 100, 100));
         when(storage.store(anyString(), eq(2), eq("back-png")))
-                .thenReturn(new LogoFileStorage.StoredImage("brand-kits/back.png", 100, 100));
+                .thenReturn(new LogoFileStorage.StoredImage("brand_kits/back.png", 100, 100));
 
         new BrandKitProcessor(repository, aiClient, storage).process(9L);
 
         assertThat(kit.getStatus()).isEqualTo(BrandKit.Status.SUCCEEDED);
-        assertThat(kit.getStorageKey()).isEqualTo("brand-kits/front.png");
+        assertThat(kit.getStorageKey()).isEqualTo("brand_kits/front.png");
         assertThat(kit.isPreliminary()).isTrue();
         assertThat(kit.getWarnings()).containsExactly("AI 연출 배경 미적용");
         verify(storage).read("logos/original.png");
         verify(storage).readSvg("generation-1", 1, SVG_REVISION);
-        verify(storage).store("brand-kits/kit-1", 1, "front-png");
-        verify(storage).store("brand-kits/kit-1", 2, "back-png");
+        verify(storage).store("brand_kits/kit-1", 1, "front-png");
+        verify(storage).store("brand_kits/kit-1", 2, "back-png");
         verify(storage).storeBrandKitPrintAsset("kit-1", 1, "front-svg", "front-pdf");
         verify(storage).storeBrandKitPrintAsset("kit-1", 2, "back-svg", "back-pdf");
         verify(storage).storeBrandKitSourceKey("kit-1", "logos/original.png");

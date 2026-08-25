@@ -52,7 +52,7 @@ public class LogoGenerationProcessor {
             }
             List<LogoFileStorage.StoredImage> images = new ArrayList<>(EXPECTED_LOGO_COUNT);
             for (int i = 0; i < EXPECTED_LOGO_COUNT; i++) {
-                images.add(storage.store(generation.getPublicId(), i + 1, logos.get(i).imageBase64()));
+                images.add(storage.store("origin_logos/" + generation.getPublicId(), i + 1, logos.get(i).imageBase64()));
                 if (logos.get(i).svg() != null) {
                     storage.storeOriginalSvg(generation.getPublicId(), i + 1, logos.get(i).svg());
                 }

@@ -10,10 +10,13 @@ import com.genmark.ai.web.exception.ApiException;
 import com.genmark.ai.web.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -366,6 +369,48 @@ class BrandKitServiceTest {
     }
 
     @Test
+    void downloadsThumbnailAsZipWithSamePhotoInPngAndSvg() throws IOException {
+        ProjectLookupService projectLookup = mock(ProjectLookupService.class);
+        LogoCandidateRepository candidateRepository = mock(LogoCandidateRepository.class);
+        BrandKitRepository brandKitRepository = mock(BrandKitRepository.class);
+        BrandKitWorker worker = mock(BrandKitWorker.class);
+        LogoFileStorage storage = mock(LogoFileStorage.class);
+        BrandKitService service = new BrandKitService(projectLookup, candidateRepository,
+                brandKitRepository, worker, storage);
+        Member member = Member.builder().id(7L).build();
+        BiProject project = BiProject.builder().id(3L).publicId("project-1").member(member).build();
+        LogoGeneration generation = LogoGeneration.builder().publicId("generation-1").biProject(project).build();
+        LogoCandidate candidate = LogoCandidate.builder().id(4L).publicId("candidate-1")
+                .candidateOrder(2).generation(generation).build();
+        BrandKit kit = BrandKit.builder().publicId("kit-1").candidate(candidate)
+                .kitType(BrandKit.KitType.THUMBNAIL).status(BrandKit.Status.SUCCEEDED)
+                .storageKey("thumbnail-key").build();
+        byte[] thumbnailPng = renderPng(12, 8);
+        when(projectLookup.requireOwned("project-1", 7L)).thenReturn(project);
+        when(brandKitRepository.findByPublicId("kit-1")).thenReturn(Optional.of(kit));
+        when(storage.brandKitStorageKeys("kit-1", "thumbnail-key")).thenReturn(List.of("thumbnail-key"));
+        when(storage.read("thumbnail-key")).thenReturn(thumbnailPng);
+
+        BrandKitService.BrandKitArchive archive = service.downloadArchive(
+                "project-1", "candidate-1", "kit-1", 7L);
+
+        assertThat(archive.filename()).isEqualTo("genmark-thumbnail.zip");
+        Map<String, byte[]> entries = unzipEntries(archive.bytes());
+        assertThat(entries).containsKeys("thumbnail.png", "thumbnail.svg");
+        assertThat(entries.get("thumbnail.png")).isEqualTo(thumbnailPng);
+        String svg = new String(entries.get("thumbnail.svg"), StandardCharsets.UTF_8);
+        assertThat(svg).contains("width=\"12\"", "height=\"8\"",
+                "data:image/png;base64," + Base64.getEncoder().encodeToString(thumbnailPng));
+    }
+
+    private byte[] renderPng(int width, int height) throws IOException {
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(image, "png", out);
+        return out.toByteArray();
+    }
+
+    @Test
     void deletesOwnedCompletedBrandKitAndItsArtifacts() {
         ProjectLookupService projectLookup = mock(ProjectLookupService.class);
         LogoCandidateRepository candidateRepository = mock(LogoCandidateRepository.class);
@@ -407,6 +452,17 @@ class BrandKitServiceTest {
                 .email("kim@example.com")
                 .address("Gwangju")
                 .build();
+    }
+
+    private Map<String, byte[]> unzipEntries(byte[] bytes) throws IOException {
+        Map<String, byte[]> entries = new LinkedHashMap<>();
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(bytes))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                entries.put(entry.getName(), zip.readAllBytes());
+            }
+        }
+        return entries;
     }
 
     private Map<String, String> unzipTextEntries(byte[] bytes) throws IOException {
