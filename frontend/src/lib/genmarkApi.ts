@@ -167,6 +167,10 @@ export type AdminMember = {
   creditBalance: number
   paidUser: boolean
   createdAt: string
+  onboardingCompleted: boolean
+  onboardingUsage: string[]
+  onboardingAudience: string | null
+  onboardingCompletedAt: string | null
 }
 
 export type AdminMetricPoint = {
@@ -199,6 +203,7 @@ export type AdminAnalyticsResponse = {
     startedGenerationMembers: number
     providerCounts: AdminMetricPoint[]
     onboardingUsage: AdminMetricPoint[]
+    onboardingAudience: AdminMetricPoint[]
     trend: AdminTrendPoint[]
     funnel: AdminMetricPoint[]
   }
@@ -263,6 +268,23 @@ export type AdminLogoMemberRecord = {
   memberName: string
   generatedLogos: AdminLogoAsset[]
   downloadedLogos: AdminLogoAsset[]
+}
+
+export type AdminSimilarityVectorRow = {
+  id: number
+  candidateId: string
+  projectId: string
+  projectType: 'CI' | 'BI'
+  name: string
+  imageUrl: string
+  vectorizedAt: string
+}
+
+export type AdminSimilarityCompareResult = {
+  similarity: number
+  riskLevel: 'SAFE' | 'MODERATE' | 'CAUTION'
+  disclaimer: string
+  note?: string | null
 }
 
 export type AdminSurveyResponse = {
@@ -559,6 +581,7 @@ export const meApi = {
   }),
   getBrandKits: () => apiRequest<BrandKit[]>('/me/brand-kits'),
   getDownloads: (type?: 'CI' | 'BI') => apiRequest<DownloadRecord[]>(`/me/downloads${type ? `?type=${type}` : ''}`),
+  downloadArchive: (downloadId: number) => downloadAuthenticatedFile(`/me/downloads/${downloadId}/archive`),
   deleteDownload: (downloadId: number) => apiRequest<void>(`/me/downloads/${downloadId}`, {
     method: 'DELETE',
   }),
@@ -583,6 +606,15 @@ export const adminApi = {
   candidateImage: (token: string, candidateId: string) => downloadAuthenticatedFileWithToken(token, `/admin/candidates/${candidateId}/image`),
   memberDownloads: (token: string, memberId: number, type?: 'CI' | 'BI') => apiRequestWithToken<DownloadRecord[]>(token, `/admin/members/${memberId}/downloads${type ? `?type=${type}` : ''}`),
   downloadImage: (token: string, downloadId: number) => downloadAuthenticatedFileWithToken(token, `/admin/downloads/${downloadId}/image`),
+  vectorizeLogo: (token: string, candidateId: string) => apiRequestWithToken<AdminSimilarityVectorRow>(token, '/admin/similarity-vectors', {
+    method: 'POST',
+    body: JSON.stringify({ candidateId }),
+  }),
+  similarityVectors: (token: string) => apiRequestWithToken<AdminSimilarityVectorRow[]>(token, '/admin/similarity-vectors'),
+  compareSimilarity: (token: string, vectorId: number, imageBase64: string) => apiRequestWithToken<AdminSimilarityCompareResult>(token, `/admin/similarity-vectors/${vectorId}/compare`, {
+    method: 'POST',
+    body: JSON.stringify({ imageBase64 }),
+  }),
 }
 
 export async function waitForLogoGeneration(projectId: string, generationId: string): Promise<LogoGeneration> {
