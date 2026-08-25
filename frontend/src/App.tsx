@@ -2216,6 +2216,11 @@ function CustomerApp() {
       if (candidates.length !== GENERATED_LOGO_COUNT) throw new Error('생성된 로고 1개를 불러오지 못했어요.')
 
       await applyLogoCandidateState(nextProjectId, candidates)
+      // 새로 생성된 후보는 이전 후보의 브랜드 키트와 무관하므로, 남아있던 상태를 지운다
+      // (안 그러면 재생성 직후 결과 화면에 예전 후보의 "브랜드 키트 상태: 완료"가 그대로 남는다).
+      setBrandKit(null)
+      setBrandKitError('')
+      setBrandKitType(null)
       if (analyzeTrademark) {
         try {
           const selectedIndex = candidates.findIndex((candidate) => candidate.selected)
@@ -2540,13 +2545,9 @@ function CustomerApp() {
       if (projectId && candidate.candidateId) {
         const download = await projectsApi.downloadCandidate(projectId, candidate.candidateId)
         setDownloadHistory((current) => [download, ...current.filter((item) => item.downloadId !== download.downloadId)])
-        if (candidate.svgUrl) {
-          const svg = await projectsApi.getCandidateSvg(candidate.svgUrl)
-          blob = new Blob([svg], { type: 'image/svg+xml' })
-          extension = 'svg'
-        } else {
-          blob = await downloadAuthenticatedFile(download.imageUrl)
-        }
+        // PNG·SVG를 하나로 묶은 zip으로 받는다(벡터 원본이 없는 예전 로고는 서버가 PNG만 담아 돌려줌).
+        blob = await meApi.downloadArchive(download.downloadId)
+        extension = 'zip'
       } else if (candidate.svgUrl) {
         const svg = await projectsApi.getCandidateSvg(candidate.svgUrl)
         blob = new Blob([svg], { type: 'image/svg+xml' })
@@ -3609,58 +3610,24 @@ function CustomerApp() {
   }
 
   const renderTrademarkLoadingScreen = () => {
-    const analysisSteps = [
-      { number: '1', text: '로고의 시각적 특징을 추출하고 있어요', state: 'complete' },
-      { number: '2', text: '비슷한 도형과 구도의 상표를 찾고 있어요', state: 'complete' },
-      { number: '3', text: '가장 유사한 상표와 점수를 정리하고 있어요', state: 'active' },
-    ]
-
     return (
       <main className="trademark-loading-screen" aria-labelledby="trademark-loading-title">
         <section className="trademark-loading-content">
-          <div className="trademark-brand-lockup" aria-label="GenMark AI">
-            <BrandLogo className="trademark-brand-mark" />
-            <span><span className="brand-mark-accent">GenMark AI</span></span>
-          </div>
-
-          <div className="trademark-progress" aria-label="상표 분석 3단계 중 2단계">
-            <span className="trademark-step-badge">2 / 3</span>
-            <div className="trademark-progress-track" aria-hidden="true">
-              <span className="trademark-progress-line" />
-              <span className="trademark-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-              <span className="trademark-progress-node complete"><Check size={14} strokeWidth={2.5} /></span>
-              <span className="trademark-progress-node active" />
-              <span className="trademark-progress-node" />
-            </div>
-          </div>
-
           <header className="trademark-loading-heading">
             <h1 id="trademark-loading-title">비슷한 화장품<br /><strong>상표 이미지</strong>를 찾고 있어요</h1>
             <p>생성한 로고의 형태와 배치를<br />기존 등록 상표 이미지와 비교하고 있어요.</p>
           </header>
 
-          <div className="trademark-search-visual" aria-label="상표 이미지 비교 분석 중">
-            <div className="trademark-reference-card reference-left"><span className="trademark-leaf-icon">♢</span><i /><i /></div>
-            <div className="trademark-magnifier"><span /></div>
-            <div className="trademark-reference-card reference-right"><span className="trademark-bottle-icon">▯</span><i /><i /></div>
-            <Sparkles className="trademark-visual-sparkle sparkle-a" aria-hidden="true" size={24} strokeWidth={1.6} />
-            <Sparkles className="trademark-visual-sparkle sparkle-b" aria-hidden="true" size={20} strokeWidth={1.6} />
+          <div className="logo-loading-orb" aria-label="상표 분석 진행 중">
+            <AiLoader label="Analyze" />
           </div>
 
-          <section className="trademark-analysis-steps" aria-label="상표 분석 단계">
-            {analysisSteps.map((step) => (
-              <div className={`trademark-analysis-step ${step.state}`} key={step.number}>
-                <span className="trademark-analysis-number">{step.number}</span>
-                <p>{step.text}</p>
-                {step.state === 'complete' ? <span className="trademark-analysis-check" aria-hidden="true"><Check size={18} strokeWidth={2.5} /></span> : <span className="trademark-analysis-spinner" aria-hidden="true" />}
-              </div>
-            ))}
-          </section>
-
-          <section className="trademark-info-card" aria-label="상표 분석 안내">
-            <span className="trademark-info-icon" aria-hidden="true"><Info size={24} strokeWidth={1.8} /></span>
-            <p>이름 검색이 아니라<br /><strong>로고 이미지의 외관</strong>을 비교하는 과정이에요.</p>
-            <span className="trademark-info-art" aria-hidden="true">⌕</span>
+          <section className="logo-loading-steps" aria-label="상표 분석 진행 상태">
+            <article className="logo-loading-step active">
+              <span className="logo-loading-step-icon icon-folder" aria-hidden="true"><FolderCheck size={47} strokeWidth={1.8} /></span>
+              <p>결과를 비교하기 쉽게 정리하고 있어요</p>
+              <span className="logo-loading-dots" aria-label="진행 중"><i /><i /><i /></span>
+            </article>
           </section>
 
           <p className="trademark-waiting"><Sparkles aria-hidden="true" size={18} strokeWidth={1.6} /> 분석 중이에요. 잠시만 기다려주세요. <Sparkles aria-hidden="true" size={18} strokeWidth={1.6} /></p>
@@ -3751,13 +3718,9 @@ function CustomerApp() {
 
     return (
       <main className="trademark-result-screen trademark-result-screen-redesign" aria-labelledby="trademark-result-title">
-        <header className="trademark-result-header trademark-result-header-redesign">
-          <button className="trademark-result-back" type="button" aria-label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')}><ChevronLeft aria-hidden="true" size={22} strokeWidth={1.8} /></button>
-          <div className="trademark-result-brand"><BrandLogo /><strong><span className="brand-mark-accent">GenMark AI</span></strong></div>
-        </header>
+        <ScreenBackButton label="로고 결과 화면으로 돌아가기" onClick={() => setMode('result')} />
 
         <section className="trademark-result-content trademark-result-content-redesign">
-          <div className="trademark-result-complete trademark-result-complete-redesign"><CircleCheck aria-hidden="true" size={17} strokeWidth={2} /> 분석을 마쳤어요</div>
           <h1 id="trademark-result-title">생성한 로고의<br /><strong>상표 유사도를 확인했어요</strong></h1>
           <p className="trademark-result-lead">KIPRIS 등록 상표 이미지와 비교해 현재 로고가 얼마나 비슷한지 살펴봤어요.</p>
 
@@ -4046,8 +4009,8 @@ function CustomerApp() {
           </header>
 
           {completedBrandKit && brandKitImageUrls.length > 0 ? (
-            <section className={completedBrandKit.kitType === 'BUSINESS_CARD' ? 'brand-kit-result-preview business-card-result-preview' : 'brand-kit-result-preview'} aria-labelledby="brand-kit-result-title">
-              <div className={completedBrandKit.kitType === 'BUSINESS_CARD' ? 'brand-kit-result-images business-card-result-images' : 'brand-kit-result-images'}>
+            <section className="brand-kit-result-preview business-card-result-preview" aria-labelledby="brand-kit-result-title">
+              <div className="brand-kit-result-images business-card-result-images">
                 {brandKitImageUrls.map((imageUrl, index) => {
                   const sideLabel = completedBrandKit.kitType === 'BUSINESS_CARD'
                     ? index === 0 ? '앞면' : '뒷면'
@@ -4056,11 +4019,6 @@ function CustomerApp() {
                     <figure className="brand-kit-result-image" key={`${imageUrl}-${index}`}>
                       <figcaption>
                         <strong>{sideLabel}</strong>
-                        {completedBrandKit.kitType !== 'BUSINESS_CARD' && (
-                          <a href={imageUrl} download="genmark-thumbnail.png">
-                            <Download aria-hidden="true" size={17} strokeWidth={1.9} />다운로드
-                          </a>
-                        )}
                       </figcaption>
                       <button className="brand-kit-result-image-button" type="button" aria-label={`${sideLabel} 이미지 크게 보기`} onClick={() => setBrandKitPreview({ imageUrls: [imageUrl], label: sideLabel })}>
                         <img src={imageUrl} alt={`완성된 ${completedBrandKit.kitType === 'BUSINESS_CARD' ? `명함 ${sideLabel}` : '제품 썸네일'} 브랜드 키트`} />
@@ -4079,10 +4037,10 @@ function CustomerApp() {
                     {completedBrandKit.warnings.map((warning) => <li key={warning}>{warning}</li>)}
                   </ul>
                 ) : null}
-                {completedBrandKit.kitType === 'BUSINESS_CARD' && !missingBusinessCardBack && (
+                {!missingBusinessCardBack && (
                   <button className="brand-kit-download-button" type="button" disabled={brandKitDownloading} onClick={() => void downloadBrandKitArchive(completedBrandKit)}>
                     <Download aria-hidden="true" size={18} strokeWidth={1.9} />
-                    {brandKitDownloading ? '묶는 중…' : 'PNG·SVG·PDF 한 번에 받기'}
+                    {brandKitDownloading ? '묶는 중…' : completedBrandKit.kitType === 'BUSINESS_CARD' ? 'PNG·SVG·PDF 한 번에 받기' : 'PNG·SVG 한 번에 받기'}
                   </button>
                 )}
                 {missingBusinessCardBack && (
@@ -4750,23 +4708,6 @@ function CustomerApp() {
       }
       return sourceUrls.filter(Boolean)
     }
-    const downloadMypageLogoSvg = async (item: MypageAssetItem) => {
-      if (item.kind !== 'logo' || !item.projectId || !item.candidateId) return false
-      const candidate = mypageGeneratedLogoCandidates[item.candidateId]
-        ?? await projectsApi.getCandidate(item.projectId, item.candidateId)
-      if (!candidate.svgUrl) return false
-
-      const svg = await projectsApi.getCandidateSvg(candidate.svgUrl)
-      const blobUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
-      const link = document.createElement('a')
-      link.href = blobUrl
-      link.download = `${item.title.replace(/[^\w가-힣-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'genmark-logo'}.svg`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0)
-      return true
-    }
     const downloadMypageAsset = async (item: MypageAssetItem) => {
       if (item.brandKit) {
         setProjectError('')
@@ -4774,19 +4715,22 @@ function CustomerApp() {
         return
       }
       try {
-        // 마이페이지에서 받는 로고는 이 함수를 거치는 경로(SVG 직접 다운로드, 아래 공개
-        // PNG 링크)가 여러 개라 백엔드 다운로드 기록 API 호출이 통째로 빠져 있었다
-        // (logo_downloads에 안 쌓이고, 관리자 통계에도 안 잡힘). 여기 한 곳에서만
-        // 기록해서 어느 경로로 받든 빠짐없이 잡히게 한다. 실패해도 파일은 그대로 받게 둔다.
+        // 로고는 다운로드를 기록한 뒤, 그 기록을 근거로 PNG·SVG를 zip 하나로 묶어 받는다
+        // (결과 화면의 다운로드와 동일한 방식). 다운로드 기록 자체는 관리자 통계에도 쓰이므로
+        // 여기서 남겨야 어느 화면에서 받든 빠짐없이 잡힌다.
         if (item.kind === 'logo' && item.projectId && item.candidateId) {
-          try {
-            const download = await projectsApi.downloadCandidate(item.projectId, item.candidateId)
-            setDownloadHistory((current) => [download, ...current.filter((existing) => existing.downloadId !== download.downloadId)])
-          } catch {
-            // 기록 실패는 무시한다.
-          }
+          const download = await projectsApi.downloadCandidate(item.projectId, item.candidateId)
+          setDownloadHistory((current) => [download, ...current.filter((existing) => existing.downloadId !== download.downloadId)])
+          const blob = await meApi.downloadArchive(download.downloadId)
+          const link = document.createElement('a')
+          link.href = URL.createObjectURL(blob)
+          link.download = `${item.title.replace(/[^\w가-힣-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'genmark-logo'}.zip`
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+          URL.revokeObjectURL(link.href)
+          return
         }
-        if (await downloadMypageLogoSvg(item)) return
         const isPublicAsset = item.imageUrl.startsWith('/uploads/') || item.imageUrl.startsWith('/mypage/')
         if (isPublicAsset) {
           const link = document.createElement('a')

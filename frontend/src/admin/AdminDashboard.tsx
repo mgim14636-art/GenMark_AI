@@ -1,11 +1,13 @@
-import { Fragment, FormEvent, useEffect, useRef, useState } from 'react'
+import { Fragment, ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react'
 import {
+  ArrowLeftRight,
   ArrowUpRight,
   BarChart3,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CircleCheck,
   CircleHelp,
   ClipboardCheck,
   Clock3,
@@ -14,12 +16,16 @@ import {
   FolderCheck,
   Heart,
   House,
+  ImageIcon,
   Palette,
   RefreshCw,
+  ScanSearch,
   Search,
   ShieldCheck,
   Sparkles,
+  ThumbsDown,
   ThumbsUp,
+  Upload,
   UserRound,
   UsersRound,
   X,
@@ -30,14 +36,15 @@ import {
   adminApi,
   type AdminAccount,
   type AdminAnalyticsResponse,
-  type AdminDashboardStats,
   type AdminMember,
   type AdminLogoMemberRecord,
+  type AdminSimilarityCompareResult,
+  type AdminSimilarityVectorRow,
   type AdminSurveyResponse,
 } from '../lib/genmarkApi'
 import './admin-dashboard.css'
 
-type DashboardSection = 'overview' | 'generation' | 'download' | 'signup' | 'requests' | 'members' | 'admins' | 'credits' | 'ci-generations' | 'bi-generations'
+type DashboardSection = 'overview' | 'generation' | 'download' | 'signup' | 'requests' | 'members' | 'admins' | 'credits' | 'ci-generations' | 'bi-generations' | 'similarity'
 
 type AdminDashboardProps = {
   standalone?: boolean
@@ -341,6 +348,8 @@ type LogoGenerationListProps = {
   openPanel: LogoPanelState
   setOpenPanel: (panel: LogoPanelState) => void
   adminToken: string
+  vectorizedCandidateIds: Set<string>
+  onVectorize: (candidateId: string) => Promise<void>
 }
 
 function AdminLogoThumb({ logo, memberName, track, adminToken }: { logo: LogoAsset; memberName: string; track: LogoGenerationTrack; adminToken: string }) {
@@ -374,8 +383,17 @@ function AdminLogoThumb({ logo, memberName, track, adminToken }: { logo: LogoAss
     : <div className="admin-logo-thumb-placeholder" aria-label="로고 이미지 불러오는 중" />
 }
 
-function AdminLogoGenerationList({ track, members, openPanel, setOpenPanel, adminToken }: LogoGenerationListProps) {
+function AdminLogoGenerationList({ track, members, openPanel, setOpenPanel, adminToken, vectorizedCandidateIds, onVectorize }: LogoGenerationListProps) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [vectorizingId, setVectorizingId] = useState('')
+  const handleVectorize = async (candidateId: string) => {
+    setVectorizingId(candidateId)
+    try {
+      await onVectorize(candidateId)
+    } finally {
+      setVectorizingId('')
+    }
+  }
   const getLogos = (member: LogoMemberRecord, type: 'generated' | 'downloaded') => type === 'generated' ? member.generatedLogos : member.downloadedLogos
   const filteredMembers = members.filter((member) => matchesAdminMemberSearch(searchQuery, member.memberId))
 
@@ -428,7 +446,26 @@ function AdminLogoGenerationList({ track, members, openPanel, setOpenPanel, admi
                         <div className="admin-logo-accordion-inner" role="region" aria-label={`${member.memberName} ${activeType === 'downloaded' ? '다운로드' : '생성'} 로고 상세`}>
                           <div className="admin-logo-accordion-heading"><strong>{activeType === 'downloaded' ? '다운로드한 로고' : '생성한 로고'}</strong><span>{activeLogos.length}개</span></div>
                           <div className="admin-logo-thumb-grid">
-                            {activeLogos.map((logo) => <article className="admin-logo-thumb-card" key={logo.id}><AdminLogoThumb logo={logo} memberName={member.memberName} track={track} adminToken={adminToken} /><div><strong>{logo.name}</strong><span>프로젝트 {logo.projectId}</span><small>{logo.date}</small></div></article>)}
+                            {activeLogos.map((logo) => {
+                              const isVectorized = vectorizedCandidateIds.has(logo.id)
+                              const isVectorizing = vectorizingId === logo.id
+                              return (
+                                <article className="admin-logo-thumb-card" key={logo.id}>
+                                  <AdminLogoThumb logo={logo} memberName={member.memberName} track={track} adminToken={adminToken} />
+                                  <div>
+                                    <strong>{logo.name}</strong>
+                                    <span>프로젝트 {logo.projectId}</span>
+                                    <small>{logo.date}</small>
+                                    {activeType === 'generated' && (
+                                      <button className={isVectorized ? 'admin-vectorize-button is-done' : 'admin-vectorize-button'} type="button" disabled={isVectorized || isVectorizing} onClick={() => void handleVectorize(logo.id)}>
+                                        <ScanSearch size={13} aria-hidden="true" />
+                                        <span>{isVectorized ? '벡터화 완료' : isVectorizing ? '벡터화 중…' : '벡터화'}</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </article>
+                              )
+                            })}
                           </div>
                         </div>
                       </div>
@@ -439,6 +476,134 @@ function AdminLogoGenerationList({ track, members, openPanel, setOpenPanel, admi
             })}
           </tbody>
         </table>
+      </div>
+    </section>
+  )
+}
+
+const SIMILARITY_RISK_LABELS: Record<string, string> = { SAFE: '낮은 유사도', MODERATE: '확인이 필요해요', CAUTION: '유사도가 높아요' }
+
+function AdminSimilarityTestPanel({ vectors, adminToken, standalone }: { vectors: AdminSimilarityVectorRow[]; adminToken: string; standalone: boolean }) {
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [comparisonFile, setComparisonFile] = useState<File | null>(null)
+  const [comparisonPreviewUrl, setComparisonPreviewUrl] = useState('')
+  const [compareLoading, setCompareLoading] = useState(false)
+  const [compareError, setCompareError] = useState('')
+  const [compareResult, setCompareResult] = useState<AdminSimilarityCompareResult | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const selectedVector = vectors.find((vector) => vector.id === selectedId) ?? null
+
+  useEffect(() => () => { if (comparisonPreviewUrl) URL.revokeObjectURL(comparisonPreviewUrl) }, [comparisonPreviewUrl])
+
+  const selectVector = (id: number) => {
+    setSelectedId(id)
+    setCompareResult(null)
+    setCompareError('')
+  }
+
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null
+    if (comparisonPreviewUrl) URL.revokeObjectURL(comparisonPreviewUrl)
+    setComparisonFile(file)
+    setComparisonPreviewUrl(file ? URL.createObjectURL(file) : '')
+    setCompareResult(null)
+    setCompareError('')
+  }
+
+  const readFileAsBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result ?? '')
+      resolve(result.includes(',') ? result.split(',')[1] : result)
+    }
+    reader.onerror = () => reject(new Error('이미지를 읽지 못했어요.'))
+    reader.readAsDataURL(file)
+  })
+
+  const runCompare = async () => {
+    if (!selectedVector || !comparisonFile) return
+    setCompareLoading(true)
+    setCompareError('')
+    try {
+      if (standalone) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500))
+        setCompareResult({ similarity: 41, riskLevel: 'MODERATE', disclaimer: '본 분석은 로고 이미지의 시각적 유사성을 보여주는 참고 자료이며, 상표 등록 가능 여부나 법적 침해 여부를 판단하지 않습니다.', note: '원형 배치와 곡선 중심의 실루엣에서 일부 비슷한 요소를 발견했어요.' })
+        return
+      }
+      const imageBase64 = await readFileAsBase64(comparisonFile)
+      const result = await adminApi.compareSimilarity(adminToken, selectedVector.id, imageBase64)
+      setCompareResult(result)
+    } catch (error) {
+      setCompareError(error instanceof Error ? error.message : '유사도를 확인하지 못했어요.')
+    } finally {
+      setCompareLoading(false)
+    }
+  }
+
+  const scoreTone = compareResult ? (compareResult.similarity >= 60 ? 'caution' : compareResult.similarity >= 30 ? 'moderate' : 'safe') : ''
+  const toThumbAsset = (vector: AdminSimilarityVectorRow) => ({ id: vector.candidateId, projectId: vector.projectId, imageUrl: vector.imageUrl, name: vector.name, date: vector.vectorizedAt })
+
+  return (
+    <section className="admin-record-page" aria-labelledby="similarity-test-title">
+      <div className="admin-section-heading">
+        <div>
+          <p className="admin-eyebrow">SIMILARITY TEST</p>
+          <h2 id="similarity-test-title">유사도 관리 및 테스트</h2>
+          <p className="admin-generation-description">벡터화된 자체 생성 로고와 임의의 이미지를 1:1로 비교합니다. 비교 결과는 저장되지 않아요.</p>
+        </div>
+      </div>
+
+      <div className="admin-similarity-layout">
+        <div className="admin-similarity-vector-list" role="list" aria-label="벡터화된 자체 생성 로고 목록">
+          {vectors.length === 0 ? (
+            <p className="admin-empty-table-state">아직 벡터화된 로고가 없어요. 생성 목록에서 "벡터화" 버튼을 먼저 눌러주세요.</p>
+          ) : vectors.map((vector) => (
+            <button key={vector.id} type="button" role="listitem" className={vector.id === selectedId ? 'admin-similarity-vector-card is-selected' : 'admin-similarity-vector-card'} onClick={() => selectVector(vector.id)}>
+              <span className="admin-similarity-vector-thumb"><AdminLogoThumb logo={toThumbAsset(vector)} memberName={vector.name} track={vector.projectType} adminToken={adminToken} /></span>
+              <span className="admin-similarity-vector-copy"><strong>{vector.name}</strong><small>{vector.projectType} · {vector.vectorizedAt}</small></span>
+            </button>
+          ))}
+        </div>
+
+        <div className="admin-similarity-compare-board">
+          {!selectedVector ? (
+            <p className="admin-empty-table-state">왼쪽 목록에서 비교할 로고를 먼저 선택해주세요.</p>
+          ) : (
+            <>
+              <div className="admin-similarity-compare-panels">
+                <figure className="admin-similarity-compare-panel">
+                  <figcaption>벡터 로고</figcaption>
+                  <div className="admin-similarity-compare-image"><AdminLogoThumb logo={toThumbAsset(selectedVector)} memberName={selectedVector.name} track={selectedVector.projectType} adminToken={adminToken} /></div>
+                </figure>
+                <div className="admin-similarity-compare-versus" aria-hidden="true"><ArrowLeftRight size={18} strokeWidth={1.8} /></div>
+                <figure className="admin-similarity-compare-panel">
+                  <figcaption>비교 로고</figcaption>
+                  <button type="button" className="admin-similarity-upload-slot" onClick={() => fileInputRef.current?.click()}>
+                    {comparisonPreviewUrl ? <img src={comparisonPreviewUrl} alt="비교할 이미지 미리보기" /> : <><Upload size={22} aria-hidden="true" /><span>내 PC에서 사진 넣기</span></>}
+                  </button>
+                  <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleFileChange} />
+                </figure>
+              </div>
+
+              <button className="admin-similarity-run-button" type="button" disabled={!comparisonFile || compareLoading} onClick={() => void runCompare()}>
+                <ScanSearch size={17} aria-hidden="true" />
+                <span>{compareLoading ? '확인하는 중…' : '유사도 확인'}</span>
+              </button>
+
+              {compareError && <p className="project-error" role="alert">{compareError}</p>}
+
+              {compareResult && (
+                <article className={`admin-similarity-result ${scoreTone}`}>
+                  <div className="admin-similarity-result-heading"><BarChart3 size={18} strokeWidth={1.8} aria-hidden="true" /><span>유사도 점수</span></div>
+                  <strong>{compareResult.similarity}<small>점</small></strong>
+                  <span className="admin-similarity-result-status">{SIMILARITY_RISK_LABELS[compareResult.riskLevel] ?? compareResult.riskLevel}</span>
+                  {compareResult.note && <p className="admin-similarity-result-note">{compareResult.note}</p>}
+                  <p className="admin-similarity-result-disclaimer">{compareResult.disclaimer}</p>
+                </article>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </section>
   )
@@ -469,6 +634,7 @@ const getDashboardSectionFromUrl = (): DashboardSection => {
   if (section === 'bi-generations' || section === 'bi-generation') return 'bi-generations'
   if (section === 'generation' || section === 'generations' || section === 'logo-generation' || section === 'download' || section === 'downloads' || section === 'signup' || section === 'signups' || section === 'join' || section === 'credits' || section === 'credit' || section === 'credit-stats') return 'overview'
   if (section === 'requests' || section === 'improvement' || section === 'feedback') return 'requests'
+  if (section === 'similarity' || section === 'similarity-test' || section === 'similarity-vectors') return 'similarity'
   if (section === 'members' || section === 'member-list' || section === 'users') return 'members'
   if (section === 'admins' || section === 'admin-list' || section === 'administrators') return 'admins'
   return 'overview'
@@ -500,7 +666,6 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
   const [adminPassword, setAdminPassword] = useState('')
   const [adminLoginError, setAdminLoginError] = useState('')
   const [adminLoginLoading, setAdminLoginLoading] = useState(false)
-  const [adminStats, setAdminStats] = useState<AdminDashboardStats | null>(null)
   const [adminAnalytics, setAdminAnalytics] = useState<AdminAnalyticsResponse | null>(null)
   const [adminMemberData, setAdminMemberData] = useState<AdminMember[]>([])
   const [adminMemberDownloadCounts, setAdminMemberDownloadCounts] = useState<Record<number, { ci: number; bi: number }>>({})
@@ -508,6 +673,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
   const [adminCiGenerationMembers, setAdminCiGenerationMembers] = useState<AdminLogoMemberRecord[]>([])
   const [adminBiGenerationMembers, setAdminBiGenerationMembers] = useState<AdminLogoMemberRecord[]>([])
   const [adminSurveyResponses, setAdminSurveyResponses] = useState<AdminSurveyResponse[]>([])
+  const [adminSimilarityVectors, setAdminSimilarityVectors] = useState<AdminSimilarityVectorRow[]>([])
   const adminInitial = Array.from(adminId.trim())[0]?.toLocaleUpperCase() || 'A'
 
   const logoutAdmin = () => {
@@ -515,6 +681,24 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     setAdminToken('')
     storeAdminToken('')
     setAdminPassword('')
+  }
+
+  const vectorizedCandidateIds = new Set(adminSimilarityVectors.map((vector) => vector.candidateId))
+
+  const handleVectorizeLogo = async (candidateId: string) => {
+    if (standalone) {
+      const mock = [...ciGenerationMembers, ...biGenerationMembers]
+        .flatMap((member) => member.generatedLogos)
+        .find((logo) => logo.id === candidateId)
+      if (!mock) return
+      setAdminSimilarityVectors((current) => current.some((vector) => vector.candidateId === candidateId) ? current : [
+        { id: Date.now(), candidateId, projectId: mock.projectId, projectType: candidateId.startsWith('bi-') ? 'BI' : 'CI', name: mock.name, imageUrl: mock.imageUrl, vectorizedAt: '2026.08.25' },
+        ...current,
+      ])
+      return
+    }
+    const row = await adminApi.vectorizeLogo(adminToken, candidateId)
+    setAdminSimilarityVectors((current) => [row, ...current.filter((vector) => vector.candidateId !== candidateId)])
   }
 
   const setDashboardSection = (nextSection: DashboardSection) => {
@@ -608,12 +792,12 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     }
 
     void Promise.allSettled([
-      adminApi.dashboard(adminToken).then(setAdminStats),
       loadMembers(),
       adminApi.admins(adminToken).then((accounts) => { if (!cancelled) setAdminAccounts(accounts) }),
       adminApi.generationRecords(adminToken, 'CI').then((records) => { if (!cancelled) setAdminCiGenerationMembers(records) }),
       adminApi.generationRecords(adminToken, 'BI').then((records) => { if (!cancelled) setAdminBiGenerationMembers(records) }),
       adminApi.surveyResponses(adminToken).then((responses) => { if (!cancelled) setAdminSurveyResponses(responses) }),
+      adminApi.similarityVectors(adminToken).then((vectors) => { if (!cancelled) setAdminSimilarityVectors(vectors) }),
     ]).then((results) => {
       if (results.some((result) => result.status === 'rejected' && result.reason instanceof AuthError && result.reason.status === 401)) {
         setAdminToken('')
@@ -689,7 +873,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     const generationXAxisLabels = adminAnalytics
       ? adminAnalytics.signup.trend.map((point) => point.label)
       : generationXAxisLabelsByPeriod[dashboardPeriod]
-    const dashboardSectionLabels: Record<DashboardSection, string> = { overview: '대시보드', generation: '', download: '', signup: '', requests: '개선 요청', members: '회원 목록', admins: '관리자 목록', credits: '', 'ci-generations': 'CI 생성 목록', 'bi-generations': 'BI 생성 목록' }
+    const dashboardSectionLabels: Record<DashboardSection, string> = { overview: '대시보드', generation: '', download: '', signup: '', requests: '개선 요청', members: '회원 목록', admins: '관리자 목록', credits: '', 'ci-generations': 'CI 생성 목록', 'bi-generations': 'BI 생성 목록', similarity: '유사도 관리 및 테스트' }
     const calendarDays = getCalendarDays(dashboardCalendarMonth)
     const calendarMonthLabel = `${dashboardCalendarMonth.getFullYear()}년 ${dashboardCalendarMonth.getMonth() + 1}월`
     const customRangeLabel = dashboardCustomStart && dashboardCustomEnd
@@ -960,6 +1144,8 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
       : (standalone ? surveyImprovementCategories.map((label, index) => ({ label, value: surveyImprovementStatsByPeriod[dashboardPeriod][index] })) : [])
     const surveyImprovementMax = Math.max(1, ...selectedSurveyImprovementStats.map(({ value }) => value))
     const surveyImprovementTotal = selectedSurveyImprovementStats.reduce((total, { value }) => total + value, 0)
+    const surveyLikeCount = adminSurveyResponses.filter((response) => response.rating === 5).length
+    const surveyDislikeCount = adminSurveyResponses.filter((response) => response.rating === 1).length
     const allAdminMembers: AdminMemberTableRow[] = standalone ? previewAdminMembers : adminMemberData
     const displayedAdminMembers = allAdminMembers.filter((member) => matchesAdminMemberSearch(memberSearchQuery, member.email))
     // 온보딩 작성률은 기간과 무관하게 "지금 이 순간" 기준 누적 값이다 — 가입자 수 카드의
@@ -980,6 +1166,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
             <div className="admin-menu-group"><button className={`admin-menu-item ${['members', 'admins'].includes(dashboardSection) ? 'active' : ''}`} type="button" aria-expanded={isMemberMenuOpen} onClick={() => setIsMemberMenuOpen((open) => !open)}><UsersRound size={19} strokeWidth={1.8} /><span>회원관리</span><ChevronDown className={isMemberMenuOpen ? 'menu-chevron-open' : ''} size={15} /></button>{isMemberMenuOpen && <div className="admin-submenu active-submenu"><button className={dashboardSection === 'members' ? 'active' : ''} type="button" onClick={() => setDashboardSection('members')}>회원목록</button><button className={dashboardSection === 'admins' ? 'active' : ''} type="button" onClick={() => setDashboardSection('admins')}>관리자 목록</button></div>}</div>
             <div className="admin-menu-group"><button className={`admin-menu-item ${['ci-generations', 'bi-generations'].includes(dashboardSection) ? 'active' : ''}`} type="button" aria-expanded={isStatsMenuOpen} onClick={() => setIsStatsMenuOpen((open) => !open)}><BarChart3 size={19} strokeWidth={1.8} /><span>로고 생성 목록</span><ChevronDown className={isStatsMenuOpen ? 'menu-chevron-open' : ''} size={15} /></button>{isStatsMenuOpen && <div className="admin-submenu active-submenu"><button className={dashboardSection === 'ci-generations' ? 'active' : ''} type="button" onClick={() => setDashboardSection('ci-generations')}>CI 생성 목록</button><button className={dashboardSection === 'bi-generations' ? 'active' : ''} type="button" onClick={() => setDashboardSection('bi-generations')}>BI 생성 목록</button></div>}</div>
             <button className={`admin-menu-item ${dashboardSection === 'requests' ? 'active' : ''}`} type="button" onClick={() => setDashboardSection('requests')}><ThumbsUp size={19} strokeWidth={1.8} /><span>개선 요청</span></button>
+            <button className={`admin-menu-item ${dashboardSection === 'similarity' ? 'active' : ''}`} type="button" onClick={() => setDashboardSection('similarity')}><ScanSearch size={19} strokeWidth={1.8} /><span>유사도 관리 및 테스트</span></button>
           </nav>
         </aside>
 
@@ -992,7 +1179,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
           </div>
 
           <header className="admin-dashboard-header">
-             <div><p className="admin-eyebrow">ADMIN · ANALYTICS</p><h1>GenMark AI {dashboardSectionLabels[dashboardSection]}</h1>{adminStats && <p className="admin-live-status">실시간 API 연결됨 · 회원 {adminStats.totalMembers}명 · 생성 {adminStats.totalGenerations}건</p>}</div>
+             <div><p className="admin-eyebrow">ADMIN · ANALYTICS</p><h1>GenMark AI {dashboardSectionLabels[dashboardSection]}</h1></div>
             <div className="admin-header-actions" ref={adminAccountMenuRef}>
               <button className="admin-account-trigger" type="button" aria-label="관리자 계정 메뉴" aria-expanded={isAdminMenuOpen} onClick={() => setIsAdminMenuOpen((open) => !open)}>
                 <span className="admin-avatar">{adminInitial}</span>
@@ -1099,6 +1286,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
               <article className="admin-card admin-overview-chart-card admin-survey-overview-card" aria-labelledby="admin-survey-overview-title">
                 <div className="admin-overview-chart-heading">
                   <div><p id="admin-survey-overview-title">설문 개선 항목</p><strong>{surveyImprovementTotal.toLocaleString()}<small>건</small></strong><span className="admin-positive">{periodLabels[dashboardPeriod]} 응답</span></div>
+                  <p className="admin-survey-rating-summary"><span className="like"><ThumbsUp size={14} strokeWidth={2} aria-hidden="true" />좋아요 {surveyLikeCount}건</span><span className="dislike"><ThumbsDown size={14} strokeWidth={2} aria-hidden="true" />싫어요 {surveyDislikeCount}건</span></p>
                 </div>
                 <div className="admin-survey-improvement-bars" role="list" aria-label="설문 개선 항목별 응답 통계">
                   {selectedSurveyImprovementStats.map(({ label, value }) => <div className="admin-survey-improvement-row" key={label} role="listitem" aria-label={label + ' ' + value.toLocaleString() + '건'}><div><span>{label}</span><strong>{value.toLocaleString()}건</strong></div><i aria-hidden="true"><b style={{ width: `${surveyImprovementMax ? value / surveyImprovementMax * 100 : 0}%` }} /></i></div>)}
@@ -1213,9 +1401,10 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
                 </table>
               </div>
             </section>
-           </> : dashboardSection === 'ci-generations' ? <AdminLogoGenerationList track="CI" members={standalone ? ciGenerationMembers : adminCiGenerationMembers} openPanel={openLogoPanel} setOpenPanel={setOpenLogoPanel} adminToken={standalone ? '' : adminToken} />
-           : dashboardSection === 'bi-generations' ? <AdminLogoGenerationList track="BI" members={standalone ? biGenerationMembers : adminBiGenerationMembers} openPanel={openLogoPanel} setOpenPanel={setOpenLogoPanel} adminToken={standalone ? '' : adminToken} />
+           </> : dashboardSection === 'ci-generations' ? <AdminLogoGenerationList track="CI" members={standalone ? ciGenerationMembers : adminCiGenerationMembers} openPanel={openLogoPanel} setOpenPanel={setOpenLogoPanel} adminToken={standalone ? '' : adminToken} vectorizedCandidateIds={vectorizedCandidateIds} onVectorize={handleVectorizeLogo} />
+           : dashboardSection === 'bi-generations' ? <AdminLogoGenerationList track="BI" members={standalone ? biGenerationMembers : adminBiGenerationMembers} openPanel={openLogoPanel} setOpenPanel={setOpenLogoPanel} adminToken={standalone ? '' : adminToken} vectorizedCandidateIds={vectorizedCandidateIds} onVectorize={handleVectorizeLogo} />
            : dashboardSection === 'requests' ? <AdminSurveyResponseTable responses={standalone ? [] : adminSurveyResponses} />
+           : dashboardSection === 'similarity' ? <AdminSimilarityTestPanel vectors={adminSimilarityVectors} adminToken={standalone ? '' : adminToken} standalone={standalone} />
           : dashboardSection === 'generation' ? <>
           <section className="admin-kpi-grid admin-generation-kpi-grid admin-generation-single-kpi-grid" aria-label="생성 핵심 지표">
             <article className="admin-kpi-card"><span className="admin-kpi-icon purple"><Sparkles size={19} /></span><div><p>총 로고 생성</p><strong>{selectedPeriodData.total}<small>건</small></strong><span className="admin-positive">{selectedPeriodData.totalDelta} <ArrowUpRight size={14} /></span></div></article>

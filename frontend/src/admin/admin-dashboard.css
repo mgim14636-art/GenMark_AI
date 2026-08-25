@@ -24,7 +24,6 @@
 .admin-login-card > button { width: 100%; margin-top: 12px; border: 0; border-radius: 12px; padding: 13px; color: #fff; background: linear-gradient(100deg, #8255df, #e56db4); font: inherit; font-weight: 700; cursor: pointer; }
 .admin-login-card > button:disabled { opacity: .65; cursor: wait; }
 .admin-login-error { margin: 5px 0 0 !important; color: #d34f72 !important; font-size: 13px; }
-.admin-live-status { margin: 6px 0 0; color: #7250cb; font-size: 12px; font-weight: 700; }
 
 .admin-dashboard-screen *,
 .admin-dashboard-screen *::before,
@@ -229,6 +228,10 @@
 .admin-credit-overview-graph strong { color: var(--admin-ink); font-size: 12px; text-align: right; }
 
 .admin-survey-overview-card { min-height: 258px; margin-bottom: 0; }
+.admin-survey-rating-summary { display: flex; flex-shrink: 0; align-items: center; gap: 12px; margin: 2px 0 0; color: #5f687c; font-size: 12px; font-weight: 700; }
+.admin-survey-rating-summary .like, .admin-survey-rating-summary .dislike { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.admin-survey-rating-summary .like { color: #2f9e6c; }
+.admin-survey-rating-summary .dislike { color: #c24d8e; }
 .admin-survey-overview-total { display: flex; align-items: baseline; gap: 10px; margin: 19px 0 16px; }
 .admin-survey-overview-total strong { color: #7550e2; font-size: 30px; letter-spacing: -.06em; }
 .admin-survey-overview-total strong small { margin-left: 3px; font-size: 13px; letter-spacing: 0; }
@@ -692,3 +695,50 @@
   .admin-member-table-wrap { overflow: visible; }
 }
 
+/* "벡터화" 버튼 — 생성 로고 목록 카드 안 */
+.admin-vectorize-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: 100%; min-height: 28px; margin-top: 6px; border: 1px solid #d9cdfa; border-radius: 8px; padding: 0 8px; color: #7550e2; background: #fff; font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; transition: border-color 180ms ease, background-color 180ms ease; }
+.admin-vectorize-button:hover:not(:disabled) { border-color: #8d70ed; background: #f6f2ff; }
+.admin-vectorize-button:disabled { cursor: not-allowed; }
+.admin-vectorize-button.is-done { color: #2f9e6c; border-color: #bfe6d4; background: #f2fbf7; }
+
+/* 유사도 관리 및 테스트 */
+.admin-similarity-layout { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 18px; align-items: start; }
+.admin-similarity-vector-list { display: grid; gap: 10px; max-height: 640px; overflow-y: auto; padding-right: 4px; }
+.admin-similarity-vector-card { display: flex; align-items: center; gap: 12px; border: 1px solid var(--admin-border); border-radius: 14px; padding: 9px; background: #fff; text-align: left; cursor: pointer; transition: border-color 180ms ease, box-shadow 180ms ease; }
+.admin-similarity-vector-card:hover { border-color: #c7b6f5; }
+.admin-similarity-vector-card.is-selected { border-color: #8d70ed; box-shadow: 0 0 0 3px rgb(141 112 237 / .15); }
+.admin-similarity-vector-thumb { display: block; width: 52px; height: 52px; flex: 0 0 auto; overflow: hidden; border-radius: 10px; background: #f8f6ff; }
+.admin-similarity-vector-thumb img, .admin-similarity-vector-thumb .admin-logo-thumb-placeholder { display: block; width: 100%; height: 100%; object-fit: cover; }
+.admin-similarity-vector-copy { display: grid; gap: 3px; min-width: 0; }
+.admin-similarity-vector-copy strong { overflow: hidden; color: var(--admin-ink); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-similarity-vector-copy small { color: #8b93a5; font-size: 11px; }
+
+.admin-similarity-compare-board { display: grid; gap: 16px; border: 1px solid var(--admin-border); border-radius: 18px; padding: 22px; background: #fff; box-shadow: 0 9px 25px rgb(71 57 116 / .04); }
+.admin-similarity-compare-panels { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: center; }
+.admin-similarity-compare-panel { display: grid; gap: 8px; min-width: 0; }
+.admin-similarity-compare-panel figcaption { color: #7152c7; font-size: 12px; font-weight: 700; letter-spacing: -.02em; }
+.admin-similarity-compare-image, .admin-similarity-upload-slot { display: grid; place-items: center; aspect-ratio: 1 / 1; overflow: hidden; border: 1px solid #eee9f8; border-radius: 14px; background: linear-gradient(145deg, #fbf9ff, #fff8fc); }
+.admin-similarity-compare-image img, .admin-similarity-upload-slot img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.admin-similarity-upload-slot { width: 100%; border-style: dashed; color: #8b93a5; font-size: 12px; font-weight: 700; cursor: pointer; gap: 8px; }
+.admin-similarity-upload-slot:hover { border-color: #b993ff; color: #7550e2; }
+.admin-similarity-compare-versus { display: grid; place-items: center; color: #b2a6da; }
+
+.admin-similarity-run-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: fit-content; min-height: 44px; margin: 0 auto; padding: 0 20px; border: 0; border-radius: 12px; color: #fff; background: #7543d4; box-shadow: 0 10px 22px rgb(117 67 212 / .22); font-size: 14px; font-weight: 800; cursor: pointer; }
+.admin-similarity-run-button:hover:not(:disabled) { background: #6937ca; }
+.admin-similarity-run-button:disabled { cursor: not-allowed; opacity: .55; }
+
+.admin-similarity-result { display: grid; justify-items: center; gap: 6px; margin: 0 auto; border: 1px solid #e8e3f2; border-radius: 18px; padding: 22px; background: rgb(255 255 255 / .9); text-align: center; }
+.admin-similarity-result-heading { display: flex; align-items: center; gap: 8px; color: #7152c7; font-size: 13px; font-weight: 700; }
+.admin-similarity-result > strong { color: var(--admin-ink); font-size: 44px; letter-spacing: -.03em; }
+.admin-similarity-result > strong small { margin-left: 3px; color: #8b93a5; font-size: 15px; font-weight: 700; }
+.admin-similarity-result-status { border-radius: 999px; padding: 4px 12px; color: #2f9e6c; background: #eafbf3; font-size: 12px; font-weight: 800; }
+.admin-similarity-result.moderate .admin-similarity-result-status { color: #b8860a; background: #fff6e0; }
+.admin-similarity-result.caution .admin-similarity-result-status { color: #c24d8e; background: #fdeef5; }
+.admin-similarity-result-note { max-width: 40ch; margin: 10px 0 0; border: 1px solid #e4dbfa; border-radius: 14px; padding: 12px 18px; color: #6a3ddd; background: linear-gradient(105deg, rgb(255 255 255 / 0.9), rgb(247 242 255 / 0.85)); font-size: 14px; font-weight: 700; line-height: 1.55; }
+.admin-similarity-result-disclaimer { max-width: 46ch; margin: 4px 0 0; color: #8a91a4; font-size: 12px; line-height: 1.6; }
+
+@media (max-width: 900px) {
+  .admin-similarity-layout { grid-template-columns: 1fr; }
+  .admin-similarity-compare-panels { grid-template-columns: 1fr; }
+  .admin-similarity-compare-versus { transform: rotate(90deg); justify-self: center; }
+}
