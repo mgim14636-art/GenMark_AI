@@ -339,6 +339,124 @@ def generate_notes(
     return notes
 
 
+PAIR_PROMPT = """두 이미지는 서로 다른 로고입니다. 두 로고가 시각적으로 어떤 점이 비슷한지
+한 문장으로 설명하세요.
+
+작성 규칙:
+- 반드시 한국어로만 작성 (영어 단어 사용 금지)
+- 도형의 형태·구도·배치를 중심으로 서술 (색상은 부수적)
+- 15~40자, "~해요" 로 끝나는 평서문 한 문장만 작성
+- 닮은 점이 뚜렷하지 않으면 "뚜렷하게 닮은 점은 없어요" 라고 쓰세요
+- 침해 여부·등록 가능성 같은 법적 판단은 절대 쓰지 마세요
+- 문장 하나만 출력하고 따옴표·번호·다른 설명은 붙이지 마세요"""
+
+
+def generate_pair_note(image_a: bytes, image_b: bytes) -> Optional[str]:
+    """임의의 두 이미지(로고)를 1:1로 비교해 한 문장 설명을 만든다. 실패 시 None.
+
+    관리자 전용 "유사도 관리 및 테스트" 도구에서 쓴다. KIPRIS 매치 설명(generate_notes)과
+    달리 등록 상표를 전제하지 않는 임의의 두 이미지 비교라 프롬프트와 응답 형식(배열이
+    아닌 문장 하나)이 다르다.
+    """
+    if not is_enabled():
+        key_name = "OPENROUTER_API_KEY" if _provider() == "openrouter" else "GEMINI_API_KEY"
+        logger.warning("%s가 없어 pair note를 생성하지 않습니다 (.env 확인)", key_name)
+        return None
+    if _quota_blocked():
+        logger.warning("할당량 초과 상태 — pair note 생성을 건너뜁니다")
+        return None
+
+    try:
+        images = [_encode(image_a), _encode(image_b)]
+    except Exception as e:
+        logger.warning("Pair note image prep failed: %s", type(e).__name__)
+        return None
+
+    text = _call_openrouter_plain(images) if _provider() == "openrouter" else _call_gemini_plain(images)
+    return _sanitize(text) if text else None
+
+
+def _call_gemini_plain(images: list[str]) -> Optional[str]:
+    """Gemini에 문장 하나만 요청한다(배열 응답 강제 없음)."""
+    parts = [{"text": PAIR_PROMPT}] + [
+        {"inline_data": {"mime_type": "image/jpeg", "data": b64}} for b64 in images
+    ]
+    try:
+        res = requests.post(
+            GEMINI_URL.format(model=_model()),
+            params={"key": _api_key()},
+            json={"contents": [{"parts": parts}],
+                  "generationConfig": {"temperature": 0.3, "maxOutputTokens": 300}},
+            timeout=(3.05, _timeout()),
+        )
+    except requests.exceptions.Timeout:
+        logger.warning("Note generation timed out (%.0fs)", _timeout())
+        return None
+    except Exception as e:
+        logger.warning("Note request failed: %s", type(e).__name__)
+        return None
+
+    if res.status_code == 429:
+        _block_quota()
+        logger.warning("Gemini 할당량 초과(429). %.0f초간 note 생성을 중단합니다. %s",
+                        QUOTA_COOLDOWN, res.text[:200])
+        return None
+    if not res.ok:
+        logger.warning("Note generation failed (HTTP %s): %s", res.status_code, res.text[:300])
+        return None
+
+    payload = res.json()
+    candidates = payload.get("candidates") or []
+    if not candidates:
+        logger.warning("Note blocked or empty: %s", str(payload.get("promptFeedback"))[:200])
+        return None
+    try:
+        return candidates[0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, TypeError):
+        logger.warning("Note response has no text part: %s", str(candidates[0])[:200])
+        return None
+
+
+def _call_openrouter_plain(images: list[str]) -> Optional[str]:
+    """OpenRouter에 문장 하나만 요청한다(response_format 강제 없음)."""
+    content = [{"type": "text", "text": PAIR_PROMPT}] + [
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+        for b64 in images
+    ]
+    payload = {
+        "model": _model(),
+        "messages": [{"role": "user", "content": content}],
+        "temperature": 0.3,
+        "max_tokens": 200,
+    }
+    try:
+        res = requests.post(
+            OPENROUTER_URL,
+            headers={"Authorization": f"Bearer {_api_key()}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=(3.05, _timeout()),
+        )
+    except requests.exceptions.Timeout:
+        logger.warning("Note generation timed out (%.0fs)", _timeout())
+        return None
+    except Exception as e:
+        logger.warning("Note request failed: %s", type(e).__name__)
+        return None
+
+    if res.status_code == 429:
+        _block_quota()
+        logger.warning("OpenRouter 할당량 초과(429). %.0f초간 note 생성을 중단합니다. %s",
+                        QUOTA_COOLDOWN, res.text[:200])
+        return None
+    if not res.ok:
+        logger.warning("Note generation failed (HTTP %s): %s", res.status_code, res.text[:300])
+        return None
+
+    choice = ((res.json().get("choices") or [{}])[0])
+    msg = choice.get("message") or {}
+    return msg.get("content") or msg.get("reasoning") or None
+
+
 def _call_openrouter(images: list[str]) -> Optional[str]:
     """OpenAI 호환 채팅 API로 설명을 받아온다. 실패하면 None.
 

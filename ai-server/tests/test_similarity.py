@@ -568,3 +568,76 @@ def test_openrouter_request_carries_images_as_data_uri(monkeypatch):
     assert len(images) == 2
     assert images[0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
     assert any(c.get("type") == "text" for c in content)
+
+
+# --------------------------------------------------------------------------
+# generate_pair_note — 관리자 유사도 테스트 도구의 임의 두 이미지 1:1 설명
+# --------------------------------------------------------------------------
+
+def _tiny_png_bytes() -> bytes:
+    from io import BytesIO
+
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (4, 4), (255, 255, 255)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_generate_pair_note_returns_none_when_disabled(monkeypatch):
+    from app.services import note_service
+
+    monkeypatch.setattr(note_service, "is_enabled", lambda: False)
+    assert note_service.generate_pair_note(_tiny_png_bytes(), _tiny_png_bytes()) is None
+
+
+def test_generate_pair_note_sends_both_images_and_sanitizes_result(monkeypatch):
+    from app.services import note_service
+
+    monkeypatch.setenv("NOTE_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    note_service._quota_blocked_until = 0.0
+    sent = {}
+
+    class _Res:
+        status_code = 200
+        ok = True
+
+        @staticmethod
+        def json():
+            return {"choices": [{"message": {"content": "원형 배치와 곡선 중심의 실루엣에서 일부 비슷한 요소를 발견했어요."},
+                                 "finish_reason": "stop"}]}
+
+    def fake_post(url, **kwargs):
+        sent["url"] = url
+        sent["json"] = kwargs.get("json")
+        return _Res()
+
+    monkeypatch.setattr(note_service.requests, "post", fake_post)
+
+    note = note_service.generate_pair_note(_tiny_png_bytes(), _tiny_png_bytes())
+
+    assert note == "원형 배치와 곡선 중심의 실루엣에서 일부 비슷한 요소를 발견했어요."
+    assert sent["url"] == note_service.OPENROUTER_URL
+    images = [c for c in sent["json"]["messages"][0]["content"] if c.get("type") == "image_url"]
+    assert len(images) == 2
+
+
+def test_generate_pair_note_drops_legal_wording(monkeypatch):
+    from app.services import note_service
+
+    monkeypatch.setenv("NOTE_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    note_service._quota_blocked_until = 0.0
+
+    class _Res:
+        status_code = 200
+        ok = True
+
+        @staticmethod
+        def json():
+            return {"choices": [{"message": {"content": "상표권 침해 소지가 있어 보여요"}, "finish_reason": "stop"}]}
+
+    monkeypatch.setattr(note_service.requests, "post", lambda url, **kwargs: _Res())
+
+    assert note_service.generate_pair_note(_tiny_png_bytes(), _tiny_png_bytes()) is None

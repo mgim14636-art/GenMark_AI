@@ -68,6 +68,13 @@ class SimilaritySearchFailed(CodedHTTPException):
     message_default = "Unexpected error during similarity search."
 
 
+# --- 자체 생성 로고 벡터 저장소(관리자 전용) -----------------------------------
+class GenerationVectorNotFound(CodedHTTPException):
+    code = "GENERATION_VECTOR_NOT_FOUND"
+    status_code_default = status.HTTP_404_NOT_FOUND
+    message_default = "The requested generated logo vector was not found."
+
+
 # --- 브랜드킷(F14) -------------------------------------------------------------
 class BrandKitInvalidImage(CodedHTTPException):
     code = "BRANDKIT_INVALID_IMAGE"
