@@ -80,6 +80,7 @@ type EditorDraft = {
   color: string
   colorChanged: boolean
   dirty: boolean
+  removed: boolean
 }
 type EditorDrafts = Record<string, EditorDraft>
 type EditorDragState = {
@@ -102,6 +103,7 @@ const createEditorDraft = (color = '#7B5CDF'): EditorDraft => ({
   color,
   colorChanged: false,
   dirty: false,
+  removed: false,
 })
 
 const createEditorDrafts = (color = '#7B5CDF'): EditorDrafts => ({})
@@ -683,6 +685,7 @@ function CustomerApp() {
         opacity: draft.opacity,
         offsetX: draft.offsetX,
         offsetY: draft.offsetY,
+        removed: draft.removed,
       })
     }
     return edited
@@ -2054,6 +2057,13 @@ function CustomerApp() {
     // applied got baked into editorSvgSource, so the baseline has to be restored too.
     if (editorBaseSvgSource) setEditorSvgSource(editorBaseSvgSource)
     markEditorDirty()
+  }
+
+  const deleteSelectedEditorElement = () => {
+    if (!editTarget) return
+    updateCurrentEditorDraft({ removed: true })
+    markEditorDirty()
+    setEditTarget(null)
   }
 
   const selectEditorTarget = (target: EditorTarget) => {
@@ -4397,7 +4407,13 @@ function CustomerApp() {
           <section className="logo-editor-panel" aria-labelledby="logo-editor-title">
             <h1 id="logo-editor-title" className="sr-only">로고 수정</h1>
             <div className="editor-control-section element-controls">
-              <div className="editor-control-heading"><strong>{editTarget ? '선택한 요소 설정' : '요소를 선택해 주세요'}</strong><button type="button" aria-label="전체 이미지 초기화" onClick={resetEditorControls}><RefreshCw aria-hidden="true" size={14} strokeWidth={2} />초기화</button></div>
+              <div className="editor-control-heading">
+                <strong>{editTarget ? '선택한 요소 설정' : '요소를 선택해 주세요'}</strong>
+                <div className="editor-control-heading-actions">
+                  <button type="button" className="editor-delete-button" disabled={!editTarget} aria-label="선택한 요소 삭제" onClick={deleteSelectedEditorElement}><Trash2 aria-hidden="true" size={14} strokeWidth={2} />삭제</button>
+                  <button type="button" aria-label="전체 이미지 초기화" onClick={resetEditorControls}><RefreshCw aria-hidden="true" size={14} strokeWidth={2} />초기화</button>
+                </div>
+              </div>
               <label className="editor-slider-row"><span>크기</span><input disabled={!editTarget} type="range" min="70" max="140" value={editorScale} onChange={(event) => { const value = Number(event.target.value); setEditorScale(value); updateCurrentEditorDraft({ scale: value }); markEditorDirty() }} /></label>
               <label className="editor-slider-row"><span>회전</span><input disabled={!editTarget} type="range" min="-180" max="180" value={editorRotation} onChange={(event) => { const value = Number(event.target.value); setEditorRotation(value); updateCurrentEditorDraft({ rotation: value }); markEditorDirty() }} /></label>
               <label className="editor-slider-row"><span>투명도</span><input disabled={!editTarget} type="range" min="30" max="100" value={editorOpacity} onChange={(event) => { const value = Number(event.target.value); setEditorOpacity(value); updateCurrentEditorDraft({ opacity: value }); markEditorDirty() }} /></label>

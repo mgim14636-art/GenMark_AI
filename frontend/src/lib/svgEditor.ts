@@ -6,6 +6,7 @@ export type SvgEdits = {
   opacity: number
   offsetX: number
   offsetY: number
+  removed?: boolean
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
@@ -249,6 +250,10 @@ export const buildEditedSvg = (source: string, edits: SvgEdits) => {
   unwrapElementEdit(root as unknown as SVGSVGElement, edits.target)
   const target = findEditableElement(root as unknown as SVGSVGElement, edits.target)
   if (!target) throw new Error('선택한 SVG 요소를 찾지 못했어요.')
+  if (edits.removed) {
+    target.remove()
+    return new XMLSerializer().serializeToString(root)
+  }
   if (edits.color) applyColor(target, edits.color)
 
   const wrapper = document.createElementNS(SVG_NS, 'g')
