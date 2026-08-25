@@ -134,6 +134,10 @@
 .editor-control-heading button:active { transform: translateY(0) scale(.98); }
 .editor-control-heading button:focus-visible { outline: 3px solid rgb(146 94 232 / .25); outline-offset: 2px; }
 .editor-control-heading button:disabled { opacity: .45; cursor: not-allowed; }
+.editor-control-heading-actions { display: flex; align-items: center; gap: 8px; }
+.editor-control-heading button.editor-delete-button { border-color: #f0cfd8; color: #b24e69; background: #fff5f7; }
+.editor-control-heading button.editor-delete-button:hover:not(:disabled) { border-color: #df8da3; color: #a23958; background: #ffeaef; }
+.editor-control-heading button.editor-delete-button:focus-visible { outline-color: rgb(205 83 116 / .25); }
 .editor-font-grid, .editor-symbol-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .editor-font-grid button { position: relative; min-height: 91px; border: 1px solid #ece8f6; border-radius: 11px; color: #22283e; background: #fff; font-size: 18px; }
 .editor-font-grid button.selected { border: 1.5px solid #8751ee; color: #7b5cdf; }
