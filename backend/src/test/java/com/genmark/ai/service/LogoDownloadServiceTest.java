@@ -93,6 +93,44 @@ class LogoDownloadServiceTest {
     }
 
     @Test
+    void redownloadingRefreshesArchiveToCandidatesCurrentStorageKey() {
+        // 처음 받았을 때 보관본은 "candidate-1-edited.png"였는데, 그 뒤 후보가 원본으로
+        // 되돌려져서 storageKey가 "candidate-1.png"로 바뀐 상태를 가정한다.
+        ProjectLookupService projectLookup = mock(ProjectLookupService.class);
+        LogoCandidateRepository candidateRepository = mock(LogoCandidateRepository.class);
+        LogoDownloadRepository downloads = mock(LogoDownloadRepository.class);
+        MemberRepository memberRepository = mock(MemberRepository.class);
+        MemberSurveyRepository surveyRepository = mock(MemberSurveyRepository.class);
+        LogoFileStorage storage = mock(LogoFileStorage.class);
+
+        CiProject project = CiProject.builder().id(3L).publicId("project-1").build();
+        LogoGeneration generation = LogoGeneration.builder().ciProject(project).build();
+        LogoCandidate candidate = LogoCandidate.builder().id(4L).publicId("candidate-1")
+                .generation(generation).storageKey("origin_logos/generation-1/candidate-1.png").build();
+        LogoDownload existing = LogoDownload.builder().id(42L)
+                .member(Member.builder().id(7L).build())
+                .candidate(candidate)
+                .projectType(LogoDownload.ProjectType.CI)
+                .storageKey("downloads/7/candidate-1-edited.png").build();
+
+        when(surveyRepository.existsByMemberId(7L)).thenReturn(true);
+        when(projectLookup.requireOwned("project-1", 7L)).thenReturn(project);
+        when(candidateRepository.findByPublicIdAndGenerationCiProjectIdAndGenerationCiProjectMemberId(
+                "candidate-1", 3L, 7L)).thenReturn(Optional.of(candidate));
+        when(downloads.findByMemberIdAndCandidateId(7L, 4L)).thenReturn(Optional.of(existing));
+        when(storage.archiveForDownload(7L, "candidate-1", "origin_logos/generation-1/candidate-1.png"))
+                .thenReturn("downloads/7/candidate-1.png");
+
+        LogoDownloadService service = new LogoDownloadService(projectLookup, candidateRepository,
+                downloads, memberRepository, surveyRepository, storage, 20);
+
+        service.download("project-1", "candidate-1", 7L);
+
+        assertThat(existing.getStorageKey()).isEqualTo("downloads/7/candidate-1.png");
+        verify(downloads).save(existing);
+    }
+
+    @Test
     void downloadArchiveBundlesPngAndSvg() throws IOException {
         LogoDownloadRepository downloads = mock(LogoDownloadRepository.class);
         LogoFileStorage storage = mock(LogoFileStorage.class);
