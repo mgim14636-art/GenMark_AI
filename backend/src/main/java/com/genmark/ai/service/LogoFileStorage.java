@@ -77,7 +77,10 @@ public class LogoFileStorage {
         try {
             BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
             if (image == null) throw new ApiException(ErrorCode.AI_INVALID_RESPONSE, "AI 결과가 PNG 이미지가 아닙니다.");
-            Path directory = root.resolve("logos").resolve(generationPublicId).normalize();
+            // 폴더 이름 자체가 카테고리다(origin_logos/brand_kits 등) — 호출하는 쪽에서
+            // "카테고리/식별자" 형태로 넘긴다. 지금은 원본 로고 생성과 브랜드 키트 두
+            // 곳에서 쓰는데, 서로 다른 카테고리 폴더에 남아야 해서 이 방식을 쓴다.
+            Path directory = root.resolve(generationPublicId).normalize();
             if (!directory.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
             Files.createDirectories(directory);
             Path file = directory.resolve("candidate-" + order + ".png");
@@ -195,7 +198,7 @@ public class LogoFileStorage {
         if (generationPublicId == null || !SAFE_PATH_SEGMENT.matcher(generationPublicId).matches() || order < 1) {
             throw new ApiException(ErrorCode.STORAGE_ERROR);
         }
-        Path directory = root.resolve("logos").resolve(generationPublicId).normalize();
+        Path directory = root.resolve("origin_logos").resolve(generationPublicId).normalize();
         if (!directory.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
         Path file = directory.resolve("candidate-" + order + ".png").normalize();
         if (!file.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
@@ -242,7 +245,7 @@ public class LogoFileStorage {
         if (brandKitPublicId == null || !SAFE_PATH_SEGMENT.matcher(brandKitPublicId).matches()) {
             throw new ApiException(ErrorCode.STORAGE_ERROR);
         }
-        Path directory = root.resolve("logos").resolve("brand-kits").resolve(brandKitPublicId).normalize();
+        Path directory = root.resolve("brand_kits").resolve(brandKitPublicId).normalize();
         if (!directory.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
 
         List<String> storageKeys = new ArrayList<>();
@@ -367,7 +370,8 @@ public class LogoFileStorage {
         if (generationPublicId == null || !SAFE_PATH_SEGMENT.matcher(generationPublicId).matches() || order < 1) {
             throw new ApiException(ErrorCode.STORAGE_ERROR);
         }
-        Path directory = privateRoot.resolve("logos").resolve(generationPublicId).normalize();
+        Path directory = privateRoot.resolve(edited ? "edit_logos" : "origin_logos")
+                .resolve(generationPublicId).normalize();
         if (!directory.startsWith(privateRoot)) throw new ApiException(ErrorCode.STORAGE_ERROR);
         String suffix = edited ? "-edited.svg" : ".svg";
         Path file = directory.resolve("candidate-" + order + suffix).normalize();
@@ -377,8 +381,14 @@ public class LogoFileStorage {
 
     private Path revisionSvgPath(String generationPublicId, int order, String revision) {
         validateRevision(revision);
-        Path legacy = svgPath(generationPublicId, order, false);
-        return legacy.resolveSibling("candidate-" + order + "-" + revision + ".svg");
+        if (generationPublicId == null || !SAFE_PATH_SEGMENT.matcher(generationPublicId).matches() || order < 1) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+        Path directory = privateRoot.resolve("Revision_logos").resolve(generationPublicId).normalize();
+        if (!directory.startsWith(privateRoot)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+        Path file = directory.resolve("candidate-" + order + "-" + revision + ".svg").normalize();
+        if (!file.startsWith(privateRoot)) throw new ApiException(ErrorCode.STORAGE_ERROR);
+        return file;
     }
 
     private Path revisionPngPath(String generationPublicId, int order, String revision) {
@@ -386,7 +396,7 @@ public class LogoFileStorage {
         if (generationPublicId == null || !SAFE_PATH_SEGMENT.matcher(generationPublicId).matches() || order < 1) {
             throw new ApiException(ErrorCode.STORAGE_ERROR);
         }
-        Path directory = root.resolve("logos").resolve(generationPublicId).normalize();
+        Path directory = root.resolve("edit_logos").resolve(generationPublicId).normalize();
         if (!directory.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
         Path file = directory.resolve("candidate-" + order + "-" + revision + ".png").normalize();
         if (!file.startsWith(root)) throw new ApiException(ErrorCode.STORAGE_ERROR);
@@ -397,7 +407,7 @@ public class LogoFileStorage {
         if (brandKitPublicId == null || !SAFE_PATH_SEGMENT.matcher(brandKitPublicId).matches()) {
             throw new ApiException(ErrorCode.STORAGE_ERROR);
         }
-        Path directory = privateRoot.resolve("brand-kits").normalize();
+        Path directory = privateRoot.resolve("brand_kits").normalize();
         Path file = directory.resolve(brandKitPublicId + ".source-key").normalize();
         if (!file.startsWith(privateRoot)) throw new ApiException(ErrorCode.STORAGE_ERROR);
         return file;
@@ -408,7 +418,7 @@ public class LogoFileStorage {
                 || order < 1 || order > 2 || !(extension.equals("svg") || extension.equals("pdf"))) {
             throw new ApiException(ErrorCode.STORAGE_ERROR);
         }
-        Path directory = privateRoot.resolve("brand-kits").resolve(brandKitPublicId).normalize();
+        Path directory = privateRoot.resolve("brand_kits").resolve(brandKitPublicId).normalize();
         if (!directory.startsWith(privateRoot)) throw new ApiException(ErrorCode.STORAGE_ERROR);
         String side = order == 1 ? "front" : "back";
         Path file = directory.resolve(side + "." + extension).normalize();

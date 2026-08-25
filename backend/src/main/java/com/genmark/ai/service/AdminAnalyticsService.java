@@ -127,6 +127,7 @@ public class AdminAnalyticsService {
 
         SurveyStats surveyStats = surveyStats(surveys, range);
         List<AdminMetricPoint> onboardingUsage = onboardingUsage(onboardings, range);
+        List<AdminMetricPoint> onboardingAudience = onboardingAudience(onboardings, range);
         List<AdminMetricPoint> purpose = onboardingUsage;
         List<AdminMetricPoint> ciInputs = topInputs(ciProjects.stream()
                 .filter(p -> inRange(p.getCreatedAt(), range))
@@ -158,7 +159,7 @@ public class AdminAnalyticsService {
                         periodDownloads.size(), ciDownloads, biDownloads),
                 new AdminAnalyticsResponse.Signup(
                         members.size(), newMembers.size(), startedMemberIds.size(),
-                        providerCounts(newMembers), onboardingUsage, signupTrend,
+                        providerCounts(newMembers), onboardingUsage, onboardingAudience, signupTrend,
                         List.of(
                                 new AdminMetricPoint("가입 완료", newMembers.size()),
                                 new AdminMetricPoint("온보딩 시작", countOnboardings(onboardings, range)),
@@ -294,6 +295,29 @@ public class AdminAnalyticsService {
                 };
                 counts.merge(label, 1L, Long::sum);
             }
+        }
+        return counts.entrySet().stream().map(entry -> new AdminMetricPoint(entry.getKey(), entry.getValue())).toList();
+    }
+
+    /** 온보딩 2단계 "어떤 계기로 방문하게 되셨나요?" 응답 분포. 선택지 4개를 항상 고정 순서로 반환한다. */
+    private List<AdminMetricPoint> onboardingAudience(List<MemberOnboarding> onboardings, Range range) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        counts.put("회사 / 팀", 0L);
+        counts.put("자영업", 0L);
+        counts.put("취미 / 창작", 0L);
+        counts.put("부업 & 투잡", 0L);
+        for (MemberOnboarding onboarding : onboardings) {
+            if (!inRange(onboarding.getCompletedAt(), range)) continue;
+            String audience = onboarding.getAudience();
+            if (audience == null || audience.isBlank()) continue;
+            String label = switch (audience.toLowerCase(Locale.ROOT)) {
+                case "company" -> "회사 / 팀";
+                case "owner" -> "자영업";
+                case "hobby" -> "취미 / 창작";
+                case "sidejob" -> "부업 & 투잡";
+                default -> audience;
+            };
+            counts.merge(label, 1L, Long::sum);
         }
         return counts.entrySet().stream().map(entry -> new AdminMetricPoint(entry.getKey(), entry.getValue())).toList();
     }
@@ -472,11 +496,32 @@ public class AdminAnalyticsService {
             return result;
         }
         if ("custom".equals(range.period)) {
-            long seconds = Math.max(1, Duration.between(range.from, range.to).getSeconds());
-            for (int index = 0; index < 12; index++) {
-                LocalDateTime from = range.from.plusSeconds(seconds * index / 12);
-                LocalDateTime to = index == 11 ? range.to : range.from.plusSeconds(seconds * (index + 1) / 12);
-                result.add(new Bucket(from, to, String.valueOf(index + 1)));
+            // 사용자가 고른 기간 길이에 맞춰 표시 단위를 바꾼다.
+            // 1개월 이하: 하루씩(8/1, 8/2, …) / 1년 이하: 달마다(8월, 9월, …) / 그보다 길면: 해마다(2025년, 2026년, …)
+            long days = Duration.between(range.from, range.to).toDays();
+            if (days <= 31) {
+                LocalDateTime cursor = range.from;
+                while (cursor.isBefore(range.to)) {
+                    LocalDateTime next = cursor.plusDays(1);
+                    result.add(new Bucket(cursor, next, cursor.getMonthValue() + "/" + cursor.getDayOfMonth()));
+                    cursor = next;
+                }
+                return result;
+            }
+            if (days <= 366) {
+                LocalDateTime cursor = range.from.withDayOfMonth(1);
+                while (cursor.isBefore(range.to)) {
+                    LocalDateTime next = cursor.plusMonths(1);
+                    result.add(new Bucket(cursor, next, cursor.getMonthValue() + "월"));
+                    cursor = next;
+                }
+                return result;
+            }
+            LocalDateTime cursor = range.from.withDayOfYear(1);
+            while (cursor.isBefore(range.to)) {
+                LocalDateTime next = cursor.plusYears(1);
+                result.add(new Bucket(cursor, next, cursor.getYear() + "년"));
+                cursor = next;
             }
             return result;
         }
@@ -500,8 +545,9 @@ public class AdminAnalyticsService {
             }
             if ("daily".equals(period)) return new Range(period, today.atStartOfDay(), today.plusDays(1).atStartOfDay());
             if ("monthly".equals(period)) {
-                LocalDate start = today.withDayOfMonth(1).minusMonths(11);
-                return new Range(period, start.atStartOfDay(), today.withDayOfMonth(1).plusMonths(1).atStartOfDay());
+                // "최근 12개월(이번 달 포함, 예: 9월~다음해 8월)" 대신 항상 올해 1월~12월 순서로 보여준다.
+                LocalDate start = today.withDayOfYear(1);
+                return new Range(period, start.atStartOfDay(), start.plusYears(1).atStartOfDay());
             }
             LocalDate start = today.minusDays(6);
             return new Range(period, start.atStartOfDay(), today.plusDays(1).atStartOfDay());

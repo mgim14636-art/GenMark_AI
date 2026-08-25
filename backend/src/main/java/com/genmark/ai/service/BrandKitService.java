@@ -21,11 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +37,7 @@ import java.util.TreeMap;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import javax.imageio.ImageIO;
 
 /**
  * 브랜드킷 (F14). 사용자가 명함 또는 제품 썸네일 이미지를 선택해 만든다.
@@ -133,12 +137,15 @@ public class BrandKitService {
 
         try (ByteArrayOutputStream bytes = new ByteArrayOutputStream();
              ZipOutputStream zip = new ZipOutputStream(bytes)) {
+            byte[] thumbnailPng = null;
             for (int index = 0; index < expectedCount; index += 1) {
                 String entryName = kit.getKitType() == BrandKit.KitType.BUSINESS_CARD
                         ? (index == 0 ? "front.png" : "back.png")
                         : "thumbnail.png";
+                byte[] imageBytes = storage.read(storageKeys.get(index));
+                if (index == 0 && kit.getKitType() != BrandKit.KitType.BUSINESS_CARD) thumbnailPng = imageBytes;
                 zip.putNextEntry(new ZipEntry(entryName));
-                zip.write(storage.read(storageKeys.get(index)));
+                zip.write(imageBytes);
                 zip.closeEntry();
             }
             if (kit.getKitType() == BrandKit.KitType.BUSINESS_CARD) {
@@ -153,6 +160,12 @@ public class BrandKitService {
                     zip.write(printAsset.get().pdf());
                     zip.closeEntry();
                 }
+            } else {
+                // 제품 썸네일은 사진 합성 결과라 별도의 벡터 원본이 없다.
+                // 같은 사진을 SVG 컨테이너에 담아 PNG와 동일한 화면을 SVG로도 받을 수 있게 한다.
+                zip.putNextEntry(new ZipEntry("thumbnail.svg"));
+                zip.write(wrapPngAsSvg(thumbnailPng));
+                zip.closeEntry();
             }
             zip.finish();
             String filename = kit.getKitType() == BrandKit.KitType.BUSINESS_CARD
@@ -162,6 +175,24 @@ public class BrandKitService {
         } catch (IOException e) {
             throw new ApiException(ErrorCode.STORAGE_ERROR);
         }
+    }
+
+    /**
+     * 제품 썸네일은 사진 합성 결과라 벡터 원본이 없다. PNG를 그대로 SVG의 {@code <image>}
+     * 태그에 담아, PNG와 화면상 완전히 같은 내용을 SVG 파일로도 내려받을 수 있게 한다.
+     */
+    private byte[] wrapPngAsSvg(byte[] pngBytes) throws IOException {
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(pngBytes));
+        if (image == null) throw new ApiException(ErrorCode.STORAGE_ERROR);
+        int width = image.getWidth();
+        int height = image.getHeight();
+        String base64Png = Base64.getEncoder().encodeToString(pngBytes);
+        String svg = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + width + "\" height=\"" + height
+                + "\" viewBox=\"0 0 " + width + " " + height + "\">"
+                + "<image width=\"" + width + "\" height=\"" + height
+                + "\" href=\"data:image/png;base64," + base64Png + "\"/></svg>";
+        return svg.getBytes(StandardCharsets.UTF_8);
     }
 
     public List<BrandKitResponse> list(String projectId, String candidateId, Long memberId) {

@@ -36,6 +36,7 @@ public record AdminAnalyticsResponse(
             long startedGenerationMembers,
             List<AdminMetricPoint> providerCounts,
             List<AdminMetricPoint> onboardingUsage,
+            List<AdminMetricPoint> onboardingAudience,
             List<AdminTrendPoint> trend,
             List<AdminMetricPoint> funnel
     ) {}

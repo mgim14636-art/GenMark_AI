@@ -57,8 +57,8 @@ class LogoGenerationProcessorTest {
     void exactlyOneImageSucceeds() {
         when(aiClient.generate(any())).thenReturn(
                 new LogoAiClient.LogoAiResult(true, "remote/model", List.of(logo("a"))));
-        when(storage.store(eq("g"), anyInt(), anyString()))
-                .thenReturn(new LogoFileStorage.StoredImage("logos/g/c.png", 512, 512));
+        when(storage.store(eq("origin_logos/g"), anyInt(), anyString()))
+                .thenReturn(new LogoFileStorage.StoredImage("origin_logos/g/c.png", 512, 512));
 
         processor.process(10L);
 
@@ -72,8 +72,8 @@ class LogoGenerationProcessorTest {
     void storesOriginalSvgWithPng() {
         var logo = new LogoAiClient.GeneratedLogo("a", null, null, "<svg><path/></svg>");
         when(aiClient.generate(any())).thenReturn(new LogoAiClient.LogoAiResult(true, "remote/model", List.of(logo)));
-        when(storage.store("g", 1, "a"))
-                .thenReturn(new LogoFileStorage.StoredImage("logos/g/candidate-1.png", 512, 512));
+        when(storage.store("origin_logos/g", 1, "a"))
+                .thenReturn(new LogoFileStorage.StoredImage("origin_logos/g/candidate-1.png", 512, 512));
 
         processor.process(10L);
 

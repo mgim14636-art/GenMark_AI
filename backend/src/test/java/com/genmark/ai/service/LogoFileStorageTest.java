@@ -39,9 +39,9 @@ class LogoFileStorageTest {
 
         assertThat(storage.readSvg("generation-1", 1, null))
                 .isEqualTo(edited.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        assertThat(tempDir.resolve("private/logos/generation-1/candidate-1.svg"))
+        assertThat(tempDir.resolve("private/origin_logos/generation-1/candidate-1.svg"))
                 .hasContent(original);
-        assertThat(tempDir.resolve("private/logos/generation-1/candidate-1-edited.svg"))
+        assertThat(tempDir.resolve("private/edit_logos/generation-1/candidate-1-edited.svg"))
                 .hasContent(edited);
     }
 
@@ -81,9 +81,9 @@ class LogoFileStorageTest {
 
         storage.storeBrandKitPrintAsset("kit-1", 1, svg, pdf);
 
-        assertThat(tempDir.resolve("private/brand-kits/kit-1/front.svg")).exists();
-        assertThat(tempDir.resolve("private/brand-kits/kit-1/front.pdf")).exists();
-        assertThat(tempDir.resolve("public/brand-kits/kit-1/front.svg")).doesNotExist();
+        assertThat(tempDir.resolve("private/brand_kits/kit-1/front.svg")).exists();
+        assertThat(tempDir.resolve("private/brand_kits/kit-1/front.pdf")).exists();
+        assertThat(tempDir.resolve("public/brand_kits/kit-1/front.svg")).doesNotExist();
         assertThat(storage.readBrandKitPrintAsset("kit-1", 1)).isPresent();
     }
 
@@ -161,11 +161,11 @@ class LogoFileStorageTest {
 
         assertThat(asset.revision()).matches("[0-9a-f]{64}");
         assertThat(asset.storageKey()).isEqualTo(
-                "logos/generation-1/candidate-1-" + asset.revision() + ".png");
+                "edit_logos/generation-1/candidate-1-" + asset.revision() + ".png");
         assertThat(asset.width()).isEqualTo(1024);
         assertThat(asset.height()).isEqualTo(1024);
         assertThat(tempDir.resolve("public").resolve(asset.storageKey())).exists();
-        assertThat(tempDir.resolve("private/logos/generation-1/candidate-1-"
+        assertThat(tempDir.resolve("private/Revision_logos/generation-1/candidate-1-"
                 + asset.revision() + ".svg")).hasContent(svg);
         assertThat(storage.readSvg("generation-1", 1, asset.revision()))
                 .isEqualTo(svg.getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -175,7 +175,7 @@ class LogoFileStorageTest {
     void revisionWriteLeavesExistingActivePngUntouched() throws Exception {
         LogoFileStorage storage = storage();
         String original = pngBase64(2, 2);
-        LogoFileStorage.StoredImage active = storage.store("generation-1", 1, original);
+        LogoFileStorage.StoredImage active = storage.store("origin_logos/generation-1", 1, original);
 
         LogoFileStorage.StoredEditedAsset orphan = storage.storeEditedAssets(
                 "generation-1", 1, "<svg><path/></svg>", pngBase64(1024, 1024));
@@ -237,12 +237,12 @@ class LogoFileStorageTest {
     void storesAndMatchesBrandKitSourceKeySidecar() {
         LogoFileStorage storage = storage();
 
-        storage.storeBrandKitSourceKey("kit-1", "logos/generation-1/candidate-1-revision.png");
+        storage.storeBrandKitSourceKey("kit-1", "origin_logos/generation-1/candidate-1-revision.png");
 
         assertThat(storage.brandKitSourceKeyMatches(
-                "kit-1", "logos/generation-1/candidate-1-revision.png")).isTrue();
-        assertThat(storage.brandKitSourceKeyMatches("kit-1", "logos/another.png")).isFalse();
-        assertThat(storage.brandKitSourceKeyMatches("missing-kit", "logos/another.png")).isFalse();
+                "kit-1", "origin_logos/generation-1/candidate-1-revision.png")).isTrue();
+        assertThat(storage.brandKitSourceKeyMatches("kit-1", "origin_logos/another.png")).isFalse();
+        assertThat(storage.brandKitSourceKeyMatches("missing-kit", "origin_logos/another.png")).isFalse();
     }
 
     private LogoFileStorage storage() {

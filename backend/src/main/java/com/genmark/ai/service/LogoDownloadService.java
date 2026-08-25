@@ -16,7 +16,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * 로고 다운로드 (F12-4).
@@ -141,6 +145,45 @@ public class LogoDownloadService {
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND))
                 .getStorageKey());
     }
+
+    /**
+     * 다운로드한 로고를 PNG·SVG 둘 다 담은 zip으로 묶어 돌려준다. 본인 것만 받을 수 있다.
+     *
+     * <p>SVG가 없는(예전 방식으로 만든) 로고는 PNG만 담아서, 예전 다운로드 기록도 계속
+     * 받을 수 있게 한다.
+     */
+    public LogoDownloadArchive downloadArchive(Long downloadId, Long memberId) {
+        LogoDownload download = downloadRepository.findById(downloadId)
+                .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (!download.getMember().getId().equals(memberId)) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        LogoCandidate candidate = download.getCandidate();
+
+        try (ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+             ZipOutputStream zip = new ZipOutputStream(bytes)) {
+            zip.putNextEntry(new ZipEntry("logo.png"));
+            zip.write(fileStorage.read(download.getStorageKey()));
+            zip.closeEntry();
+
+            try {
+                byte[] svg = fileStorage.readPreferredSvg(
+                        candidate.getGeneration().getPublicId(), candidate.getCandidateOrder());
+                zip.putNextEntry(new ZipEntry("logo.svg"));
+                zip.write(svg);
+                zip.closeEntry();
+            } catch (ApiException ignored) {
+                // 벡터 원본이 없는 예전 다운로드는 PNG만 담아 그대로 받아지게 둔다
+            }
+
+            zip.finish();
+            return new LogoDownloadArchive("genmark-logo.zip", bytes.toByteArray());
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.STORAGE_ERROR);
+        }
+    }
+
+    public record LogoDownloadArchive(String filename, byte[] bytes) {}
 
     public List<LogoDownloadResponse> myDownloads(Long memberId, LogoDownload.ProjectType projectType) {
         return downloadRepository.findByMemberIdAndProjectTypeOrderByDownloadedAtDesc(memberId, projectType)

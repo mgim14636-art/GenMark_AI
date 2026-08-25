@@ -59,7 +59,7 @@ public class BrandKitProcessor {
             LogoFileStorage.StoredImage stored = null;
             for (int index = 0; index < imageBase64Values.size(); index += 1) {
                 LogoFileStorage.StoredImage current = storage.store(
-                        "brand-kits/" + kit.getPublicId(), index + 1, imageBase64Values.get(index));
+                        "brand_kits/" + kit.getPublicId(), index + 1, imageBase64Values.get(index));
                 if (stored == null) stored = current;
             }
             if (kit.getKitType() == BrandKit.KitType.BUSINESS_CARD) {

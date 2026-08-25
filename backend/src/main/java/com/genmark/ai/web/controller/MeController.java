@@ -20,11 +20,14 @@ import com.genmark.ai.web.exception.ApiException;
 import com.genmark.ai.web.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import jakarta.validation.Valid;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -69,6 +72,21 @@ public class MeController {
         return ResponseEntity.ok()
                 .contentType(MediaType.IMAGE_PNG)
                 .body(downloadService.readImage(downloadId, principal.id()));
+    }
+
+    /** 다운로드한 로고를 PNG·SVG 둘 다 담은 zip으로 받는다. 본인 것만 받을 수 있다. */
+    @GetMapping("/downloads/{downloadId}/archive")
+    public ResponseEntity<byte[]> downloadArchive(
+            @AuthenticationPrincipal MemberPrincipal principal, @PathVariable Long downloadId) {
+        LogoDownloadService.LogoDownloadArchive archive =
+                downloadService.downloadArchive(downloadId, principal.id());
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(archive.filename(), StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(archive.bytes());
     }
 
     /** 로그인 사용자가 만든 모든 완료 로고 후보를 최신순으로 조회한다. */
