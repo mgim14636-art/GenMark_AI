@@ -112,6 +112,7 @@ class CreditFreeFlowTest {
                 memberRepository,
                 surveyRepository,
                 fileStorage,
+                new ObjectMapper(),
                 20);
 
         var response = service.download(project.getPublicId(), candidate.getPublicId(), member.getId());

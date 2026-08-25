@@ -1,5 +1,7 @@
 package com.genmark.ai.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.LogoCandidate;
 import com.genmark.ai.entity.LogoDownload;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -47,6 +50,7 @@ public class LogoDownloadService {
     private final MemberRepository memberRepository;
     private final MemberSurveyRepository surveyRepository;
     private final LogoFileStorage fileStorage;
+    private final ObjectMapper objectMapper;
 
     /** 종류별 보관 한도. CI 20개, BI 20개를 각각 센다. */
     private final int retentionLimit;
@@ -57,6 +61,7 @@ public class LogoDownloadService {
                                MemberRepository memberRepository,
                                MemberSurveyRepository surveyRepository,
                                LogoFileStorage fileStorage,
+                               ObjectMapper objectMapper,
                                @Value("${app.download.retention-per-type:20}") int retentionLimit) {
         this.projectLookup = projectLookup;
         this.candidateRepository = candidateRepository;
@@ -64,6 +69,7 @@ public class LogoDownloadService {
         this.memberRepository = memberRepository;
         this.surveyRepository = surveyRepository;
         this.fileStorage = fileStorage;
+        this.objectMapper = objectMapper;
         this.retentionLimit = retentionLimit;
     }
 
@@ -173,8 +179,8 @@ public class LogoDownloadService {
             zip.closeEntry();
 
             try {
-                byte[] svg = fileStorage.readPreferredSvg(
-                        candidate.getGeneration().getPublicId(), candidate.getCandidateOrder());
+                byte[] svg = fileStorage.readSvg(candidate.getGeneration().getPublicId(),
+                        candidate.getCandidateOrder(), svgRevision(candidate.getAiMetadataJson()));
                 zip.putNextEntry(new ZipEntry("logo.svg"));
                 zip.write(svg);
                 zip.closeEntry();
@@ -190,6 +196,22 @@ public class LogoDownloadService {
     }
 
     public record LogoDownloadArchive(String filename, byte[] bytes) {}
+
+    /**
+     * 후보가 지금 편집본을 쓰고 있으면 그 리비전을, 아니면(한 번도 편집 안 했거나 원본으로
+     * 되돌렸으면) null을 돌려준다. {@link LogoSvgService}의 같은 이름 헬퍼와 동일한 규칙 —
+     * 편집 화면이 보여주는 SVG와 다운로드가 담는 SVG가 항상 같은 파일을 가리키게 한다.
+     */
+    private String svgRevision(String metadataJson) {
+        if (metadataJson == null) return null;
+        try {
+            Map<String, Object> metadata = objectMapper.readValue(metadataJson, new TypeReference<>() {});
+            Object revision = metadata.get("svgRevision");
+            return revision instanceof String value && !value.isBlank() ? value : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
 
     public List<LogoDownloadResponse> myDownloads(Long memberId, LogoDownload.ProjectType projectType) {
         return downloadRepository.findByMemberIdAndProjectTypeOrderByDownloadedAtDesc(memberId, projectType)
