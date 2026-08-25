@@ -96,6 +96,12 @@ public class LogoDownloadService {
         LogoDownload existing = downloadRepository
                 .findByMemberIdAndCandidateId(memberId, candidate.getId()).orElse(null);
         if (existing != null) {
+            // 보관본은 후보의 "지금" 상태를 반영해야 한다 — 처음 받은 뒤 원본으로 되돌리거나
+            // 다시 수정했다면, 재다운로드 시 그 옛날 사본이 아니라 현재 storageKey로 새로 떠야 한다.
+            String refreshedKey = fileStorage.archiveForDownload(
+                    memberId, candidate.getPublicId(), candidate.getStorageKey());
+            existing.setStorageKey(refreshedKey);
+            downloadRepository.save(existing);
             return toResponse(existing, false);
         }
 
