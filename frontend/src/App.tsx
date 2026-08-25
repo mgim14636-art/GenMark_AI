@@ -4455,12 +4455,15 @@ function CustomerApp() {
     try {
       const restored = await projectsApi.restoreCandidateOriginalSvg(projectId, candidate.id)
       setLogoCandidates((current) => current.map((item) => item.id === candidate.id ? restored : item))
-      // The result screen prefers the locally rendered edit preview over the server image
-      // (see candidateImageUrl), so the restored original stays hidden until this is cleared.
-      setEditorSvgSource(null)
-      setEditorBaseSvgSource(null)
-      setEditorSvgPreviewSource(null)
-      setEditorSvgPreviewUrl(null)
+      // The result screen prefers the locally rendered edit preview (editorSvgPreviewUrl) over the
+      // server PNG when one is available (see candidateImageUrl). Simply clearing it here used to
+      // fall back to the raw PNG, which has different internal canvas padding than the SVG preview
+      // pipeline — the logo would visibly jump in size until the user opened the editor once more.
+      // Re-fetch the (now original) SVG so the result screen keeps rendering through the same
+      // preview pipeline the editor uses, keeping the size consistent.
+      const originalSvg = restored.svgUrl ? await projectsApi.getCandidateSvg(restored.svgUrl).catch(() => null) : null
+      setEditorSvgSource(originalSvg)
+      setEditorBaseSvgSource(originalSvg)
       setEditorDrafts(createEditorDrafts())
       setEditorDirty(false)
       setEditorSaved(false)
