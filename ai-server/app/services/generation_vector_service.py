@@ -35,6 +35,13 @@ def _load() -> tuple[np.ndarray, list[str]]:
     return vectors, ids
 
 
+def load_all() -> tuple[np.ndarray, list[str]]:
+    """등록된 벡터 전체와 그 id 목록. 자동 유사도 검사(faiss_service)가 이 저장소도
+    함께 검색할 때 쓴다. register()와 같은 락을 써서 쓰는 도중에 읽지 않게 한다."""
+    with _LOCK:
+        return _load()
+
+
 def _save(vectors: np.ndarray, ids: list[str]) -> None:
     emb_path = Path(settings.generation_embeddings_path)
     ids_path = Path(settings.generation_ids_path)

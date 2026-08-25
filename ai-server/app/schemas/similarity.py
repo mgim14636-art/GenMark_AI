@@ -31,6 +31,10 @@ class MatchedTrademark(BaseModel):
     similarity: int = Field(ge=0, le=100)
     imagePath: str = Field(min_length=1)
 
+    # KIPRIS 등록 상표 매치인지, 관리자가 수동 등록해둔 자체 생성 로고 매치인지.
+    # 기본값 KIPRIS로 두어 이 필드를 모르는 옛 소비자와도 호환된다.
+    source: Literal["KIPRIS", "GENERATED"] = "KIPRIS"
+
     # 왜 닮았는지에 대한 한 줄 설명(Gemini). 부가 정보이므로 없을 수 있다.
     # 외부 API 실패·지연·콘텐츠 필터링 시 생략되며, 그래도 응답은 정상이다.
     # 소비 측은 note가 없을 수 있음을 전제해야 한다.

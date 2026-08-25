@@ -92,6 +92,25 @@ class SimilarityService:
         rows = []
         for r in raw:
             meta = r["meta"]
+            source = r.get("source", "KIPRIS")
+            if source == "GENERATED":
+                # 관리자가 수동 등록해둔 자체 생성 로고. KIPRIS처럼 상표명·류·이미지
+                # 파일이 없으므로, 백엔드가 candidatePublicId로 자기 DB를 다시 조회해
+                # name·category·이미지를 채운다 — 여기선 조회 키만 정확히 넘긴다.
+                candidate_id = str(meta.get("candidate_public_id", "") or "").strip()
+                if not candidate_id:
+                    logger.warning("Skipping generated match with missing candidate id")
+                    continue
+                rows.append({
+                    "applicationNumber": candidate_id,
+                    "name": "자체 생성 로고",
+                    "category": "자체 생성 로고",
+                    "similarity": _to_score(r["cos"]),
+                    "imagePath": candidate_id,
+                    "source": "GENERATED",
+                })
+                continue
+
             app_no = str(meta.get("출원번호", "") or "").strip()
             image_path = str(meta.get("이미지경로", "") or "").strip().replace("\\", "/")
             if not app_no or not image_path:
@@ -104,6 +123,7 @@ class SimilarityService:
                 "category": _category(meta),
                 "similarity": _to_score(r["cos"]),
                 "imagePath": image_path,
+                "source": "KIPRIS",
             })
 
         if not rows:
@@ -114,14 +134,19 @@ class SimilarityService:
         matches = [{"rank": i, **m} for i, m in enumerate(rows, 1)]
 
         # 설명 생성은 정렬이 끝난 뒤에 한다. 순서가 바뀌면 설명이 엉뚱한 상표에 붙는다.
-        if with_notes and note_service.is_enabled():
+        # KIPRIS 매치만 대상으로 한다 — generate_notes()는 이미지경로를 trademark_data_root
+        # 기준 상대경로로 읽는데, 자체 생성 로고는 그런 파일이 없어서 하나라도 섞이면
+        # 배치 전체가 note 없이 반환된다(note_service.generate_notes 참고).
+        kipris_positions = [i for i, m in enumerate(matches) if m["source"] == "KIPRIS"]
+        if with_notes and kipris_positions and note_service.is_enabled():
             try:
                 notes = note_service.generate_notes(
-                    DinoService.to_bytes(image_src), [m["imagePath"] for m in matches]
+                    DinoService.to_bytes(image_src),
+                    [matches[i]["imagePath"] for i in kipris_positions],
                 )
-                for m, note in zip(matches, notes):
+                for pos, note in zip(kipris_positions, notes):
                     if note:
-                        m["note"] = note
+                        matches[pos]["note"] = note
             except Exception as e:
                 # note는 부가 정보다. 어떤 실패도 점수 결과를 막아서는 안 된다.
                 logger.warning("Note attach skipped: %s", type(e).__name__)
