@@ -46,6 +46,8 @@ ai-server/data/outputs/*
 ai-server/data/faiss/*.index
 ai-server/data/faiss/*.json
 !ai-server/data/faiss/.gitkeep
+ai-server/generation-data/*
+!ai-server/generation-data/.gitkeep
 
 # Docker volumes
 .docker-data/
