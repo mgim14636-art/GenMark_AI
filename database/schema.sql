@@ -265,6 +265,7 @@ CREATE TABLE IF NOT EXISTS trademark_matches (
     similarity INT NOT NULL,
     image_path VARCHAR(500) NULL,
     note TEXT NULL,
+    source VARCHAR(20) NOT NULL DEFAULT 'KIPRIS',
     CONSTRAINT fk_match_analysis FOREIGN KEY (analysis_id) REFERENCES trademark_analyses(id) ON DELETE CASCADE,
     CONSTRAINT uq_match_rank UNIQUE (analysis_id, match_rank),
     CONSTRAINT chk_match_similarity CHECK (similarity BETWEEN 0 AND 100)

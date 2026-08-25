@@ -8,5 +8,6 @@ public record TrademarkMatchResponse(
         int similarity,
         String imagePath,
         String imageUrl,
-        String note
+        String note,
+        String source
 ) {}

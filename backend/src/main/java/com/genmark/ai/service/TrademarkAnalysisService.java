@@ -106,8 +106,9 @@ public class TrademarkAnalysisService {
     private TrademarkMatchResponse toResponse(TrademarkMatch m, String projectId, String analysisId) {
         String imageUrl = "/api/v1/projects/%s/trademark-analyses/%s/matches/%d/image"
                 .formatted(projectId, analysisId, m.getRank());
+        String source = m.getSource() == TrademarkMatch.Source.GENERATED ? "GENERATED" : "KIPRIS";
         return new TrademarkMatchResponse(m.getRank(), m.getApplicationNumber(), m.getName(), m.getCategory(),
-                m.getSimilarity(), m.getImagePath(), imageUrl, m.getNote());
+                m.getSimilarity(), m.getImagePath(), imageUrl, m.getNote(), source);
     }
 
     private void runAfterCommit(Runnable task) {

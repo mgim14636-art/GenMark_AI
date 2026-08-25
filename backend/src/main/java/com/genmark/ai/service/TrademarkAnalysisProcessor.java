@@ -1,9 +1,14 @@
 package com.genmark.ai.service;
 
 import com.genmark.ai.client.TrademarkAiClient;
+import com.genmark.ai.entity.BiProject;
+import com.genmark.ai.entity.CiProject;
+import com.genmark.ai.entity.LogoCandidate;
+import com.genmark.ai.entity.ProjectLike;
 import com.genmark.ai.entity.ProjectStatus;
 import com.genmark.ai.entity.TrademarkAnalysis;
 import com.genmark.ai.entity.TrademarkMatch;
+import com.genmark.ai.repository.LogoCandidateRepository;
 import com.genmark.ai.repository.TrademarkAnalysisRepository;
 import com.genmark.ai.repository.TrademarkMatchRepository;
 import com.genmark.ai.web.exception.ApiException;
@@ -28,6 +33,7 @@ public class TrademarkAnalysisProcessor {
     private final TrademarkMatchRepository matchRepository;
     private final TrademarkAiClient aiClient;
     private final LogoFileStorage storage;
+    private final LogoCandidateRepository candidateRepository;
 
     @Transactional
     public void process(Long analysisId) {
@@ -49,9 +55,18 @@ public class TrademarkAnalysisProcessor {
             analysis.setDisclaimer(result.disclaimer());
             for (int i = 0; i < result.matches().size(); i++) {
                 TrademarkAiClient.Match match = result.matches().get(i);
+                TrademarkMatch.Source source = match.source() == TrademarkAiClient.Source.GENERATED
+                        ? TrademarkMatch.Source.GENERATED : TrademarkMatch.Source.KIPRIS;
+                String name = match.name();
+                if (source == TrademarkMatch.Source.GENERATED) {
+                    // AI 서버는 이 매치의 applicationNumber 자리에 후보 publicId를 담아 보낸다
+                    // (자체 생성 로고라 실제 출원번호가 없음). 우리 DB에서 프로젝트명을 다시 찾아 채운다.
+                    name = generatedLogoName(match.applicationNumber());
+                }
                 matchRepository.save(TrademarkMatch.builder().analysis(analysis).rank(i + 1)
-                        .applicationNumber(match.applicationNumber()).name(match.name()).category(match.category())
-                        .similarity(match.similarity()).imagePath(match.imagePath()).note(match.note()).build());
+                        .applicationNumber(match.applicationNumber()).name(name).category(match.category())
+                        .similarity(match.similarity()).imagePath(match.imagePath()).note(match.note())
+                        .source(source).build());
             }
             analysis.setStatus(TrademarkAnalysis.Status.SUCCEEDED);
             analysis.getProject().setStatus(ProjectStatus.COMPLETED);
@@ -63,6 +78,23 @@ public class TrademarkAnalysisProcessor {
             analysis.setErrorMessage(safeMessage(ex));
             analysis.setCompletedAt(LocalDateTime.now());
         }
+    }
+
+    /**
+     * 자체 생성 로고 매치의 표시용 이름. {@code AdminSimilarityService.toRow()}와 같은
+     * 규칙(CI는 회사명, BI는 브랜드명)으로 찾되, 후보를 못 찾거나 이름이 비어 있으면
+     * "자체 생성 로고"로 대체한다.
+     */
+    private String generatedLogoName(String candidatePublicId) {
+        return candidateRepository.findByPublicId(candidatePublicId)
+                .map(LogoCandidate::getGeneration)
+                .map(generation -> {
+                    ProjectLike project = generation.getProject();
+                    String name = project instanceof CiProject ci ? ci.getCompanyName()
+                            : project instanceof BiProject bi ? bi.getBrandName() : null;
+                    return name != null && !name.isBlank() ? name : null;
+                })
+                .orElse("자체 생성 로고");
     }
 
     private void validate(TrademarkAiClient.Result result) {

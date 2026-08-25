@@ -47,8 +47,10 @@ public class FastApiTrademarkAiClient implements TrademarkAiClient {
     private Match toMatch(Map<String, Object> value) {
         int similarity = number(value.get("similarity"));
         validateScore(similarity);
+        Source source = "GENERATED".equals(value.get("source")) ? Source.GENERATED : Source.KIPRIS;
         return new Match(string(value.get("applicationNumber")), string(value.get("name")),
-                string(value.get("category")), similarity, string(value.get("imagePath")), string(value.get("note")));
+                string(value.get("category")), similarity, string(value.get("imagePath")), string(value.get("note")),
+                source);
     }
 
     private int number(Object value) {
