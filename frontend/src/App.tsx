@@ -945,8 +945,13 @@ function CustomerApp() {
     let objectUrl: string | null = null
     try {
       const edited = editorDirty ? buildEditorDraftSvg(editorSvgSource, editorDrafts) : editorSvgSource
-      setEditorSvgPreviewSource(prepareEditableSvg(edited, editTarget))
-      objectUrl = URL.createObjectURL(new Blob([edited], { type: 'image/svg+xml' }))
+      // prepareEditableSvg()가 preserveAspectRatio를 "xMidYMid meet"로 고정해준다 — 원본 SVG가
+      // "none"으로 돼 있으면(생성 파이프라인에서 종종 그렇다) 결과 화면의 <img>가 그 값을 그대로
+      // 물려받아 로고가 눌리거나 늘어나 보인다. 편집 캔버스와 결과 화면 썸네일이 같은 문자열을
+      // 쓰게 해서 둘의 비율이 항상 같게 맞춘다.
+      const preview = prepareEditableSvg(edited, editTarget)
+      setEditorSvgPreviewSource(preview)
+      objectUrl = URL.createObjectURL(new Blob([preview], { type: 'image/svg+xml' }))
       setEditorSvgPreviewUrl(objectUrl)
       setEditorError('')
     } catch (error) {
