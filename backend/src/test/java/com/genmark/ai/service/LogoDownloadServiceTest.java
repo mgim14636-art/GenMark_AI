@@ -1,5 +1,6 @@
 package com.genmark.ai.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.genmark.ai.entity.CiProject;
 import com.genmark.ai.entity.LogoCandidate;
 import com.genmark.ai.entity.LogoDownload;
@@ -40,7 +41,7 @@ class LogoDownloadServiceTest {
         when(downloads.findById(42L)).thenReturn(Optional.of(download));
         LogoDownloadService service = new LogoDownloadService(mock(ProjectLookupService.class),
                 mock(LogoCandidateRepository.class), downloads, mock(MemberRepository.class),
-                mock(MemberSurveyRepository.class), storage,
+                mock(MemberSurveyRepository.class), storage, new ObjectMapper(),
                 20);
 
         service.delete(42L, 7L);
@@ -61,7 +62,7 @@ class LogoDownloadServiceTest {
         LogoFileStorage storage = mock(LogoFileStorage.class);
         LogoDownloadService service = new LogoDownloadService(mock(ProjectLookupService.class),
                 mock(LogoCandidateRepository.class), downloads, mock(MemberRepository.class),
-                mock(MemberSurveyRepository.class), storage,
+                mock(MemberSurveyRepository.class), storage, new ObjectMapper(),
                 20);
 
         assertThatThrownBy(() -> service.delete(42L, 9L))
@@ -80,7 +81,7 @@ class LogoDownloadServiceTest {
         when(surveyRepository.existsByMemberId(7L)).thenReturn(false);
         LogoDownloadService service = new LogoDownloadService(projectLookup,
                 candidateRepository, mock(LogoDownloadRepository.class), mock(MemberRepository.class),
-                surveyRepository, mock(LogoFileStorage.class),
+                surveyRepository, mock(LogoFileStorage.class), new ObjectMapper(),
                 20);
 
         assertThatThrownBy(() -> service.download("project-1", "candidate-1", 7L))
@@ -122,7 +123,7 @@ class LogoDownloadServiceTest {
                 .thenReturn("downloads/7/candidate-1.png");
 
         LogoDownloadService service = new LogoDownloadService(projectLookup, candidateRepository,
-                downloads, memberRepository, surveyRepository, storage, 20);
+                downloads, memberRepository, surveyRepository, storage, new ObjectMapper(), 20);
 
         service.download("project-1", "candidate-1", 7L);
 
@@ -143,10 +144,10 @@ class LogoDownloadServiceTest {
                 .storageKey("downloads/7/candidate-1.png").build();
         when(downloads.findById(42L)).thenReturn(Optional.of(download));
         when(storage.read("downloads/7/candidate-1.png")).thenReturn("png-bytes".getBytes(StandardCharsets.UTF_8));
-        when(storage.readPreferredSvg("generation-1", 1)).thenReturn("svg-bytes".getBytes(StandardCharsets.UTF_8));
+        when(storage.readSvg("generation-1", 1, null)).thenReturn("svg-bytes".getBytes(StandardCharsets.UTF_8));
         LogoDownloadService service = new LogoDownloadService(mock(ProjectLookupService.class),
                 mock(LogoCandidateRepository.class), downloads, mock(MemberRepository.class),
-                mock(MemberSurveyRepository.class), storage, 20);
+                mock(MemberSurveyRepository.class), storage, new ObjectMapper(), 20);
 
         LogoDownloadService.LogoDownloadArchive archive = service.downloadArchive(42L, 7L);
 
@@ -154,6 +155,35 @@ class LogoDownloadServiceTest {
         assertThat(unzipTextEntries(archive.bytes())).containsExactly(
                 Map.entry("logo.png", "png-bytes"),
                 Map.entry("logo.svg", "svg-bytes"));
+    }
+
+    @Test
+    void downloadArchiveUsesTheEditedRevisionSvgWhenCandidateHasBeenEdited() throws IOException {
+        // 후보가 수정된 적 있으면 aiMetadataJson에 svgRevision이 남아 있다. 예전에는 이 값을
+        // 무시하고 항상 원본 SVG를 담아서, "수정했는데 다운로드에는 원본 SVG가 나온다"는
+        // 버그가 있었다 — 리비전이 실제로 readSvg에 전달되는지 이 테스트로 고정한다.
+        LogoDownloadRepository downloads = mock(LogoDownloadRepository.class);
+        LogoFileStorage storage = mock(LogoFileStorage.class);
+        LogoGeneration generation = LogoGeneration.builder().publicId("generation-1")
+                .ciProject(CiProject.builder().build()).build();
+        LogoCandidate candidate = LogoCandidate.builder().candidateOrder(1).generation(generation)
+                .aiMetadataJson("{\"svgAvailable\":true,\"svgEdited\":true,\"svgRevision\":\"abc123\"}").build();
+        LogoDownload download = LogoDownload.builder().id(42L)
+                .member(Member.builder().id(7L).build())
+                .candidate(candidate)
+                .storageKey("downloads/7/candidate-1.png").build();
+        when(downloads.findById(42L)).thenReturn(Optional.of(download));
+        when(storage.read("downloads/7/candidate-1.png")).thenReturn("png-bytes".getBytes(StandardCharsets.UTF_8));
+        when(storage.readSvg("generation-1", 1, "abc123")).thenReturn("edited-svg-bytes".getBytes(StandardCharsets.UTF_8));
+        LogoDownloadService service = new LogoDownloadService(mock(ProjectLookupService.class),
+                mock(LogoCandidateRepository.class), downloads, mock(MemberRepository.class),
+                mock(MemberSurveyRepository.class), storage, new ObjectMapper(), 20);
+
+        LogoDownloadService.LogoDownloadArchive archive = service.downloadArchive(42L, 7L);
+
+        assertThat(unzipTextEntries(archive.bytes())).containsExactly(
+                Map.entry("logo.png", "png-bytes"),
+                Map.entry("logo.svg", "edited-svg-bytes"));
     }
 
     @Test
@@ -169,10 +199,10 @@ class LogoDownloadServiceTest {
                 .storageKey("downloads/7/candidate-1.png").build();
         when(downloads.findById(42L)).thenReturn(Optional.of(download));
         when(storage.read("downloads/7/candidate-1.png")).thenReturn("png-bytes".getBytes(StandardCharsets.UTF_8));
-        when(storage.readPreferredSvg("generation-1", 1)).thenThrow(new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
+        when(storage.readSvg("generation-1", 1, null)).thenThrow(new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
         LogoDownloadService service = new LogoDownloadService(mock(ProjectLookupService.class),
                 mock(LogoCandidateRepository.class), downloads, mock(MemberRepository.class),
-                mock(MemberSurveyRepository.class), storage, 20);
+                mock(MemberSurveyRepository.class), storage, new ObjectMapper(), 20);
 
         LogoDownloadService.LogoDownloadArchive archive = service.downloadArchive(42L, 7L);
 
@@ -190,7 +220,7 @@ class LogoDownloadServiceTest {
         LogoFileStorage storage = mock(LogoFileStorage.class);
         LogoDownloadService service = new LogoDownloadService(mock(ProjectLookupService.class),
                 mock(LogoCandidateRepository.class), downloads, mock(MemberRepository.class),
-                mock(MemberSurveyRepository.class), storage, 20);
+                mock(MemberSurveyRepository.class), storage, new ObjectMapper(), 20);
 
         assertThatThrownBy(() -> service.downloadArchive(42L, 9L))
                 .isInstanceOfSatisfying(ApiException.class,
