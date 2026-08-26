@@ -1498,7 +1498,7 @@ function CustomerApp() {
   }
 
   const toggleSurveyImprovement = (item: SurveyImprovement) => {
-    setSurveyImprovements((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])
+    setSurveyImprovements((current) => current.includes(item) ? [] : [item])
   }
 
   const applyLogoCandidateState = async (candidateProjectId: string, candidates: LogoCandidate[]) => {
@@ -4918,7 +4918,7 @@ function CustomerApp() {
             <section className="survey-section" aria-labelledby="rating-title"><h2 id="rating-title">결과에 얼마나 만족하시나요?</h2><div className="rating-options" role="radiogroup" aria-label="결과 만족도"><button type="button" role="radio" aria-checked={surveyRating === 5} className={surveyRating === 5 ? 'rating-choice like selected' : 'rating-choice like'} onClick={() => selectSurveyRating(5)}><ThumbsUp aria-hidden="true" size={34} strokeWidth={1.7} fill={surveyRating === 5 ? 'currentColor' : 'none'} /><span>좋아요</span></button><button type="button" role="radio" aria-checked={surveyRating === 1} className={surveyRating === 1 ? 'rating-choice dislike selected' : 'rating-choice dislike'} onClick={() => selectSurveyRating(1)}><ThumbsDown aria-hidden="true" size={34} strokeWidth={1.7} fill={surveyRating === 1 ? 'currentColor' : 'none'} /><span>싫어요</span></button></div></section>
 
             {surveyRating === 1 && (
-              <section className="survey-section" aria-labelledby="improvement-title"><h2 id="improvement-title">어떤 부분이 더 좋아졌으면 하나요?</h2><p className="survey-helper">개선이 필요하다고 느낀 항목을 모두 선택해주세요.</p><div className="improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'improvement-option selected' : 'improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div>
+              <section className="survey-section" aria-labelledby="improvement-title"><h2 id="improvement-title">어떤 부분이 더 좋아졌으면 하나요?</h2><p className="survey-helper">가장 아쉬웠던 항목을 하나만 선택해주세요.</p><div className="improvement-grid" role="radiogroup" aria-label="개선이 필요한 항목">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" role="radio" className={selected ? 'improvement-option selected' : 'improvement-option'} aria-checked={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div>
                 {surveyImprovements.includes('기타 사항') && <textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어떤 부분이 아쉬웠는지 자유롭게 적어주세요." maxLength={500} />}
               </section>
             )}
@@ -5003,7 +5003,7 @@ function CustomerApp() {
         <form onSubmit={submitCreditSurvey}>
           <div className="modal-survey-block"><h3>결과에 얼마나 만족하시나요?</h3><div className="modal-rating-options" role="radiogroup" aria-label="결과 만족도"><button type="button" role="radio" aria-checked={surveyRating === 5} className={surveyRating === 5 ? 'modal-rating-choice like selected' : 'modal-rating-choice like'} onClick={() => selectSurveyRating(5)}><ThumbsUp aria-hidden="true" size={24} strokeWidth={1.8} fill={surveyRating === 5 ? 'currentColor' : 'none'} /><span>좋아요</span></button><button type="button" role="radio" aria-checked={surveyRating === 1} className={surveyRating === 1 ? 'modal-rating-choice dislike selected' : 'modal-rating-choice dislike'} onClick={() => selectSurveyRating(1)}><ThumbsDown aria-hidden="true" size={24} strokeWidth={1.8} fill={surveyRating === 1 ? 'currentColor' : 'none'} /><span>싫어요</span></button></div></div>
           {surveyRating === 1 && <div className="survey-followup" aria-live="polite"><div className="survey-followup-inner">
-            <div className="modal-survey-block"><h3>어떤 부분이 더 좋아졌으면 하나요?</h3><div className="modal-improvement-grid">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" className={selected ? 'modal-improvement-option selected' : 'modal-improvement-option'} aria-pressed={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div>
+            <div className="modal-survey-block"><h3>어떤 부분이 더 좋아졌으면 하나요?</h3><div className="modal-improvement-grid" role="radiogroup" aria-label="개선이 필요한 항목">{surveyImprovementOptions.map((item) => { const selected = surveyImprovements.includes(item); return <button key={item} type="button" role="radio" className={selected ? 'modal-improvement-option selected' : 'modal-improvement-option'} aria-checked={selected} onClick={() => toggleSurveyImprovement(item)}>{item}</button> })}</div>
               {surveyImprovements.includes('기타 사항') && <textarea value={surveyComment} onChange={(event) => setSurveyComment(event.target.value)} placeholder="어떤 부분이 아쉬웠는지 자유롭게 적어주세요." maxLength={500} />}
             </div>
           </div></div>}
