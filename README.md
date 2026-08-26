@@ -15,23 +15,25 @@
 
 ---
 
-## 목차
+## 📑 목차
 
 1. [프로젝트 소개](#1-프로젝트-소개)
-2. [주요 기능](#2-주요-기능)
-3. [기술 스택](#3-기술-스택)
-4. [시스템 아키텍처](#4-시스템-아키텍처)
-5. [메인 프로세스](#5-메인-프로세스)
-6. [유스케이스](#6-유스케이스)
-7. [ER 다이어그램](#7-er-다이어그램)
-8. [화면 구성](#8-화면-구성)
-9. [트러블슈팅](#9-트러블슈팅)
-10. [팀원 역할](#10-팀원-역할)
-11. [실행 방법](#11-실행-방법)
-12. [데이터베이스 & 배포](#12-데이터베이스--배포)
-13. [CI / 테스트](#13-ci--테스트)
-14. [문서](#14-문서)
-15. [향후 개선 방향](#15-향후-개선-방향)
+2. [서비스 소개](#2-서비스-소개)
+3. [프로젝트 기간](#3-프로젝트-기간)
+4. [주요 기능](#4-주요-기능)
+5. [기술 스택](#5-기술-스택)
+6. [시스템 아키텍처](#6-시스템-아키텍처)
+7. [서비스 흐름도](#7-서비스-흐름도)
+8. [ER Diagram](#8-er-diagram)
+9. [화면 구성](#9-화면-구성)
+10. [팀원 소개](#10-팀원-소개)
+11. [Trouble Shooting](#11-trouble-shooting)
+12. [실행 방법](#12-실행-방법)
+13. [유스케이스](#13-유스케이스)
+14. [데이터베이스 & 배포](#14-데이터베이스--배포)
+15. [CI / 테스트](#15-ci--테스트)
+16. [문서](#16-문서)
+17. [향후 개선 방향](#17-향후-개선-방향)
 
 ---
 
@@ -43,7 +45,7 @@
 | **주요 사용자** | 뷰티 창업자 · 소규모 브랜드 운영자 |
 | **핵심 가치** | 로고 제작 도구와 상표 검토 과정의 통합 — 외부 검토 없이 스스로 충돌 리스크 확인 |
 
-### 프로젝트 배경
+### 📌 프로젝트 배경
 
 - 화장품 책임판매업체는 2019년 15,707개 → 2023년 **31,524개**로 약 2배 증가, 그중 **80%가 10인 미만** 소규모 사업자
   *(출처: 식품의약품안전처 「2024년 화장품 산업 현황」)*
@@ -52,7 +54,7 @@
 - **상표법 제34조 제1항 제7호**에 따라 기존 등록 상표와 시각적으로 유사하면 등록이 제한될 수 있음
 - 창업자는 로고 제작 이후 자신이 곧 겪게 될 상표 충돌 여부를 미리 알기 어렵다는 문제가 있음
 
-### 유사 서비스와의 차별점
+### 🆚 유사 서비스와의 차별점
 
 | 서비스 | 한계 | GenMark-AI |
 |---|---|---|
@@ -62,7 +64,43 @@
 
 ---
 
-## 2. 주요 기능
+## 2. 서비스 소개
+
+### 🎨 로고 생성
+
+- 설문 기반 심볼 / 워드마크 / 혼합형 / 레터마크 로고 자동 생성 (SVG + PNG)
+- `Idempotency-Key` 기반 멱등 처리로 중복 생성 방지
+
+### ✏️ 로고 편집
+
+- 브라우저에서 SVG 요소 선택 · 이동 · 색상 · 크기 · 회전 · 투명도 · 삭제
+- 언제든 원본으로 복원 가능
+
+### 🔍 상표 유사도 검증
+
+- DINOv2 임베딩 + FAISS 코사인 검색으로 **KIPRIS 등록 상표**와 비교
+- 위험도 **SAFE / MODERATE / CAUTION** 판정과 유사 근거 해설(note) 제공
+- 자체 생성 로고 벡터 저장소와 **통합 검색** (`KIPRIS` / `GENERATED` 출처 구분)
+
+### 💼 브랜드킷
+
+- 명함(앞/뒷면 PNG·SVG·PDF) 및 제품 썸네일 자동 생성
+- 동일 스펙 재생성 방지(hash 기반 재사용)
+
+---
+
+## 3. 프로젝트 기간
+
+| 항목 | 내용 |
+|---|---|
+| 프로젝트명 | GenMark-AI |
+| 개발기간 | 2026.07 ~ 2026.08 |
+| 개발인원 | 6명 |
+| 프로젝트 소개 | 로고 생성부터 KIPRIS 상표 유사도 검증까지 한 번에 제공하는 뷰티 브랜드 통합 플랫폼 |
+
+---
+
+## 4. 주요 기능
 
 | 기능 | 설명 |
 |---|---|
@@ -79,7 +117,7 @@
 
 ---
 
-## 3. 기술 스택
+## 5. 기술 스택
 
 ### Frontend
 ![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=flat-square&logo=html5&logoColor=white)
@@ -102,6 +140,8 @@
 - REST API(`/api/v1/**`) · 비동기 작업 큐(`QUEUED→RUNNING→SUCCEEDED/FAILED`) · 폴링 인터페이스
 - 소셜로그인(Google ID Token / Kakao Access Token) 검증 후 JWT access+refresh 발급·rotate
 - 멱등키 기반 생성 중복 방지, 설문 게이팅 등 서버 주도 정책 강제
+- Docker 기반 백엔드·AI 서버·DB 컨테이너 설계, 환경별(local/dev/prod) docker-compose 구성
+- 네이버클라우드 Public/Private 2서버 분리 배포, Nginx 리버스 프록시·SSL·무중단 재배포 운영
 
 ### AI Server
 ![Python](https://img.shields.io/badge/Python_3.11-3776AB?style=flat-square&logo=python&logoColor=white)
@@ -123,7 +163,7 @@
 
 ---
 
-## 4. 시스템 아키텍처
+## 6. 시스템 아키텍처
 
 ```mermaid
 flowchart TB
@@ -160,7 +200,7 @@ flowchart TB
 
 ---
 
-## 5. 메인 프로세스
+## 7. 서비스 흐름도
 
 ```mermaid
 sequenceDiagram
@@ -200,40 +240,7 @@ sequenceDiagram
 
 ---
 
-## 6. 유스케이스
-
-```mermaid
-flowchart LR
-    User((👤 사용자))
-    Admin((🛡 관리자))
-
-    subgraph UserFlow["사용자"]
-        direction TB
-        u1["소셜 로그인 / 온보딩"]
-        u2["CI·BI 브리프 4단계 입력"]
-        u3["로고 생성"]
-        u4["SVG 편집"]
-        u5["상표 유사도 분석"]
-        u6["브랜드킷 생성 (명함·썸네일)"]
-        u7["다운로드 (설문 게이트)"]
-        u8["마이페이지 · 만족도 설문"]
-    end
-
-    subgraph AdminFlow["관리자"]
-        direction TB
-        a1["대시보드 · 분석 리포트"]
-        a2["회원 / 생성물 관리"]
-        a3["설문 개선 요청 열람"]
-        a4["유사도 벡터화 · 1:1 비교 도구"]
-    end
-
-    User --> u1 --> u2 --> u3 --> u4 --> u5 --> u6 --> u7 --> u8
-    Admin --> a1 & a2 & a3 & a4
-```
-
----
-
-## 7. ER 다이어그램
+## 8. ER Diagram
 
 ```mermaid
 erDiagram
@@ -301,7 +308,7 @@ erDiagram
 
 ---
 
-## 8. 화면 구성
+## 9. 화면 구성
 
 | 홈 | CI·BI 로고 스타일 선택 |
 |---|---|
@@ -315,7 +322,20 @@ erDiagram
 
 ---
 
-## 9. 트러블슈팅
+## 10. 팀원 소개
+
+| 이름 | 담당 | GitHub |
+|---|---|---|
+| **김명은** 팀장 | Back-End · Docker/클라우드 설계 · 서버 인프라 | [@mgim14636-art](https://github.com/mgim14636-art) |
+| **남현욱** | PM · AI 프롬프팅 | [@wook153462](https://github.com/wook153462) |
+| **서성찬** | Front-end · AI 프롬프팅 | [@seongchan](https://github.com/seongchan) |
+| **한창수** | Back-end · AI 프롬프팅 | [@chsngsoo2609](https://github.com/chsngsoo2609) |
+| **정혜리** | AI-Modeling · Front-End | [@HYERI-02](https://github.com/HYERI-02) |
+| **김호근** | Front-End · DB | [@kim4646](https://github.com/kim4646) |
+
+---
+
+## 11. Trouble Shooting
 
 ### ① 무관한 로고가 동일 상표보다 높은 점수를 받던 문제
 
@@ -349,20 +369,7 @@ erDiagram
 
 ---
 
-## 10. 팀원 역할
-
-| 이름 | 역할 | GitHub |
-|---|---|---|
-| **김명은** 팀장 | Back-End · DB 및 서버 설계 | [@mgim14636-art](https://github.com/mgim14636-art) |
-| **남현욱** | PM · AI 프롬프팅 | [@wook153462](https://github.com/wook153462) |
-| **서성찬** | Front-end · AI 프롬프팅 | [@seongchan](https://github.com/seongchan) |
-| **한창수** | Back-end · AI 프롬프팅 | [@chsngsoo2609](https://github.com/chsngsoo2609) |
-| **정혜리** | AI-Modeling · Front-End | [@HYERI-02](https://github.com/HYERI-02) |
-| **김호근** | Front-End · DB | [@kim4646](https://github.com/kim4646) |
-
----
-
-## 11. 실행 방법
+## 12. 실행 방법
 
 ### 0. 요구사항
 Docker + Docker Compose · Node.js 20+ (프론트 빌드) · JDK 17/Maven · Python 3.11 (개별 실행 시)
@@ -404,7 +411,40 @@ cd frontend  && npm run dev                  # Vite dev 서버 (/api 프록시)
 
 ---
 
-## 12. 데이터베이스 & 배포
+## 13. 유스케이스
+
+```mermaid
+flowchart LR
+    User((👤 사용자))
+    Admin((🛡 관리자))
+
+    subgraph UserFlow["사용자"]
+        direction TB
+        u1["소셜 로그인 / 온보딩"]
+        u2["CI·BI 브리프 4단계 입력"]
+        u3["로고 생성"]
+        u4["SVG 편집"]
+        u5["상표 유사도 분석"]
+        u6["브랜드킷 생성 (명함·썸네일)"]
+        u7["다운로드 (설문 게이트)"]
+        u8["마이페이지 · 만족도 설문"]
+    end
+
+    subgraph AdminFlow["관리자"]
+        direction TB
+        a1["대시보드 · 분석 리포트"]
+        a2["회원 / 생성물 관리"]
+        a3["설문 개선 요청 열람"]
+        a4["유사도 벡터화 · 1:1 비교 도구"]
+    end
+
+    User --> u1 --> u2 --> u3 --> u4 --> u5 --> u6 --> u7 --> u8
+    Admin --> a1 & a2 & a3 & a4
+```
+
+---
+
+## 14. 데이터베이스 & 배포
 
 - 런타임 Flyway 비활성(`ddl-auto=validate`) — 로컬은 `database/schema.sql` 스냅샷, 운영은 `database/migration/V1~V33` 순차 적용
 - 운영 반영은 GitHub Actions **db-migrate.yml**(수동 dispatch, environment 승인)이 Flyway 12로 수행
@@ -421,7 +461,7 @@ cd frontend  && npm run dev                  # Vite dev 서버 (/api 프록시)
 
 ---
 
-## 13. CI / 테스트
+## 15. CI / 테스트
 
 | 워크플로 | 내용 |
 |---|---|
@@ -436,7 +476,7 @@ cd frontend   && npm run build  # tsc 타입검사 + Vite 빌드
 
 ---
 
-## 14. 문서
+## 16. 문서
 
 - [`docs/ai-team-trademark-similarity-requirements.md`](docs/ai-team-trademark-similarity-requirements.md) — 상표 유사도 AI 요구사항 정의서
 - [`docs/api/ai-api.md`](docs/api/ai-api.md) — FastAPI AI 서버 API 명세
@@ -446,7 +486,7 @@ cd frontend   && npm run build  # tsc 타입검사 + Vite 빌드
 
 ---
 
-## 15. 향후 개선 방향
+## 17. 향후 개선 방향
 
 - **크레딧 소비 활성화** — `GENERATE`/`DOWNLOAD` 차감 로직 활성화 및 결제 연동 (지급 체계는 이미 구현)
 - **KIPRIS 인덱스 확장** — 현 7,423건 → 전 산업권 확대, 주기적 재색인 파이프라인
