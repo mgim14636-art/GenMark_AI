@@ -549,7 +549,6 @@ function AdminSimilarityTestPanel({ vectors, adminToken, standalone }: { vectors
         <div>
           <p className="admin-eyebrow">SIMILARITY TEST</p>
           <h2 id="similarity-test-title">유사도 관리 및 테스트</h2>
-          <p className="admin-generation-description">벡터화된 자체 생성 로고와 임의의 이미지를 1:1로 비교합니다. 비교 결과는 저장되지 않아요.</p>
         </div>
       </div>
 
