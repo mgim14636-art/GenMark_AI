@@ -838,6 +838,11 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
         setAdminId(result.loginId)
         storeAdminId(result.loginId)
         setAdminPassword('')
+        // 로그인 전 URL에 다른 탭(?tab=members 등)이 남아 있으면 dashboardSection이
+        // 그 값으로 초기화돼 있을 수 있다 — 로그인 성공 시에는 항상 대시보드(개요)로,
+        // 기간도 항상 주간으로 되돌려서 로그인 직후 화면을 일관되게 만든다.
+        setDashboardSection('overview')
+        setDashboardPeriod('weekly')
       })
       .catch((error) => {
         setAdminLoginError(error instanceof AuthError && error.code === 'ADMIN_LOGIN_FAILED' ? '아이디 또는 비밀번호를 확인해주세요.' : error instanceof Error ? error.message : '관리자 로그인에 실패했어요.')
