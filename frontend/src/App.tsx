@@ -875,10 +875,16 @@ function CustomerApp() {
     const candidate = editorCandidate
     let disposed = false
 
+    // 저장(적용하기) 없이 편집 화면을 떠날 때, 저장하지 않은 초안(editorDrafts)이
+    // 그대로 남아 있으면 아래에서 결과 화면용으로 새로 받아오는 원본 SVG에 그 초안이
+    // 다시 덧씌워져 "적용하기를 안 눌렀는데 수정된 로고가 보이는" 문제가 생긴다.
+    // mode가 'edit'이든 'result'든 항상 초안을 비워서, 저장은 saveEditorChanges()를
+    // 통해서만 반영되게 한다.
+    const baseColor = projectColors[0] ?? '#7B5CDF'
+    setEditorDirty(false)
+    setEditorDrafts(createEditorDrafts(baseColor))
     if (mode === 'edit') {
-      const baseColor = projectColors[0] ?? '#7B5CDF'
       setEditorSaved(false)
-      setEditorDirty(false)
       setEditorColorChanged(false)
       setEditorColorPickerOpen(false)
       setEditorColor(baseColor)
@@ -888,7 +894,6 @@ function CustomerApp() {
       setEditorOffsetX(0)
       setEditorOffsetY(0)
       setEditTarget(null)
-      setEditorDrafts(createEditorDrafts(baseColor))
     }
     setEditorError('')
     setEditorSvgSource(null)
