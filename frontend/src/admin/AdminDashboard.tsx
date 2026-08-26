@@ -1178,7 +1178,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
           </div>
 
           <header className="admin-dashboard-header">
-             <div><p className="admin-eyebrow">ADMIN · ANALYTICS</p><h1>GenMark AI {dashboardSectionLabels[dashboardSection]}</h1></div>
+             <div><h1>GenMark AI {dashboardSectionLabels[dashboardSection]}</h1></div>
             <div className="admin-header-actions" ref={adminAccountMenuRef}>
               <button className="admin-account-trigger" type="button" aria-label="관리자 계정 메뉴" aria-expanded={isAdminMenuOpen} onClick={() => setIsAdminMenuOpen((open) => !open)}>
                 <span className="admin-avatar">{adminInitial}</span>
