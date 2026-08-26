@@ -1106,29 +1106,28 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
       ? <i key={kind} className={kind} style={{ height: `${Math.max(3, (value / logoGenerationAxis.top) * 100)}%` }} title={`${label} ${kindLabel} ${value.toLocaleString()}건`} aria-label={`${label} ${kindLabel} ${value.toLocaleString()}건`} tabIndex={0} />
       : <i key={kind} className={`${kind} zero`} title={`${label} ${kindLabel} 0건`} aria-label={`${label} ${kindLabel} 0건`} tabIndex={0} />
 
+    // 설문 개선 항목·온보딩 작성 현황은 "누적 전체" 통계다 — 가입자 수 헤더 총량과
+    // 같은 성격이라, 기간(일일/주간/월간/사용자 지정) 필터가 바뀌어도 그대로 둔다.
+    // adminAnalytics.survey/signup.onboarding*는 기간별로 다시 집계된 값이라 여기
+    // 쓰지 않고, 기간과 무관하게 한 번만 불러오는 전체 목록(adminSurveyResponses,
+    // allAdminMembers)에서 직접 세어 쓴다.
+    const allAdminMembers: AdminMemberTableRow[] = standalone ? previewAdminMembers : adminMemberData
+    const displayedAdminMembers = allAdminMembers.filter((member) => matchesAdminMemberSearch(memberSearchQuery, member.email))
+
     // 온보딩(첫 방문 설문) 1단계 "어디에 사용할 예정인가요?" 응답 분포.
-    // 실데이터는 백엔드가 이미 계산해서 signup.onboardingUsage로 내려준다("생성 계기/용도" 도넛과 같은 값).
-    const onboardingUsagePreviewByPeriod = {
-      daily: [{ label: '온라인 판매', value: 62 }, { label: 'SNS', value: 48 }, { label: '오프라인', value: 21 }],
-      weekly: [{ label: '온라인 판매', value: 214 }, { label: 'SNS', value: 168 }, { label: '오프라인', value: 74 }],
-      monthly: [{ label: '온라인 판매', value: 812 }, { label: 'SNS', value: 640 }, { label: '오프라인', value: 288 }],
-      custom: [{ label: '온라인 판매', value: 96 }, { label: 'SNS', value: 71 }, { label: '오프라인', value: 33 }],
-    } as const
-    const selectedOnboardingUsageStats = adminAnalytics
-      ? adminAnalytics.signup.onboardingUsage.map(({ label, value }) => ({ label, value }))
-      : standalone ? onboardingUsagePreviewByPeriod[dashboardPeriod] : []
+    const onboardingUsageLabels = ['온라인 판매', 'SNS', '오프라인'] as const
+    const onboardingUsagePreview = [{ label: '온라인 판매', value: 812 }, { label: 'SNS', value: 640 }, { label: '오프라인', value: 288 }]
+    const selectedOnboardingUsageStats = !standalone
+      ? onboardingUsageLabels.map((label) => ({ label, value: allAdminMembers.filter((member) => member.onboardingUsage.includes(label)).length }))
+      : onboardingUsagePreview
     const onboardingUsageMax = Math.max(1, ...selectedOnboardingUsageStats.map(({ value }) => value))
 
-    // 온보딩 2단계 "어떤 계기로 방문하게 되셨나요?" 응답 분포. 실데이터는 signup.onboardingAudience로 내려온다.
-    const onboardingAudiencePreviewByPeriod = {
-      daily: [{ label: '회사 / 팀', value: 38 }, { label: '자영업', value: 52 }, { label: '취미 / 창작', value: 24 }, { label: '부업 & 투잡', value: 17 }],
-      weekly: [{ label: '회사 / 팀', value: 132 }, { label: '자영업', value: 181 }, { label: '취미 / 창작', value: 86 }, { label: '부업 & 투잡', value: 57 }],
-      monthly: [{ label: '회사 / 팀', value: 504 }, { label: '자영업', value: 688 }, { label: '취미 / 창작', value: 326 }, { label: '부업 & 투잡', value: 222 }],
-      custom: [{ label: '회사 / 팀', value: 59 }, { label: '자영업', value: 81 }, { label: '취미 / 창작', value: 38 }, { label: '부업 & 투잡', value: 26 }],
-    } as const
-    const selectedOnboardingAudienceStats = adminAnalytics
-      ? adminAnalytics.signup.onboardingAudience.map(({ label, value }) => ({ label, value }))
-      : standalone ? onboardingAudiencePreviewByPeriod[dashboardPeriod] : []
+    // 온보딩 2단계 "어떤 계기로 방문하게 되셨나요?" 응답 분포.
+    const onboardingAudienceLabels = ['회사 / 팀', '자영업', '취미 / 창작', '부업 & 투잡'] as const
+    const onboardingAudiencePreview = [{ label: '회사 / 팀', value: 504 }, { label: '자영업', value: 688 }, { label: '취미 / 창작', value: 326 }, { label: '부업 & 투잡', value: 222 }]
+    const selectedOnboardingAudienceStats = !standalone
+      ? onboardingAudienceLabels.map((label) => ({ label, value: allAdminMembers.filter((member) => member.onboardingAudience === label).length }))
+      : onboardingAudiencePreview
     const onboardingAudienceMax = Math.max(1, ...selectedOnboardingAudienceStats.map(({ value }) => value))
 
     const surveyImprovementCategories = [
@@ -1139,21 +1138,17 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
       '유사 상표 확인 결과를 얼마나 믿어야 할지 모르겠음',
       '기타 사항',
     ] as const
-    const surveyImprovementStatsByPeriod = {
-      daily: [184, 160, 128, 86, 62, 18],
-      weekly: [1284, 1116, 893, 604, 421, 97],
-      monthly: [4920, 4310, 3460, 2360, 1640, 380],
-      custom: [612, 528, 421, 286, 198, 46],
-    } as const
-    const selectedSurveyImprovementStats = adminAnalytics
-      ? adminAnalytics.survey.improvements.map(({ label, value }) => ({ label, value }))
-      : (standalone ? surveyImprovementCategories.map((label, index) => ({ label, value: surveyImprovementStatsByPeriod[dashboardPeriod][index] })) : [])
+    const surveyImprovementPreview = [4920, 4310, 3460, 2360, 1640, 380]
+    const selectedSurveyImprovementStats = !standalone
+      ? surveyImprovementCategories.map((label) => ({
+          label,
+          value: adminSurveyResponses.filter((response) => response.improvements.includes(label)).length,
+        }))
+      : surveyImprovementCategories.map((label, index) => ({ label, value: surveyImprovementPreview[index] }))
     const surveyImprovementMax = Math.max(1, ...selectedSurveyImprovementStats.map(({ value }) => value))
     const surveyImprovementTotal = selectedSurveyImprovementStats.reduce((total, { value }) => total + value, 0)
     const surveyLikeCount = adminSurveyResponses.filter((response) => response.rating === 5).length
     const surveyDislikeCount = adminSurveyResponses.filter((response) => response.rating === 1).length
-    const allAdminMembers: AdminMemberTableRow[] = standalone ? previewAdminMembers : adminMemberData
-    const displayedAdminMembers = allAdminMembers.filter((member) => matchesAdminMemberSearch(memberSearchQuery, member.email))
     // 온보딩 작성률은 기간과 무관하게 "지금 이 순간" 기준 누적 값이다 — 가입자 수 카드의
     // 총 회원 수와 같은 성격(추이 그래프만 기간별, 헤더 총량은 전체 누적)이라 맞춰뒀다.
     const onboardingCompletedCount = allAdminMembers.filter((member) => member.onboardingCompleted).length
@@ -1239,7 +1234,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
               <tr><th scope="row">로고 생성 건수</th><td>{selectedPeriodData.total}건</td><td>CI {selectedPeriodData.ci}건 · BI {selectedPeriodData.bi}건</td></tr>
               <tr><th scope="row">다운로드 건수</th><td>{selectedDownloadData.total}건</td><td>CI {selectedDownloadData.ciShare}% · BI {selectedDownloadData.biShare}%</td></tr>
               <tr><th scope="row">온보딩 작성 현황</th><td>{onboardingCompletedCount}명 (작성률 {onboardingCompletionRate}%)</td><td>전체 회원 {onboardingTotalCount}명 중 작성</td></tr>
-              <tr><th scope="row">설문 개선 항목</th><td>{surveyImprovementTotal.toLocaleString()}건</td><td>{periodLabels[dashboardPeriod]} 응답 기준</td></tr>
+              <tr><th scope="row">설문 개선 항목</th><td>{surveyImprovementTotal.toLocaleString()}건</td><td>전체 응답 기준</td></tr>
             </tbody>
           </table>}
 
@@ -1291,7 +1286,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
 
               <article className="admin-card admin-overview-chart-card admin-survey-overview-card" aria-labelledby="admin-survey-overview-title">
                 <div className="admin-overview-chart-heading">
-                  <div><p id="admin-survey-overview-title">설문 개선 항목</p><strong>{surveyImprovementTotal.toLocaleString()}<small>건</small></strong><span className="admin-positive">{periodLabels[dashboardPeriod]} 응답</span></div>
+                  <div><p id="admin-survey-overview-title">설문 개선 항목</p><strong>{surveyImprovementTotal.toLocaleString()}<small>건</small></strong><span className="admin-positive">전체 응답</span></div>
                   <p className="admin-survey-rating-summary"><span className="like"><ThumbsUp size={14} strokeWidth={2} aria-hidden="true" />좋아요 {surveyLikeCount}건</span><span className="dislike"><ThumbsDown size={14} strokeWidth={2} aria-hidden="true" />싫어요 {surveyDislikeCount}건</span></p>
                 </div>
                 <div className="admin-survey-improvement-bars" role="list" aria-label="설문 개선 항목별 응답 통계">
