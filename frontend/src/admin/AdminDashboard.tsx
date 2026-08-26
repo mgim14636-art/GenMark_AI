@@ -1062,6 +1062,13 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
           fileOnly: 0, fileWithInput: 0, analysis: 0, insightRates: ['—', '—', '—'],
         }
       : standalone ? downloadPeriodData[dashboardPeriod] : { total: '0', conversion: '실데이터', ci: '0', bi: '0', ciShare: '0', biShare: '0', ciStyles: [0, 0, 0, 0], biStyles: [0, 0, 0, 0], fileOnly: 0, fileWithInput: 0, analysis: 0, insightRates: ['—', '—', '—'] }
+    // 도넛 그래프 색 비율을 실데이터(ciShare)에서 직접 계산한다 — 예전에는 CSS에
+    // 31.1%/68.9%로 고정된 목업 그라데이션을 그대로 썼어서, 실제로는 CI 100%인데도
+    // 화면에는 항상 같은 비율의 원이 나왔다.
+    const downloadDonutTotal = Number(String(selectedDownloadData.total).replace(/,/g, '')) || 0
+    const downloadDonutGradient = downloadDonutTotal === 0
+      ? '#f3edf4'
+      : `conic-gradient(#ed9d5c 0 ${selectedDownloadData.ciShare}%, #8d70ed ${selectedDownloadData.ciShare}% 100%)`
     const formatDownloadCount = (value: string | number) => Number(String(value).replace(/,/g, '')).toLocaleString()
     const downloadStyleCount = (total: string, percentage: number) => formatDownloadCount(Math.round(Number(total.replace(/,/g, '')) * percentage / 100))
     const overviewSignupTrendByPeriod = {
@@ -1230,7 +1237,7 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
             <tbody>
               <tr><th scope="row">가입자 수</th><td>{selectedSignupData.total}명</td><td>{selectedSignupData.totalDelta}</td></tr>
               <tr><th scope="row">로고 생성 건수</th><td>{selectedPeriodData.total}건</td><td>CI {selectedPeriodData.ci}건 · BI {selectedPeriodData.bi}건</td></tr>
-              <tr><th scope="row">전체 다운로드 건수</th><td>{selectedDownloadData.total}건</td><td>CI {selectedDownloadData.ciShare}% · BI {selectedDownloadData.biShare}%</td></tr>
+              <tr><th scope="row">다운로드 건수</th><td>{selectedDownloadData.total}건</td><td>CI {selectedDownloadData.ciShare}% · BI {selectedDownloadData.biShare}%</td></tr>
               <tr><th scope="row">온보딩 작성 현황</th><td>{onboardingCompletedCount}명 (작성률 {onboardingCompletionRate}%)</td><td>전체 회원 {onboardingTotalCount}명 중 작성</td></tr>
               <tr><th scope="row">설문 개선 항목</th><td>{surveyImprovementTotal.toLocaleString()}건</td><td>{periodLabels[dashboardPeriod]} 응답 기준</td></tr>
             </tbody>
@@ -1277,9 +1284,9 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
 
               <article className="admin-card admin-overview-chart-card">
                 <div className="admin-overview-chart-heading">
-                  <div><p>전체 다운로드 건수</p><strong>{selectedDownloadData.total}<small>건</small></strong><span className="admin-positive">{selectedDownloadData.conversion === '실데이터' ? 'CI·BI 실데이터' : `${selectedDownloadData.conversion}% 전환`} <ArrowUpRight size={14} /></span></div>
+                  <div><p>다운로드 건수</p><strong>{selectedDownloadData.total}<small>건</small></strong><span className="admin-positive">{selectedDownloadData.conversion === '실데이터' ? 'CI·BI 실데이터' : `${selectedDownloadData.conversion}% 전환`} <ArrowUpRight size={14} /></span></div>
                 </div>
-                <div className="admin-download-overview-graph"><div className="admin-overview-donut"><span>{selectedDownloadData.total}<small>전체</small></span></div><div className="admin-overview-legend"><span><i className="ci" />CI <strong>{selectedDownloadData.ciShare}%</strong></span><span><i className="bi" />BI <strong>{selectedDownloadData.biShare}%</strong></span></div></div>
+                <div className="admin-download-overview-graph"><div className="admin-overview-donut" style={{ background: downloadDonutGradient }}><span>{selectedDownloadData.total}<small>전체</small></span></div><div className="admin-overview-legend"><span><i className="ci" />CI <strong>{selectedDownloadData.ciShare}%</strong></span><span><i className="bi" />BI <strong>{selectedDownloadData.biShare}%</strong></span></div></div>
               </article>
 
               <article className="admin-card admin-overview-chart-card admin-survey-overview-card" aria-labelledby="admin-survey-overview-title">
