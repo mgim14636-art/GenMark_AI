@@ -209,7 +209,8 @@
    항상 정확히 카드 가운데에 오고 범례도 항상 카드 안에 온전히 들어오게 했다. */
 .admin-download-overview-graph { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-height: 165px; margin-top: 11px; }
 .admin-download-overview-graph .admin-overview-legend { flex-direction: row; gap: 20px; }
-.admin-overview-donut { display: grid; width: 142px; height: 142px; place-items: center; border-radius: 50%; background: conic-gradient(#ed9d5c 0 31.1%, #f3edf4 31.1% 32%, #8d70ed 32% 100%); box-shadow: inset 0 0 0 1px rgb(141 112 237 / .12); }
+/* 실제 색 비율(conic-gradient)은 AdminDashboard.tsx가 실데이터 기준으로 인라인 style로 채운다. */
+.admin-overview-donut { display: grid; width: 142px; height: 142px; place-items: center; border-radius: 50%; background: #f3edf4; box-shadow: inset 0 0 0 1px rgb(141 112 237 / .12); }
 .admin-overview-donut::before { width: 86px; height: 86px; border-radius: 50%; background: #fff; content: ''; grid-area: 1 / 1; }
 .admin-overview-donut > span { z-index: 1; grid-area: 1 / 1; color: var(--admin-ink); font-size: 18px; font-weight: 800; text-align: center; }
 .admin-overview-donut small { display: block; margin-top: 3px; color: #8991a2; font-size: 10px; font-weight: 500; }
