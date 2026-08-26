@@ -1115,18 +1115,30 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     const displayedAdminMembers = allAdminMembers.filter((member) => matchesAdminMemberSearch(memberSearchQuery, member.email))
 
     // 온보딩(첫 방문 설문) 1단계 "어디에 사용할 예정인가요?" 응답 분포.
-    const onboardingUsageLabels = ['온라인 판매', 'SNS', '오프라인'] as const
+    // member.onboardingUsage/onboardingAudience에는 화면 문구가 아니라 제출 당시의
+    // 원시 코드(online/social/offline, company/owner/hobby/sidejob)가 그대로 들어있다
+    // (AdminMemberRow 주석 참고) — AdminAnalyticsService의 매핑과 똑같이 코드→한글로 바꿔서 센다.
+    const onboardingUsageOptions = [
+      { code: 'online', label: '온라인 판매' },
+      { code: 'social', label: 'SNS' },
+      { code: 'offline', label: '오프라인' },
+    ] as const
     const onboardingUsagePreview = [{ label: '온라인 판매', value: 812 }, { label: 'SNS', value: 640 }, { label: '오프라인', value: 288 }]
     const selectedOnboardingUsageStats = !standalone
-      ? onboardingUsageLabels.map((label) => ({ label, value: allAdminMembers.filter((member) => member.onboardingUsage.includes(label)).length }))
+      ? onboardingUsageOptions.map(({ code, label }) => ({ label, value: allAdminMembers.filter((member) => member.onboardingUsage.includes(code)).length }))
       : onboardingUsagePreview
     const onboardingUsageMax = Math.max(1, ...selectedOnboardingUsageStats.map(({ value }) => value))
 
     // 온보딩 2단계 "어떤 계기로 방문하게 되셨나요?" 응답 분포.
-    const onboardingAudienceLabels = ['회사 / 팀', '자영업', '취미 / 창작', '부업 & 투잡'] as const
+    const onboardingAudienceOptions = [
+      { code: 'company', label: '회사 / 팀' },
+      { code: 'owner', label: '자영업' },
+      { code: 'hobby', label: '취미 / 창작' },
+      { code: 'sidejob', label: '부업 & 투잡' },
+    ] as const
     const onboardingAudiencePreview = [{ label: '회사 / 팀', value: 504 }, { label: '자영업', value: 688 }, { label: '취미 / 창작', value: 326 }, { label: '부업 & 투잡', value: 222 }]
     const selectedOnboardingAudienceStats = !standalone
-      ? onboardingAudienceLabels.map((label) => ({ label, value: allAdminMembers.filter((member) => member.onboardingAudience === label).length }))
+      ? onboardingAudienceOptions.map(({ code, label }) => ({ label, value: allAdminMembers.filter((member) => member.onboardingAudience === code).length }))
       : onboardingAudiencePreview
     const onboardingAudienceMax = Math.max(1, ...selectedOnboardingAudienceStats.map(({ value }) => value))
 
