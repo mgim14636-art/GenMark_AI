@@ -81,8 +81,10 @@
 .editor-uploaded-logo-target.selected::before { top: -8px; left: -8px; box-shadow: 286px 0 0 -1px #fff, 286px 0 0 0 #a984ff; }
 .editor-uploaded-logo-target.selected::after { bottom: -8px; left: -8px; box-shadow: 286px 0 0 -1px #fff, 286px 0 0 0 #a984ff; }
 .editor-uploaded-logo { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 180ms cubic-bezier(.2, .8, .2, 1), opacity 180ms ease; }
-.editor-uploaded-logo-svg { display: grid; width: 100%; height: 100%; place-items: center; margin: auto; background: #fff; touch-action: none; user-select: none; }
-.editor-uploaded-logo-svg svg { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; background: #fff; }
+.editor-uploaded-logo-svg { display: grid; width: 100%; height: 100%; place-items: center; margin: auto; padding: 4%; box-sizing: border-box; background: #fff; touch-action: none; user-select: none; }
+/* overflow: visible + 안쪽 여백(padding) — 생성된 SVG가 자기 viewBox 경계에 딱 붙거나 살짝
+   넘치게 그려질 때(예: 워드마크 아랫부분) svg 기본 overflow:hidden에 잘리던 문제 방지. */
+.editor-uploaded-logo-svg svg { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; overflow: visible; background: #fff; }
 .editor-uploaded-logo-svg [data-genmark-editor-element] { cursor: grab; transition: filter 160ms ease, opacity 160ms ease; }
 .editor-uploaded-logo-svg [data-genmark-editor-element]:active { cursor: grabbing; }
 .editor-uploaded-logo-svg [data-genmark-editor-element]:hover { filter: drop-shadow(0 0 7px rgb(142 85 239 / .48)); }
