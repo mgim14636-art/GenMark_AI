@@ -149,6 +149,20 @@ const ensureEditableGroups = (root: SVGSVGElement) => {
 
 const editableElementNames = new Set(['path', 'rect', 'circle', 'ellipse', 'polygon', 'line', 'polyline', 'text'])
 
+// 생성된 로고 SVG 중 일부는 viewBox 없이 width/height만 갖는다. 그런 SVG를 편집 캔버스에
+// 인라인으로 넣으면 preserveAspectRatio가 동작할 기준이 없어, 정사각형 틀에 원본 픽셀 크기
+// 그대로 그려지다 아래쪽(워드마크 등)이 잘린다. 결과 화면은 <img>라서 안 잘리지만 편집
+// 화면은 인라인 <svg>라서 잘림. width/height로 viewBox를 만들어 두 화면 동작을 맞춘다.
+const ensureViewBox = (root: Element) => {
+  const existing = root.getAttribute('viewBox')?.trim().split(/[\s,]+/).filter(Boolean)
+  if (existing?.length === 4 && existing.every((value) => Number.isFinite(Number(value)))) return
+  const width = Number.parseFloat(root.getAttribute('width') ?? '')
+  const height = Number.parseFloat(root.getAttribute('height') ?? '')
+  if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+    root.setAttribute('viewBox', `0 0 ${width} ${height}`)
+  }
+}
+
 const isCanvasBackground = (element: Element, root: SVGSVGElement) => {
   if (element.localName.toLowerCase() !== 'rect') return false
   const viewBox = root.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number)
@@ -235,6 +249,7 @@ const elementCenter = (element: Element) => {
 export const prepareEditableSvg = (source: string, selectedTarget?: string | null) => {
   const { root } = sanitizeDocument(source)
   ensureEditableElements(root as unknown as SVGSVGElement)
+  ensureViewBox(root)
   root.setAttribute('preserveAspectRatio', 'xMidYMid meet')
   for (const element of Array.from(root.querySelectorAll(`[${EDITOR_ELEMENT}]`))) {
     if (element.getAttribute(EDITOR_ELEMENT) === selectedTarget) element.setAttribute(EDITOR_SELECTED, 'true')
@@ -246,6 +261,7 @@ export const prepareEditableSvg = (source: string, selectedTarget?: string | nul
 export const buildEditedSvg = (source: string, edits: SvgEdits) => {
   const { document, root } = sanitizeDocument(source)
   ensureEditableElements(root as unknown as SVGSVGElement)
+  ensureViewBox(root)
   root.setAttribute('preserveAspectRatio', 'xMidYMid meet')
   unwrapElementEdit(root as unknown as SVGSVGElement, edits.target)
   const target = findEditableElement(root as unknown as SVGSVGElement, edits.target)
