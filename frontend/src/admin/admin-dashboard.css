@@ -310,7 +310,8 @@
 .admin-onboarding-answer-dot { width: 6px; height: 6px; border-radius: 50%; background: #d9dbe4; }
 .admin-logo-thumb-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .admin-logo-thumb-card { overflow: hidden; border: 1px solid #eeeaf8; border-radius: 12px; background: #fff; box-shadow: 0 5px 16px rgb(71 57 116 / .05); }
-.admin-logo-thumb-card img, .admin-logo-thumb-placeholder { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; background: #f8f6ff; }
+/* contain: 결과 화면(.logo-candidate-image)과 동일하게 로고 전체를 비율 유지해 보여준다. cover는 가로로 긴 로고의 좌우가 잘렸다. */
+.admin-logo-thumb-card img, .admin-logo-thumb-placeholder { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: contain; background: #f8f6ff; }
 .admin-logo-thumb-placeholder { background: linear-gradient(135deg, #f5f1ff, #ece8fa); }
 .admin-logo-thumb-card > div { display: grid; gap: 3px; padding: 9px 10px 10px; }
 .admin-logo-thumb-card strong { overflow: hidden; color: var(--admin-ink); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
@@ -709,7 +710,7 @@
 .admin-similarity-vector-card:hover { border-color: #c7b6f5; }
 .admin-similarity-vector-card.is-selected { border-color: #8d70ed; box-shadow: 0 0 0 3px rgb(141 112 237 / .15); }
 .admin-similarity-vector-thumb { display: block; width: 52px; height: 52px; flex: 0 0 auto; overflow: hidden; border-radius: 10px; background: #f8f6ff; }
-.admin-similarity-vector-thumb img, .admin-similarity-vector-thumb .admin-logo-thumb-placeholder { display: block; width: 100%; height: 100%; object-fit: cover; }
+.admin-similarity-vector-thumb img, .admin-similarity-vector-thumb .admin-logo-thumb-placeholder { display: block; width: 100%; height: 100%; object-fit: contain; }
 .admin-similarity-vector-copy { display: grid; gap: 3px; min-width: 0; }
 .admin-similarity-vector-copy strong { overflow: hidden; color: var(--admin-ink); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .admin-similarity-vector-copy small { color: #8b93a5; font-size: 11px; }

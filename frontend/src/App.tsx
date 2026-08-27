@@ -3745,7 +3745,11 @@ function CustomerApp() {
     const displayedTrademarkScore = trademarkSimilarity ?? topMatch?.similarity ?? TRADEMARK_SCORE_FALLBACK
     const matchImage = topMatch ? trademarkMatchImages.find((image) => image.rank === topMatch.rank) : undefined
     const selectedCandidate = logoCandidates[resultCandidate]
-    const generatedLogoSrc = selectedCandidate ? getLogoCandidateImageUrl(selectedCandidate.storageKey) : resultPreviewImageUrl
+    // 결과 화면과 동일하게, 비율이 보정된 SVG 미리보기(editorSvgPreviewUrl)를 우선 쓴다.
+    // 저장된 PNG(storageKey)는 래스터화 단계에서 정사각형으로 늘어나 있어서 그대로 쓰면 로고가 찌그러진다.
+    const generatedLogoSrc = selectedCandidate
+      ? (editorSvgPreviewUrl ?? getLogoCandidateImageUrl(selectedCandidate.storageKey))
+      : resultPreviewImageUrl
     const scoreTone = displayedTrademarkScore >= 60 ? 'caution' : 'low'
     const scoreLabel = trademarkRiskLabel || (scoreTone === 'caution' ? '확인이 필요해요' : '낮은 유사도')
     const comparisonInsight = topMatch?.note?.trim() || (scoreTone === 'caution'
