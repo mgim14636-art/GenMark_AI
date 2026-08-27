@@ -1,4 +1,5 @@
 import base64
+import re
 from io import BytesIO
 
 from fastapi import APIRouter, HTTPException
@@ -30,6 +31,22 @@ def _image_to_base64(img) -> str:
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
+_PRESERVE_ASPECT_RE = re.compile(r'\bpreserveAspectRatio\s*=\s*(["\']).*?\1')
+
+
+def _force_meet_aspect(svg: str) -> str:
+    """편집된 로고 SVG를 정사각형(1024x1024)으로 늘리지 않도록 루트에
+    preserveAspectRatio="xMidYMid meet"를 강제한다.
+
+    Recraft 벡터는 이 값이 "none"이라, cairosvg가 output_width/height를 둘 다
+    1024로 받으면 가로로 긴 로고가 정사각형에 눌려 찌그러진다. 프론트
+    svgEditor.prepareEditableSvg가 편집 미리보기에 하는 처리와 동일하게 맞춘다.
+    """
+    if _PRESERVE_ASPECT_RE.search(svg):
+        return _PRESERVE_ASPECT_RE.sub('preserveAspectRatio="xMidYMid meet"', svg, count=1)
+    return re.sub(r"<svg(\s|>)", r'<svg preserveAspectRatio="xMidYMid meet"\1', svg, count=1)
+
+
 def _compose_svg(variant: dict, survey: dict) -> str | None:
     symbol_svg = variant.get("svg")
     if not symbol_svg:
@@ -45,7 +62,7 @@ def _compose_svg(variant: dict, survey: dict) -> str | None:
 def rasterize_svg(req: SvgRasterizeRequest):
     try:
         svg_rasterization_service.validate_svg(req.svg)
-        image = logo_gen_service.rasterize_svg(req.svg, size=1024)
+        image = logo_gen_service.rasterize_svg(_force_meet_aspect(req.svg), size=1024)
     except svg_rasterization_service.InvalidSvg as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:

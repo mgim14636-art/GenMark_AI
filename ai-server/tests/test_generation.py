@@ -261,7 +261,11 @@ def test_rasterize_svg_returns_1024_png_base64(monkeypatch):
     assert png.startswith(b"\x89PNG\r\n\x1a\n")
     assert body["width"] == 1024
     assert body["height"] == 1024
-    assert captured == {"svg": svg, "size": 1024}
+    assert captured["size"] == 1024
+    # 라우트가 비율 왜곡(정사각형 stretch) 방지를 위해 preserveAspectRatio를 강제한다.
+    assert 'preserveAspectRatio="xMidYMid meet"' in captured["svg"]
+    assert 'viewBox="0 0 10 10"' in captured["svg"]
+    assert 'preserveAspectRatio="none"' not in captured["svg"]
 
 
 def test_rasterize_svg_uses_real_renderer_for_simple_document():
