@@ -709,10 +709,10 @@ function CustomerApp() {
 
   const getEditorOffsetBounds = (svg: SVGSVGElement, targetId: string) => {
     const targetEl = svg.querySelector<SVGGraphicsElement>(`[data-genmark-editor-element="${targetId}"]`)
-    // .editor-uploaded-logo-svg is deliberately rendered at ~110% of the visible white
-    // card (a bleed effect, see styles.css), so the SVG's own viewBox edges do NOT line up
-    // with the card's visible edges. Bounds must be measured against the card's actual
-    // screen rect, not the viewBox — same screen<->svg unit conversion getEditorSvgPoint uses.
+    // 편집 미리보기는 viewBox 사각형으로 clip된다(svgEditor.clipContentToViewBox). 요소를
+    // 그 밖으로 끌면 화면에서 잘려 사라지므로, 드래그 한계도 흰 카드가 아니라 "화면에 그려진
+    // viewBox 영역"으로 잡는다. getScreenCTM()은 viewBox 스케일 + preserveAspectRatio까지
+    // 반영하므로, viewBox 모서리를 화면 좌표로 변환하면 실제 보이는 로고 틀이 나온다.
     const container = svg.closest<HTMLElement>('.editor-uploaded-logo-target')
     const svgScreenCtm = svg.getScreenCTM()
     const targetScreenCtm = targetEl?.getScreenCTM()
@@ -741,7 +741,22 @@ function CustomerApp() {
     const boxMinY = Math.min(...corners.map((corner) => corner.y))
     const boxMaxY = Math.max(...corners.map((corner) => corner.y))
 
-    const rect = container.getBoundingClientRect()
+    // 화면에 그려진 viewBox 영역(= clip 경계)을 화면 좌표로 계산. viewBox가 없으면 카드로 폴백.
+    const viewBox = svg.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number)
+    let rect: { left: number; right: number; top: number; bottom: number }
+    if (viewBox?.length === 4 && viewBox.every(Number.isFinite)) {
+      const corner = (x: number, y: number) => {
+        const p = svg.createSVGPoint()
+        p.x = x
+        p.y = y
+        return p.matrixTransform(svgScreenCtm)
+      }
+      const a = corner(viewBox[0], viewBox[1])
+      const b = corner(viewBox[0] + viewBox[2], viewBox[1] + viewBox[3])
+      rect = { left: Math.min(a.x, b.x), right: Math.max(a.x, b.x), top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y) }
+    } else {
+      rect = container.getBoundingClientRect()
+    }
     const scaleX = svgScreenCtm.a || 1
     const scaleY = svgScreenCtm.d || 1
     const minX = currentOffsetX + (rect.left - boxMinX) / scaleX
