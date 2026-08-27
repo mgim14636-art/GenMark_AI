@@ -664,6 +664,10 @@ function CustomerApp() {
   const [remainingCredits, setRemainingCredits] = useState(2)
   const [creditModal, setCreditModal] = useState<'survey' | null>(null)
   const [pendingSurveyDownload, setPendingSurveyDownload] = useState<{ name: string; subtitle: string; candidateId?: string; storageKey?: string; svgUrl?: string | null } | null>(null)
+  // 결과 화면 외(마이페이지 등)에서 설문 게이트(SURVEY_REQUIRED)에 걸렸을 때, 설문 제출 후
+  // 원래 하려던 다운로드를 그대로 다시 실행하기 위한 콜백. pendingSurveyDownload는 결과 화면
+  // 후보 객체 전용 형태라 마이페이지 자산에는 그대로 못 쓴다.
+  const pendingSurveyRetryRef = useRef<null | (() => void)>(null)
   const [finalEditModal, setFinalEditModal] = useState<FinalEditKind | null>(null)
   const resultHydrationProjectRef = useRef<string | null>(null)
   const [finalEditToneMode, setFinalEditToneMode] = useState<FinalToneMode>('recommended')
@@ -2645,6 +2649,9 @@ function CustomerApp() {
         const download = pendingSurveyDownload
         setPendingSurveyDownload(null)
         if (download) void downloadLogo(download)
+        const retry = pendingSurveyRetryRef.current
+        pendingSurveyRetryRef.current = null
+        retry?.()
       })
       .catch((error) => setProjectError(error instanceof Error ? error.message : '설문을 제출하지 못했어요.'))
   }
@@ -4788,6 +4795,17 @@ function CustomerApp() {
         link.remove()
         URL.revokeObjectURL(link.href)
       } catch (error) {
+        // 마이페이지에서도 최초 다운로드(설문 미완료) 사용자는 설문부터 받는다 — 결과 화면과 동일.
+        // 설문 제출이 성공하면 pendingSurveyRetryRef가 이 다운로드를 자동으로 다시 실행한다.
+        if (error instanceof AuthError && error.code === 'SURVEY_REQUIRED') {
+          pendingSurveyRetryRef.current = () => { void downloadMypageAsset(item) }
+          setSurveyRating(5)
+          setSurveyImprovements([])
+          setSurveyComment('')
+          setProjectError('')
+          setCreditModal('survey')
+          return
+        }
         setProjectError(error instanceof Error ? error.message : '다운로드 파일을 불러오지 못했어요.')
       }
     }
