@@ -163,6 +163,37 @@ const ensureViewBox = (root: Element) => {
   }
 }
 
+const VIEWBOX_CLIP_ID = 'genmark-viewbox-clip'
+
+// 편집 캔버스는 인라인 <svg>라, viewBox 밖에 그려진 요소(생성 로고에 가끔 있는 떨어져 나간
+// 글자 등)가 정사각형 틀의 여백까지 삐져나온다. 결과 화면 <img>는 항상 viewBox로 잘라주므로,
+// 편집 미리보기도 viewBox 사각형으로 clip해 두 화면을 일치시킨다. (저장본은 건드리지 않는다.)
+const clipContentToViewBox = (root: Element) => {
+  const viewBox = root.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number)
+  if (!(viewBox?.length === 4 && viewBox.every(Number.isFinite))) return
+  if (root.querySelector(`#${VIEWBOX_CLIP_ID}`)) return
+  const doc = root.ownerDocument
+  if (!doc) return
+
+  const defs = doc.createElementNS(SVG_NS, 'defs')
+  const clipPath = doc.createElementNS(SVG_NS, 'clipPath')
+  clipPath.setAttribute('id', VIEWBOX_CLIP_ID)
+  clipPath.setAttribute('clipPathUnits', 'userSpaceOnUse')
+  const rect = doc.createElementNS(SVG_NS, 'rect')
+  rect.setAttribute('x', String(viewBox[0]))
+  rect.setAttribute('y', String(viewBox[1]))
+  rect.setAttribute('width', String(viewBox[2]))
+  rect.setAttribute('height', String(viewBox[3]))
+  clipPath.appendChild(rect)
+  defs.appendChild(clipPath)
+
+  const wrapper = doc.createElementNS(SVG_NS, 'g')
+  wrapper.setAttribute('clip-path', `url(#${VIEWBOX_CLIP_ID})`)
+  while (root.firstChild) wrapper.appendChild(root.firstChild)
+  root.appendChild(defs)
+  root.appendChild(wrapper)
+}
+
 const isCanvasBackground = (element: Element, root: SVGSVGElement) => {
   if (element.localName.toLowerCase() !== 'rect') return false
   const viewBox = root.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number)
@@ -255,6 +286,7 @@ export const prepareEditableSvg = (source: string, selectedTarget?: string | nul
     if (element.getAttribute(EDITOR_ELEMENT) === selectedTarget) element.setAttribute(EDITOR_SELECTED, 'true')
     else element.removeAttribute(EDITOR_SELECTED)
   }
+  clipContentToViewBox(root)
   return new XMLSerializer().serializeToString(root)
 }
 
