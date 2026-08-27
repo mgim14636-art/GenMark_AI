@@ -1116,8 +1116,15 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     // adminAnalytics.survey/signup.onboarding*는 기간별로 다시 집계된 값이라 여기
     // 쓰지 않고, 기간과 무관하게 한 번만 불러오는 전체 목록(adminSurveyResponses,
     // allAdminMembers)에서 직접 세어 쓴다.
+    // 생성/가입일자 최신순(내림차순). 파싱 실패한 값은 0으로 취급해 맨 뒤로 보낸다.
+    const byCreatedAtDesc = (a: { createdAt: string }, b: { createdAt: string }) =>
+      (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)
+
     const allAdminMembers: AdminMemberTableRow[] = standalone ? previewAdminMembers : adminMemberData
-    const displayedAdminMembers = allAdminMembers.filter((member) => matchesAdminMemberSearch(memberSearchQuery, member.email))
+    // filter()가 새 배열을 반환하므로 sort()가 원본(adminMemberData 등)을 건드리지 않는다.
+    const displayedAdminMembers = allAdminMembers
+      .filter((member) => matchesAdminMemberSearch(memberSearchQuery, member.email))
+      .sort(byCreatedAtDesc)
 
     // 온보딩(첫 방문 설문) 1단계 "어디에 사용할 예정인가요?" 응답 분포.
     // member.onboardingUsage/onboardingAudience에는 화면 문구가 아니라 제출 당시의
@@ -1171,9 +1178,10 @@ export default function AdminDashboard({ standalone = false }: AdminDashboardPro
     const onboardingCompletedCount = allAdminMembers.filter((member) => member.onboardingCompleted).length
     const onboardingTotalCount = allAdminMembers.length
     const onboardingCompletionRate = onboardingTotalCount ? Math.round(onboardingCompletedCount / onboardingTotalCount * 100) : 0
-    const displayedAdminAccounts = standalone
+    const displayedAdminAccounts = (standalone
       ? previewAdminAccounts
       : adminAccounts.map((account) => ({ id: account.loginId, name: account.name, createdAt: account.createdAt, lastAccessAt: account.lastAccessAt ? account.lastAccessAt.replace('T', ' ') : '기록 없음' }))
+    ).slice().sort(byCreatedAtDesc)
 
     return (
       <main className="admin-dashboard-screen">
