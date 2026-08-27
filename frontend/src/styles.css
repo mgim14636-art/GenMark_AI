@@ -82,9 +82,11 @@
 .editor-uploaded-logo-target.selected::after { bottom: -8px; left: -8px; box-shadow: 286px 0 0 -1px #fff, 286px 0 0 0 #a984ff; }
 .editor-uploaded-logo { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 180ms cubic-bezier(.2, .8, .2, 1), opacity 180ms ease; }
 .editor-uploaded-logo-svg { display: grid; width: 100%; height: 100%; place-items: center; margin: auto; box-sizing: border-box; background: #fff; touch-action: none; user-select: none; }
-/* 로고 렌더 크기를 결과 화면(.logo-candidate-image)과 동일하게 맞춘다. overflow: visible은
-   viewBox 밖으로 살짝 삐져나온 그림도 안 잘리게 하는 안전장치(바깥 정사각형이 경계는 잡아줌). */
-.editor-uploaded-logo-svg svg { display: block; width: min(84%, 430px); height: 360px; max-width: 100%; max-height: 100%; overflow: visible; background: #fff; }
+/* 로고 렌더 크기를 결과 화면(.logo-candidate-image)과 동일하게 맞춘다. 인라인 <svg>는
+   기본 overflow:hidden(=viewBox로 클립)을 그대로 둔다 — 결과 화면의 <img>도 viewBox로
+   자르므로, 그래야 두 화면이 일치한다. (예전 overflow:visible은 viewBox 밖 요소가
+   좌상단에 새어나오게 만들어 제거했다.) */
+.editor-uploaded-logo-svg svg { display: block; width: min(84%, 430px); height: 360px; max-width: 100%; max-height: 100%; background: #fff; }
 .editor-uploaded-logo-svg [data-genmark-editor-element] { cursor: grab; transition: filter 160ms ease, opacity 160ms ease; }
 .editor-uploaded-logo-svg [data-genmark-editor-element]:active { cursor: grabbing; }
 .editor-uploaded-logo-svg [data-genmark-editor-element]:hover { filter: drop-shadow(0 0 7px rgb(142 85 239 / .48)); }
