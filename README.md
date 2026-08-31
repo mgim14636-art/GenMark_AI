@@ -2,7 +2,7 @@
 
 > **뷰티 창업자를 위한 Recraft V4 Vector 기반 로고(CI·BI) 생성 및 FAISS를 통한 유사도 분석 서비스**
 >
-> 로고 생성부터 상표 충돌 가능성까지 한 번에 제공하는 통합 플랫폼
+> 로고 생성부터 상표 충돌 가능성 지표까지 한 번에 제공하는 통합 플랫폼
 
 ![Java](https://img.shields.io/badge/Java%2017-007396?style=for-the-badge&logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot%203.2-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
@@ -11,7 +11,7 @@
 ![MariaDB](https://img.shields.io/badge/MariaDB%2010.11-003545?style=for-the-badge&logo=mariadb&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 
-**팀 GenMark** · 생성형 AI융합서비스 개발자과정 실전 프로젝트 · 2026.07 ~ 2026.08
+**팀 GenMark** · 생성형 AI융합서비스 개발자과정 실전 프로젝트 · 2026.08.04. ~ 2026.08.28
 
 ---
 
